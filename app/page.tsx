@@ -40,71 +40,149 @@ export default function OnlineClassroomApp() {
     return c.name;
   });
 
-  // 從本地快取或 Appwrite 載入設定（主動偵測並清除舊版殘留之 dummy 假資料）
-  useEffect(() => {
+  // ⭐ 從 Appwrite homework_settings 與 students 表動態讀取雲端學校、課程、班別設定
+  const loadSharedSettings = async () => {
     try {
-      const dummyBranches = ['馬耀山靈糧幼稚園', '沙田分校', '九龍灣分校', '總校'];
-      const dummyCourses = ['合唱團 (12:50-13:30)', '小結他班', '幼兒常規班', '奧數思維班'];
-      const dummyClasses = ['上高乙', '3A', '3B', '4A', '4B'];
+      let loadedCourses: any[] = [];
+      let loadedClasses: string[] = [];
+      let loadedBranches: string[] = [];
 
+      // 1. 讀取 Appwrite 雲端 homework_settings 表
+      try {
+        const settingsRes = await databases.listDocuments(
+          DATABASE_ID,
+          'homework_settings',
+          [Query.limit(50)]
+        );
+
+        settingsRes.documents.forEach((doc: any) => {
+          try {
+            if (doc.setting_key === 'courses' && doc.setting_value) {
+              const parsed = JSON.parse(doc.setting_value);
+              if (Array.isArray(parsed)) loadedCourses = parsed;
+            } else if (doc.setting_key === 'classes' && doc.setting_value) {
+              const parsed = JSON.parse(doc.setting_value);
+              if (Array.isArray(parsed)) loadedClasses = parsed;
+            } else if (doc.setting_key === 'branches' && doc.setting_value) {
+              const parsed = JSON.parse(doc.setting_value);
+              if (Array.isArray(parsed)) loadedBranches = parsed;
+            }
+          } catch (pe) {}
+        });
+      } catch (err: any) {
+        console.warn('讀取 homework_settings 略過或表尚未建立:', err.message);
+      }
+
+      // 2. 亦同步整合 students 表已登記之分校、班別與課程 (保證 100% 完整)
+      try {
+        const studentsRes = await databases.listDocuments(
+          DATABASE_ID,
+          'students',
+          [Query.limit(500)]
+        );
+
+        const studentBranches = studentsRes.documents.map((d: any) => d.branch).filter(Boolean);
+        const studentClasses = studentsRes.documents.map((d: any) => d.class_name).filter(Boolean);
+        const studentCourses = studentsRes.documents.map((d: any) => d.course_name).filter(Boolean);
+
+        if (studentBranches.length > 0) {
+          loadedBranches = Array.from(new Set([...loadedBranches, ...studentBranches]));
+        }
+        if (studentClasses.length > 0) {
+          loadedClasses = Array.from(new Set([...loadedClasses, ...studentClasses]));
+        }
+        if (studentCourses.length > 0) {
+          const existingNames = loadedCourses.map((c) => (typeof c === 'string' ? c : c.name));
+          studentCourses.forEach((sc) => {
+            if (!existingNames.includes(sc)) {
+              loadedCourses.push(sc);
+            }
+          });
+        }
+      } catch (e) {}
+
+      // 更新全域狀態與本地快取
+      if (loadedBranches.length > 0) {
+        setBranches(loadedBranches);
+        try { localStorage.setItem('oc_settings_branches', JSON.stringify(loadedBranches)); } catch (e) {}
+      }
+      if (loadedClasses.length > 0) {
+        setClasses(loadedClasses);
+        try { localStorage.setItem('oc_settings_classes', JSON.stringify(loadedClasses)); } catch (e) {}
+      }
+      if (loadedCourses.length > 0) {
+        setCourses(loadedCourses);
+        try { localStorage.setItem('oc_settings_courses', JSON.stringify(loadedCourses)); } catch (e) {}
+      }
+    } catch (err: any) {
+      console.warn('同步全域設定中:', err.message);
+    }
+  };
+
+  // 將設定即時同步保存至 Appwrite homework_settings 表與本地快取
+  const saveSettingToCloud = async (key: string, value: any) => {
+    const jsonStr = JSON.stringify(value);
+    try {
+      localStorage.setItem(`oc_settings_${key}`, jsonStr);
+      const res = await databases.listDocuments(
+        DATABASE_ID,
+        'homework_settings',
+        [Query.equal('setting_key', key)]
+      );
+      if (res.documents.length > 0) {
+        await databases.updateDocument(
+          DATABASE_ID,
+          'homework_settings',
+          res.documents[0].$id,
+          { setting_value: jsonStr }
+        );
+      } else {
+        await databases.createDocument(
+          DATABASE_ID,
+          'homework_settings',
+          ID.unique(),
+          { setting_key: key, setting_value: jsonStr }
+        );
+      }
+    } catch (err: any) {
+      console.warn(`設定寫入 homework_settings (${key}) 略過 (由本機保存):`, err.message);
+    }
+  };
+
+  useEffect(() => {
+    // 1. 先讀取本地快取防白屏
+    try {
       const savedBranches = localStorage.getItem('oc_settings_branches');
-      if (savedBranches) {
-        const parsed = JSON.parse(savedBranches);
-        if (JSON.stringify(parsed) === JSON.stringify(dummyBranches)) {
-          localStorage.removeItem('oc_settings_branches');
-          setBranches([]);
-        } else {
-          setBranches(parsed);
-        }
-      }
+      if (savedBranches) setBranches(JSON.parse(savedBranches));
+
       const savedCourses = localStorage.getItem('oc_settings_courses');
-      if (savedCourses) {
-        const parsed = JSON.parse(savedCourses);
-        if (JSON.stringify(parsed) === JSON.stringify(dummyCourses)) {
-          localStorage.removeItem('oc_settings_courses');
-          setCourses([]);
-        } else {
-          setCourses(parsed);
-        }
-      }
+      if (savedCourses) setCourses(JSON.parse(savedCourses));
+
       const savedClasses = localStorage.getItem('oc_settings_classes');
-      if (savedClasses) {
-        const parsed = JSON.parse(savedClasses);
-        if (JSON.stringify(parsed) === JSON.stringify(dummyClasses)) {
-          localStorage.removeItem('oc_settings_classes');
-          setClasses([]);
-        } else {
-          setClasses(parsed);
-        }
-      }
-localStorage.removeItem('oc_settings_presets');
+      if (savedClasses) setClasses(JSON.parse(savedClasses));
+
+      localStorage.removeItem('oc_settings_presets');
     } catch (e) {}
 
+    // 2. 立即從 Appwrite 雲端載入最新學校、課程、班別與通告
+    loadSharedSettings();
     loadNotices();
   }, []);
 
   const handleUpdateBranches = (newBranches: string[]) => {
     setBranches(newBranches);
-    try {
-      localStorage.setItem('oc_settings_branches', JSON.stringify(newBranches));
-    } catch (e) {}
+    saveSettingToCloud('branches', newBranches);
   };
 
   const handleUpdateCourses = (newCourses: (string | CourseItem)[]) => {
     setCourses(newCourses);
-    try {
-      localStorage.setItem('oc_settings_courses', JSON.stringify(newCourses));
-    } catch (e) {}
+    saveSettingToCloud('courses', newCourses);
   };
 
   const handleUpdateClasses = (newClasses: string[]) => {
     setClasses(newClasses);
-    try {
-      localStorage.setItem('oc_settings_classes', JSON.stringify(newClasses));
-    } catch (e) {}
+    saveSettingToCloud('classes', newClasses);
   };
-
-
 
   const loadNotices = async () => {
     setLoading(true);
