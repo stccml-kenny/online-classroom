@@ -237,7 +237,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
     setSchedExcludedDates([]);
     setSingleDateToAdd('');
     setSingleDateToExclude('');
-    handleCloseCourseForm();
+    setIsCourseFormOpen(false); // ⭐ 關閉表單，嚴格避免自我遞迴調用
   };
 
   // ⭐ 需求 1：新增課程打開後不要預選學校、課程狀態、時間、節數、排程日期、逢星期幾上課
@@ -547,7 +547,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                     </span>
                     <button
                       type="button"
-                      onClick={() => setIsCourseFormOpen(false)}
+                      onClick={handleCloseCourseForm}
                       className="text-gray-400 hover:text-gray-600 p-0.5"
                     >
                       <X size={15} />
@@ -860,7 +860,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                   <div className="flex gap-2 pt-1">
                     <button
                       type="button"
-                      onClick={() => setIsCourseFormOpen(false)}
+                      onClick={handleCloseCourseForm}
                       className="flex-1 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-semibold text-xs transition-colors"
                     >
                       取消
