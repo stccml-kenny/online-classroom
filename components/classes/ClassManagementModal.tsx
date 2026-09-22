@@ -877,38 +877,39 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
 
                             {/* 加選課程面板 */}
                             {isAdding && (
-                              <div className="mt-2 p-2 bg-indigo-50/60 border border-indigo-200 rounded-lg flex items-center gap-1.5">
-                                <input
-                                  type="text"
-                                  placeholder="填寫或自選新課程"
+                              <div className="mt-2 p-2.5 bg-indigo-50/60 border border-indigo-200 rounded-xl flex items-center gap-2">
+                                {/* ⭐ 只保留下拉選單，移除多餘的文字輸入框 */}
+                                <select
                                   value={selectedCourseToAdd}
                                   onChange={(e) => setSelectedCourseToAdd(e.target.value)}
-                                  className="flex-1 p-1 bg-white border border-gray-200 rounded text-xs outline-none"
-                                />
-                                {allKnownCourses.length > 0 && (
-                                  <select
-                                    onChange={(e) => e.target.value && setSelectedCourseToAdd(e.target.value)}
-                                    className="bg-white border border-gray-200 rounded text-xs p-1 outline-none"
-                                  >
-                                    <option value="">現有課程</option>
-                                    {allKnownCourses.map((c) => (
-                                      <option key={c} value={c}>{c}</option>
-                                    ))}
-                                  </select>
-                                )}
+                                  className="flex-1 p-2 bg-white border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-900 outline-none focus:border-indigo-600 truncate"
+                                >
+                                  {allKnownCourses.length === 0 ? (
+                                    <option value="" disabled>暫無可選課程</option>
+                                  ) : (
+                                    <>
+                                      <option value="" disabled>請選擇要加選的課程...</option>
+                                      {allKnownCourses.map((c) => (
+                                        <option key={c} value={c}>{c}</option>
+                                      ))}
+                                    </>
+                                  )}
+                                </select>
                                 <button
                                   type="button"
+                                  disabled={!selectedCourseToAdd}
                                   onClick={() => handleAddCourseForExistingStudent(s)}
-                                  className="px-2 py-1 bg-indigo-600 text-white rounded font-bold text-xs hover:bg-indigo-700"
+                                  className="px-3 py-2 bg-indigo-600 text-white rounded-lg font-bold text-xs hover:bg-indigo-700 transition-colors shadow-2xs shrink-0 disabled:opacity-50"
                                 >
                                   確認
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => setAddingCourseForStudent(null)}
-                                  className="p-1 text-gray-500 hover:text-gray-700"
+                                  className="p-1.5 text-gray-400 hover:text-gray-600 shrink-0 transition-colors"
+                                  title="取消"
                                 >
-                                  <X size={14} />
+                                  <X size={16} />
                                 </button>
                               </div>
                             )}
