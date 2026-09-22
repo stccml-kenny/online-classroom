@@ -313,17 +313,37 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
     };
 
     if (editingCourseTargetId) {
-      // 更新
+      // 更新 (⭐ 只有相同學校、時段及名稱，才顯示課程已存在，排除自身)
       const oldCourse = normalizedCourses.find((c) => c.id === editingCourseTargetId);
+      const isDuplicate = normalizedCourses.some(
+        (c) =>
+          c.id !== editingCourseTargetId &&
+          (c.name || '').trim().toLowerCase() === finalName.toLowerCase() &&
+          (c.branch || '').trim().toLowerCase() === courseFormBranch.trim().toLowerCase() &&
+          (c.timeSlot || '').trim() === finalTime.trim()
+      );
+      if (isDuplicate) {
+        const branchMsg = courseFormBranch.trim() ? `學校「${courseFormBranch.trim()}」` : '同一學校';
+        alert(`${branchMsg}已存在相同時段（${finalTime}）且名稱為「${finalName}」的課程！`);
+        return;
+      }
+
       const updated = normalizedCourses.map((c) => (c.id === editingCourseTargetId ? newCourseItem : c));
       onUpdateCourses(updated);
       if (oldCourse && oldCourse.name !== finalName && onRenameCourse) {
         onRenameCourse(oldCourse.name, finalName);
       }
     } else {
-      // 新增
-      if (normalizedCourses.some((c) => c.name === finalName)) {
-        alert(`課程名稱「${finalName}」已存在！`);
+      // 新增 (⭐ 只有相同學校、時段及名稱，才顯示課程已存在)
+      const isDuplicate = normalizedCourses.some(
+        (c) =>
+          (c.name || '').trim().toLowerCase() === finalName.toLowerCase() &&
+          (c.branch || '').trim().toLowerCase() === courseFormBranch.trim().toLowerCase() &&
+          (c.timeSlot || '').trim() === finalTime.trim()
+      );
+      if (isDuplicate) {
+        const branchMsg = courseFormBranch.trim() ? `學校「${courseFormBranch.trim()}」` : '此學校';
+        alert(`${branchMsg}已存在相同時段（${finalTime}）且名稱為「${finalName}」的課程！`);
         return;
       }
       onUpdateCourses([...normalizedCourses, newCourseItem]);
@@ -566,7 +586,9 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                         placeholder="例：奧數思維班、兒童合唱團"
                         value={courseFormName}
                         onChange={(e) => setCourseFormName(e.target.value)}
-                        className="w-full p-2 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-indigo-600 font-semibold"
+                        className={`w-full p-2 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-indigo-600 placeholder:text-gray-400 ${
+                          courseFormName.trim() ? 'text-black font-semibold' : 'text-gray-500'
+                        }`}
                         required
                       />
                     </div>
@@ -581,11 +603,13 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                         <select
                           value={courseFormBranch}
                           onChange={(e) => setCourseFormBranch(e.target.value)}
-                          className="w-full p-2 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-purple-600 font-semibold text-purple-900"
+                          className={`w-full p-2 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-purple-600 ${
+                            courseFormBranch ? 'text-black font-semibold' : 'text-gray-500'
+                          }`}
                         >
-                          <option value="">請選擇學校/分校 (未選擇則為不限分校)</option>
+                          <option value="" className="text-gray-400">請選擇學校/分校 (未選擇則為不限分校)</option>
                           {branches.map((b) => (
-                            <option key={b} value={b}>{b}</option>
+                            <option key={b} value={b} className="text-black font-semibold">{b}</option>
                           ))}
                         </select>
                       ) : (
@@ -594,7 +618,9 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                           placeholder="輸入所屬分校 (例：總校、沙田分校)"
                           value={courseFormBranch}
                           onChange={(e) => setCourseFormBranch(e.target.value)}
-                          className="w-full p-2 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-purple-600"
+                          className={`w-full p-2 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-purple-600 placeholder:text-gray-400 ${
+                            courseFormBranch.trim() ? 'text-black font-semibold' : 'text-gray-500'
+                          }`}
                         />
                       )}
                     </div>
@@ -660,7 +686,9 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                           setCourseFormStartTime(e.target.value);
                           setCourseFormTimeSlot(`${e.target.value} - ${courseFormEndTime}`);
                         }}
-                        className="flex-1 p-1.5 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-indigo-600"
+                        className={`flex-1 p-1.5 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-indigo-600 ${
+                          courseFormStartTime ? 'text-black font-semibold' : 'text-gray-500'
+                        }`}
                       />
                       <span className="text-gray-400 text-xs">至</span>
                       <input
@@ -670,7 +698,9 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                           setCourseFormEndTime(e.target.value);
                           setCourseFormTimeSlot(`${courseFormStartTime} - ${e.target.value}`);
                         }}
-                        className="flex-1 p-1.5 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-indigo-600"
+                        className={`flex-1 p-1.5 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-indigo-600 ${
+                          courseFormEndTime ? 'text-black font-semibold' : 'text-gray-500'
+                        }`}
                       />
                     </div>
                   </div>
@@ -691,7 +721,9 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                           placeholder="0"
                           value={courseFormTotalSessions > 0 ? courseFormTotalSessions : ''}
                           onChange={(e) => setCourseFormTotalSessions(parseInt(e.target.value) || 0)}
-                          className="w-14 p-1 bg-indigo-50/60 border border-indigo-200 rounded text-center text-xs font-bold text-indigo-800 outline-none placeholder:text-gray-400"
+                          className={`w-14 p-1 bg-white border border-indigo-200 rounded text-center text-xs outline-none placeholder:text-gray-400 ${
+                            courseFormTotalSessions > 0 ? 'text-black font-semibold' : 'text-gray-500'
+                          }`}
                         />
                         <span className="text-gray-500 text-[11px]">節</span>
                       </div>
@@ -710,7 +742,9 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                             type="date"
                             value={schedStartDate}
                             onChange={(e) => setSchedStartDate(e.target.value)}
-                            className="w-full p-1 bg-white border border-gray-200 rounded text-[11px] outline-none"
+                            className={`w-full p-1 bg-white border border-gray-200 rounded text-[11px] outline-none ${
+                              schedStartDate ? 'text-black font-semibold' : 'text-gray-500'
+                            }`}
                           />
                         </div>
                         <div>
@@ -719,7 +753,9 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                             type="date"
                             value={schedEndDate}
                             onChange={(e) => setSchedEndDate(e.target.value)}
-                            className="w-full p-1 bg-white border border-gray-200 rounded text-[11px] outline-none"
+                            className={`w-full p-1 bg-white border border-gray-200 rounded text-[11px] outline-none ${
+                              schedEndDate ? 'text-black font-semibold' : 'text-gray-500'
+                            }`}
                           />
                         </div>
                       </div>
@@ -764,7 +800,9 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                         type="date"
                         value={singleDateToAdd}
                         onChange={(e) => setSingleDateToAdd(e.target.value)}
-                        className="flex-1 p-1.5 bg-white border border-gray-200 rounded-lg text-xs outline-none"
+                        className={`flex-1 p-1.5 bg-white border border-gray-200 rounded-lg text-xs outline-none ${
+                          singleDateToAdd ? 'text-black font-semibold' : 'text-gray-500'
+                        }`}
                       />
                       <button
                         type="button"
@@ -929,7 +967,9 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                       placeholder="搜尋課程名稱或時段..."
                       value={courseSearchKeyword}
                       onChange={(e) => setCourseSearchKeyword(e.target.value)}
-                      className="w-full p-1.5 bg-white border border-gray-200 rounded-lg text-[11px] outline-none placeholder:text-gray-400"
+                      className={`w-full p-1.5 bg-white border border-gray-200 rounded-lg text-[11px] outline-none placeholder:text-gray-400 ${
+                        courseSearchKeyword.trim() ? 'text-black font-semibold' : 'text-gray-500'
+                      }`}
                     />
                   </div>
                 </div>
@@ -1096,7 +1136,9 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                   placeholder="新學校/分校名稱 (例：總校、沙田分校)"
                   value={newBranch}
                   onChange={(e) => setNewBranch(e.target.value)}
-                  className="flex-1 p-2 border border-gray-200 rounded-lg text-xs outline-none focus:border-purple-600"
+                  className={`flex-1 p-2 border border-gray-200 rounded-lg text-xs outline-none focus:border-purple-600 placeholder:text-gray-400 ${
+                    newBranch.trim() ? 'text-black font-semibold' : 'text-gray-500'
+                  }`}
                 />
                 <button
                   type="submit"
@@ -1132,7 +1174,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                             type="text"
                             value={editValue}
                             onChange={(e) => setEditValue(e.target.value)}
-                            className="flex-1 p-1 bg-white border border-purple-500 rounded text-xs outline-none"
+                            className="flex-1 p-1 bg-white border border-purple-500 rounded text-xs outline-none text-black font-semibold"
                             autoFocus
                           />
                           <button
@@ -1190,7 +1232,9 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                   placeholder="新班別名稱 (例：1A、高班、週末班)"
                   value={newClass}
                   onChange={(e) => setNewClass(e.target.value)}
-                  className="flex-1 p-2 border border-gray-200 rounded-lg text-xs outline-none focus:border-indigo-600"
+                  className={`flex-1 p-2 border border-gray-200 rounded-lg text-xs outline-none focus:border-indigo-600 placeholder:text-gray-400 ${
+                    newClass.trim() ? 'text-black font-semibold' : 'text-gray-500'
+                  }`}
                 />
                 <button
                   type="submit"
@@ -1226,7 +1270,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                             type="text"
                             value={editValue}
                             onChange={(e) => setEditValue(e.target.value)}
-                            className="flex-1 p-1 bg-white border border-indigo-500 rounded text-xs outline-none"
+                            className="flex-1 p-1 bg-white border border-indigo-500 rounded text-xs outline-none text-black font-semibold"
                             autoFocus
                           />
                           <button
