@@ -132,10 +132,10 @@ export const HomeworkCard: React.FC<HomeworkCardProps> = ({
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
   let attachments: HomeworkAttachment[] = [];
-  let rawAtt = item.attachments;
+  let rawAtt: string | HomeworkAttachment[] | null | undefined = item.attachments;
 
   if (!rawAtt && item.$id && typeof window !== 'undefined') {
-    rawAtt = localStorage.getItem(`oc_hw_att_${item.$id}`);
+    rawAtt = localStorage.getItem(`oc_hw_att_${item.$id}`) || '';
   }
 
   if (rawAtt) {

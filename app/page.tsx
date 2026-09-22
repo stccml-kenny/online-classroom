@@ -169,9 +169,6 @@ localStorage.removeItem('oc_settings_presets');
           courses={courseNames}
           classes={classes}
           courseItems={courses}
-          onUpdateBranches={handleUpdateBranches}
-          onUpdateCourses={handleUpdateCourses}
-          onUpdateClasses={handleUpdateClasses}
         />
 
         {/* 3. 獨立家課彈窗 (備用向下相容) */}

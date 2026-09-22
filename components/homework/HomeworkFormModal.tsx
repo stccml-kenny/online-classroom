@@ -92,9 +92,9 @@ export const HomeworkFormModal: React.FC<HomeworkFormModalProps> = ({
         ggList.push(initialData.google_url.trim());
       }
 
-      let rawAtt = initialData.attachments;
+      let rawAtt: string | HomeworkAttachment[] | null | undefined = initialData.attachments;
       if (!rawAtt && initialData.$id && typeof window !== 'undefined') {
-        rawAtt = localStorage.getItem(`oc_hw_att_${initialData.$id}`);
+        rawAtt = localStorage.getItem(`oc_hw_att_${initialData.$id}`) || '';
       }
 
       let parsedAtts: HomeworkAttachment[] = [];

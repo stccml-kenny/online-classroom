@@ -80,9 +80,9 @@ export const parseUnitResources = (unit: CourseUnit): ParsedUnitResources => {
     unit.google_urls.forEach((url) => url && ggSet.add(url.trim()));
   }
 
-  let raw = unit.attachments;
+  let raw: string | HomeworkAttachment[] | null | undefined = unit.attachments;
   if (!raw && unit.$id && typeof window !== 'undefined') {
-    raw = localStorage.getItem(`oc_cu_att_${unit.$id}`);
+    raw = localStorage.getItem(`oc_cu_att_${unit.$id}`) || '';
   }
 
   let parsed: any[] = [];
