@@ -11,6 +11,7 @@ import { AttendanceModal } from '@/components/attendance/AttendanceModal';
 import { ClassManagementModal } from '@/components/classes/ClassManagementModal';
 import { HomeworkSetupModal, CourseItem } from '@/components/homework/HomeworkSetupModal';
 import { databases, DATABASE_ID } from '@/lib/appwrite';
+import { ID, Query } from 'appwrite';
 
 export default function OnlineClassroomApp() {
   const [activeTab, setActiveTab] = useState<TabType>('more');
