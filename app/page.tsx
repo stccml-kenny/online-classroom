@@ -262,6 +262,7 @@ export default function OnlineClassroomApp() {
           branches={branches}
           classes={classes}
           courses={courseNames}
+          courseItems={courses}
         />
 
         {/* 6. ⭐ 課程、學校及班別設定彈窗 (可從 More 目錄或課程內容右上角齒輪開啟) */}

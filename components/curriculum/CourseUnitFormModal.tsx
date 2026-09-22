@@ -139,6 +139,7 @@ export const CourseUnitFormModal: React.FC<CourseUnitFormModalProps> = ({
   };
 
   const handleRemoveYoutube = (index: number) => {
+    if (!window.confirm('確定要移除此 YouTube 影片連結嗎？')) return;
     setYoutubeUrls((prev) => prev.filter((_, idx) => idx !== index));
   };
 
@@ -152,6 +153,7 @@ export const CourseUnitFormModal: React.FC<CourseUnitFormModalProps> = ({
   };
 
   const handleRemoveGoogle = (index: number) => {
+    if (!window.confirm('確定要移除此 Google 連結嗎？')) return;
     setGoogleUrls((prev) => prev.filter((_, idx) => idx !== index));
   };
 
@@ -203,6 +205,7 @@ export const CourseUnitFormModal: React.FC<CourseUnitFormModalProps> = ({
   };
 
   const handleRemoveAttachment = (index: number) => {
+    if (!window.confirm('確定要移除此附件檔案嗎？')) return;
     setAttachments((prev) => prev.filter((_, idx) => idx !== index));
   };
 

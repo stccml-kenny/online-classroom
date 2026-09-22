@@ -3,6 +3,7 @@ import {
   X, Users, UploadCloud, Plus, FileSpreadsheet, Trash2, Download,
   CheckCircle, GraduationCap, Check, UserPlus, Edit2, RotateCcw, User
 } from 'lucide-react';
+import { CourseItem, getCourseDisplayName } from '../homework/HomeworkSetupModal';
 import { databases, DATABASE_ID } from '@/lib/appwrite';
 import { ID, Query } from 'appwrite';
 
@@ -12,6 +13,7 @@ interface ClassManagementModalProps {
   branches: string[];
   classes: string[];
   courses: string[];
+  courseItems?: (string | CourseItem)[];
   onDataChanged?: () => void;
 }
 
@@ -37,13 +39,14 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
   branches,
   classes,
   courses,
+  courseItems = [],
   onDataChanged,
 }) => {
   const [activeTab, setActiveTab] = useState<'manual' | 'excel' | 'list'>('manual');
 
   // 新增會員表單狀態
-  const [manualBranch, setManualBranch] = useState(branches[0] || '');
-  const [manualClass, setManualClass] = useState(classes[0] || '');
+  const [manualBranch, setManualBranch] = useState(''); // ⭐ 不預選分校
+  const [manualClass, setManualClass] = useState(''); // ⭐ 不預選班別
   const [studentName, setStudentName] = useState('');
   const [selectedCourses, setSelectedCourses] = useState<string[]>([]); // 預設為空，不預選任何課程
   const [customCourseInput, setCustomCourseInput] = useState('');
@@ -70,6 +73,19 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
   const [editStudentBranch, setEditStudentBranch] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
 
+  // ⭐ 需求 2：參加課程要因應所選之分校才顯示相對課程
+  const availableCoursesForSelectedBranch = React.useMemo(() => {
+    if (!manualBranch) return [];
+    if (courseItems && courseItems.length > 0) {
+      const matched = courseItems.filter((c) => {
+        if (typeof c === 'string') return true;
+        return !c.branch || c.branch === '全部分校' || c.branch === manualBranch;
+      });
+      return Array.from(new Set(matched.map((c) => getCourseDisplayName(c)))).filter(Boolean);
+    }
+    return courses;
+  }, [manualBranch, courseItems, courses]);
+
   const fetchStudents = async () => {
     setLoadingList(true);
     try {
@@ -85,11 +101,14 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       fetchStudents();
-      if (!manualClass && classes.length > 0) {
-        setManualClass(classes[0]);
-      }
+      // ⭐ 需求 1：每次打開新增會員皆為乾淨空白，不預選分校與班別
+      setManualBranch('');
+      setManualClass('');
+      setStudentName('');
+      setSelectedCourses([]);
+      setCustomCourseInput('');
     }
-  }, [isOpen, classes]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -102,6 +121,10 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
   // 1. 新增會員（手動單筆，不預選課程，新增後清空選擇）
   const handleManualAdd = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!manualBranch) {
+      alert('請先選擇學校/分校！');
+      return;
+    }
     if (!studentName.trim()) {
       alert('請填寫學生姓名！');
       return;
@@ -496,117 +519,147 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
           {/* TAB 1: 新增會員 (分校 -> 學生姓名與班別下拉選單平排 -> 參加課程不預選) */}
           {activeTab === 'manual' && (
             <form onSubmit={handleManualAdd} className="space-y-3.5">
-              {/* 1. 分校 (Branch) */}
+              {/* 1. 分校 (Branch) - ⭐ 需求 1: 不預選; 需求 3: 填選後100%黑色字, 未選60%灰 */}
               <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">分校 (Branch)</label>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  分校 (Branch) <span className="text-red-500">*</span>
+                </label>
                 {branches.length > 0 ? (
                   <select
                     value={manualBranch}
-                    onChange={(e) => setManualBranch(e.target.value)}
-                    className="w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 text-xs outline-none focus:border-[#FF6B57]"
+                    onChange={(e) => {
+                      setManualBranch(e.target.value);
+                      setSelectedCourses([]); // 切換分校時重置課程選取
+                    }}
+                    className={`w-full p-2.5 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#FF6B57] transition-colors ${
+                      manualBranch ? 'text-black font-semibold bg-white' : 'text-gray-500 bg-gray-50'
+                    }`}
+                    required
                   >
+                    <option value="" disabled className="text-gray-400">請選擇學校/分校...</option>
                     {branches.map((b) => (
-                      <option key={b} value={b}>{b}</option>
+                      <option key={b} value={b} className="text-black font-medium">{b}</option>
                     ))}
                   </select>
                 ) : (
                   <input
                     type="text"
-                    placeholder="分校名稱 (例: 總校、沙田分校)"
+                    placeholder="請輸入分校名稱 (例: 總校、沙田分校)"
                     value={manualBranch}
                     onChange={(e) => setManualBranch(e.target.value)}
-                    className="w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 text-xs outline-none focus:border-[#FF6B57]"
+                    className={`w-full p-2.5 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#FF6B57] placeholder:text-gray-400 ${
+                      manualBranch ? 'text-black font-semibold bg-white' : 'text-gray-500 bg-gray-50'
+                    }`}
+                    required
                   />
                 )}
               </div>
 
-              {/* 2. 學生姓名 與 班別 (只保留下拉選單) 平排並列 */}
+              {/* 2. 學生姓名 與 班別 (平排並列) - ⭐ 填選後100%黑色字, 未選60%灰 */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">學生姓名 (Student Name)</label>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">
+                    學生姓名 (Student Name) <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="text"
-                    placeholder="例: 會員學生姓名"
+                    placeholder="請輸入學生姓名"
                     value={studentName}
                     onChange={(e) => setStudentName(e.target.value)}
-                    className="w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 text-xs outline-none focus:border-[#FF6B57]"
+                    className={`w-full p-2.5 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#FF6B57] placeholder:text-gray-400 ${
+                      studentName ? 'text-black font-semibold bg-white' : 'text-gray-500 bg-gray-50'
+                    }`}
                     required
                   />
                 </div>
-
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">班別 (Class)</label>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">
+                    班別 (Class) <span className="text-red-500">*</span>
+                  </label>
                   {classes.length > 0 ? (
                     <select
                       value={manualClass}
                       onChange={(e) => setManualClass(e.target.value)}
-                      className="w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 text-xs outline-none focus:border-[#FF6B57]"
+                      className={`w-full p-2.5 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#FF6B57] transition-colors ${
+                        manualClass ? 'text-black font-semibold bg-white' : 'text-gray-500 bg-gray-50'
+                      }`}
                       required
                     >
-                      <option value="" disabled>選擇班別</option>
+                      <option value="" disabled className="text-gray-400">請選擇班別...</option>
                       {classes.map((c) => (
-                        <option key={c} value={c}>{c} 班</option>
+                        <option key={c} value={c} className="text-black font-medium">{c.endsWith('班') ? c : `${c} 班`}</option>
                       ))}
                     </select>
                   ) : (
                     <input
                       type="text"
-                      placeholder="輸入班別 (例: 1A、高班)"
+                      placeholder="請輸入班別 (例: 1A)"
                       value={manualClass}
                       onChange={(e) => setManualClass(e.target.value)}
-                      className="w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 text-xs outline-none focus:border-[#FF6B57]"
+                      className={`w-full p-2.5 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#FF6B57] placeholder:text-gray-400 ${
+                        manualClass ? 'text-black font-semibold bg-white' : 'text-gray-500 bg-gray-50'
+                      }`}
                       required
                     />
                   )}
                 </div>
               </div>
 
-              {/* 3. 參加課程 (Courses) - 不預先勾選，新增後清空 */}
+              {/* 3. 參加課程 (Courses) - ⭐ 需求 2: 因應所選之分校才顯示相對課程 */}
               <div>
                 <div className="flex justify-between items-center mb-1">
                   <label className="block text-xs font-semibold text-gray-600">
                     參加課程 (Courses) <span className="text-gray-400 font-normal">（選填，可不選任何課程）</span>
                   </label>
-                  <span className="text-[11px] text-indigo-600 font-medium">
+                  <span className="text-[11px] text-indigo-600 font-semibold">
                     已選 {selectedCourses.length + (customCourseInput.trim() ? 1 : 0)} 個課程
                   </span>
                 </div>
-
                 <div className="border border-gray-200 rounded-xl p-2.5 bg-gray-50/70 space-y-2">
-                  <div className="text-[11px] text-gray-400">點擊標籤複選參加的課程：</div>
-                  {allKnownCourses.length === 0 ? (
-                    <p className="text-xs text-gray-400 py-1">尚未建立課程，可直接於下方自訂輸入</p>
+                  {!manualBranch ? (
+                    <p className="text-xs text-amber-600 font-medium py-2.5 text-center bg-amber-50/60 rounded-lg border border-amber-200/60">
+                      ※ 請先於上方選取「分校」，系統將自動過濾並顯示該校所屬之課程
+                    </p>
+                  ) : availableCoursesForSelectedBranch.length === 0 ? (
+                    <p className="text-xs text-gray-400 py-2.5 text-center">
+                      「{manualBranch}」目前尚未設定專屬課程，可於下方自訂輸入或稍後至「設定」新增
+                    </p>
                   ) : (
-                    <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1">
-                      {allKnownCourses.map((c) => {
-                        const isSelected = selectedCourses.includes(c);
-                        return (
-                          <button
-                            key={c}
-                            type="button"
-                            onClick={() => toggleCourse(c)}
-                            className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-all ${
-                              isSelected
-                                ? 'bg-indigo-600 text-white shadow-xs'
-                                : 'bg-white text-indigo-700 border border-indigo-200 hover:bg-indigo-50'
-                            }`}
-                          >
-                            {isSelected && <Check size={12} />}
-                            <GraduationCap size={12} />
-                            <span>{c}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
+                    <>
+                      <div className="text-[11px] text-gray-400">點擊標籤複選「{manualBranch}」的課程：</div>
+                      <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1">
+                        {availableCoursesForSelectedBranch.map((c) => {
+                          const isSelected = selectedCourses.includes(c);
+                          return (
+                            <button
+                              key={c}
+                              type="button"
+                              onClick={() => toggleCourse(c)}
+                              className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-all ${
+                                isSelected
+                                  ? 'bg-indigo-600 text-white shadow-xs'
+                                  : 'bg-white text-indigo-700 border border-indigo-200 hover:bg-indigo-50'
+                              }`}
+                            >
+                              {isSelected && <Check size={12} />}
+                              <GraduationCap size={12} />
+                              <span>{c}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
                   )}
-
+                  {/* 自訂課程 - ⭐ 填寫後100%黑色字, 未填提示60%灰 */}
                   <div className="pt-1.5 border-t border-gray-200/80">
                     <input
                       type="text"
                       placeholder="+ 自訂或填寫新課程 (選填)"
                       value={customCourseInput}
                       onChange={(e) => setCustomCourseInput(e.target.value)}
-                      className="w-full p-2 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-indigo-500"
+                      className={`w-full p-2 border border-gray-200 rounded-lg text-xs outline-none focus:border-indigo-500 placeholder:text-gray-400 ${
+                        customCourseInput ? 'text-black font-semibold bg-white' : 'text-gray-500 bg-white'
+                      }`}
                     />
                   </div>
                 </div>
@@ -821,9 +874,15 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
                                 <span className="text-gray-600 bg-gray-200/80 px-1.5 py-0.5 rounded text-[11px] font-semibold">
                                   {s.class_name} 班
                                 </span>
-                                {s.branch && (
-                                  <span className="text-purple-700 text-[10px] bg-purple-50 px-1.5 py-0.5 rounded font-medium">
-                                    {s.branch}
+                                {/* ⭐ 需求 4：分校資料一併展示，未設分校亦有明確提示 */}
+                                {s.branch ? (
+                                  <span className="text-purple-900 font-bold text-[10px] bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full flex items-center gap-0.5">
+                                    <MapPin size={10} className="text-purple-600 shrink-0" />
+                                    <span>{s.branch}</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-500 text-[10px] bg-gray-100 border border-gray-200 px-2 py-0.5 rounded font-medium">
+                                    未設定分校
                                   </span>
                                 )}
                               </div>

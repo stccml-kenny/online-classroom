@@ -167,6 +167,7 @@ export const HomeworkFormModal: React.FC<HomeworkFormModalProps> = ({
   };
 
   const handleRemoveTitle = (index: number) => {
+    if (!window.confirm('確定要移除此功課項目嗎？')) return;
     setSelectedTitles((prev) => prev.filter((_, idx) => idx !== index));
   };
 
@@ -180,6 +181,7 @@ export const HomeworkFormModal: React.FC<HomeworkFormModalProps> = ({
   };
 
   const handleRemoveYoutube = (index: number) => {
+    if (!window.confirm('確定要移除此 YouTube 影片連結嗎？')) return;
     setYoutubeUrls((prev) => prev.filter((_, idx) => idx !== index));
   };
 
@@ -193,6 +195,7 @@ export const HomeworkFormModal: React.FC<HomeworkFormModalProps> = ({
   };
 
   const handleRemoveGoogle = (index: number) => {
+    if (!window.confirm('確定要移除此 Google 連結嗎？')) return;
     setGoogleUrls((prev) => prev.filter((_, idx) => idx !== index));
   };
 
@@ -244,6 +247,7 @@ export const HomeworkFormModal: React.FC<HomeworkFormModalProps> = ({
   };
 
   const handleRemoveAttachment = (index: number) => {
+    if (!window.confirm('確定要移除此附件檔案嗎？')) return;
     setAttachments((prev) => prev.filter((_, idx) => idx !== index));
   };
 

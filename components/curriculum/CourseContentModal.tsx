@@ -609,6 +609,7 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
 
   // 9. 解除單一家課與單元的關聯
   const handleUnlinkHomework = async (hwId: string) => {
+    if (!window.confirm('確定要解除此項家課與單元的關聯嗎？')) return;
     const updatedList = homeworkList.map((hw) => {
       if (hw.$id === hwId) {
         const { unit_id, unit_title, ...rest } = hw;

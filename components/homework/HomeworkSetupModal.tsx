@@ -381,6 +381,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
 
   // 剔除特定日子 (從清單移除並記錄於已剔除)
   const handleRemoveDate = (dateToRemove: string) => {
+    if (!window.confirm(`確定要剔除此日課堂 (${dateToRemove}) 嗎？`)) return;
     const remaining = courseFormSessionDates.filter((d) => d !== dateToRemove);
     setCourseFormSessionDates(remaining);
     setCourseFormTotalSessions(remaining.length);
