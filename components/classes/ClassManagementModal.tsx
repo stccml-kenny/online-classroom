@@ -1,7 +1,8 @@
 ﻿import React, { useState, useEffect } from 'react';
 import {
   X, Users, UploadCloud, Plus, FileSpreadsheet, Trash2, Download,
-  CheckCircle, GraduationCap, Check, UserPlus, Edit2, RotateCcw, User
+  CheckCircle, GraduationCap, Check, UserPlus, Edit2, RotateCcw, User,
+  MapPin
 } from 'lucide-react';
 import { CourseItem, getCourseDisplayName } from '../homework/HomeworkSetupModal';
 import { databases, DATABASE_ID } from '@/lib/appwrite';
