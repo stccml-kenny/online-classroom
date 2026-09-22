@@ -30,25 +30,29 @@ export default function OnlineClassroomApp() {
   const [classes, setClasses] = useState<string[]>([]);
   const [courses, setCourses] = useState<(string | CourseItem)[]>([]);
 
-  // ⭐ 需求 2：輔助取得純字串課程名稱清單供全域選單使用：格式為「課程名稱 + (課程時間)」
-  const courseNames = courses.map((c) => {
-    if (typeof c === 'string') return c;
-    if (c.timeSlot && c.timeSlot.trim()) {
-      const slot = c.timeSlot.trim();
-      if (c.name.includes(slot)) return c.name;
-      return `${c.name} (${slot})`;
-    }
-    return c.name;
-  });
+  // ⭐ 輔助取得純字串課程名稱清單供全域選單使用：格式為「課程名稱 + (課程時間)」，並嚴格去重防 key 衝突
+  const courseNames = Array.from(
+    new Set(
+      courses.map((c) => {
+        if (typeof c === 'string') return c.trim();
+        if (c.timeSlot && c.timeSlot.trim()) {
+          const slot = c.timeSlot.trim();
+          if (c.name.includes(slot)) return c.name.trim();
+          return `${c.name.trim()} (${slot})`;
+        }
+        return c.name ? c.name.trim() : '';
+      }).filter(Boolean)
+    )
+  );
 
-  // ⭐ 從 Appwrite homework_settings 與 students 表動態讀取雲端學校、課程、班別設定
+  // ⭐ 從 Appwrite homework_settings 表動態讀取雲端學校、課程、班別設定 (絕不再隨意插入預設/假課程)
   const loadSharedSettings = async () => {
     try {
       let loadedCourses: any[] = [];
       let loadedClasses: string[] = [];
       let loadedBranches: string[] = [];
 
-      // 1. 讀取 Appwrite 雲端 homework_settings 表
+      // 僅讀取 Appwrite 雲端 homework_settings 表中由使用者設定之真實資料，不自動從其他表雜湊注入課程
       try {
         const settingsRes = await databases.listDocuments(
           DATABASE_ID,
@@ -74,47 +78,30 @@ export default function OnlineClassroomApp() {
         console.warn('讀取 homework_settings 略過或表尚未建立:', err.message);
       }
 
-      // 2. 亦同步整合 students 表已登記之分校、班別與課程 (保證 100% 完整)
-      try {
-        const studentsRes = await databases.listDocuments(
-          DATABASE_ID,
-          'students',
-          [Query.limit(500)]
-        );
+      // 嚴格去重：避免出現同名或重複 key 衝突
+      const uniqueCourses: any[] = [];
+      const seenNames = new Set<string>();
+      loadedCourses.forEach((c) => {
+        const name = typeof c === 'string' ? c.trim() : (c.name || '').trim();
+        if (name && !seenNames.has(name)) {
+          seenNames.add(name);
+          uniqueCourses.push(c);
+        }
+      });
+      loadedCourses = uniqueCourses;
 
-        const studentBranches = studentsRes.documents.map((d: any) => d.branch).filter(Boolean);
-        const studentClasses = studentsRes.documents.map((d: any) => d.class_name).filter(Boolean);
-        const studentCourses = studentsRes.documents.map((d: any) => d.course_name).filter(Boolean);
-
-        if (studentBranches.length > 0) {
-          loadedBranches = Array.from(new Set([...loadedBranches, ...studentBranches]));
-        }
-        if (studentClasses.length > 0) {
-          loadedClasses = Array.from(new Set([...loadedClasses, ...studentClasses]));
-        }
-        if (studentCourses.length > 0) {
-          const existingNames = loadedCourses.map((c) => (typeof c === 'string' ? c : c.name));
-          studentCourses.forEach((sc) => {
-            if (!existingNames.includes(sc)) {
-              loadedCourses.push(sc);
-            }
-          });
-        }
-      } catch (e) {}
+      loadedBranches = Array.from(new Set(loadedBranches.map((b) => (typeof b === 'string' ? b.trim() : b)).filter(Boolean)));
+      loadedClasses = Array.from(new Set(loadedClasses.map((c) => (typeof c === 'string' ? c.trim() : c)).filter(Boolean)));
 
       // 更新全域狀態與本地快取
-      if (loadedBranches.length > 0) {
-        setBranches(loadedBranches);
-        try { localStorage.setItem('oc_settings_branches', JSON.stringify(loadedBranches)); } catch (e) {}
-      }
-      if (loadedClasses.length > 0) {
-        setClasses(loadedClasses);
-        try { localStorage.setItem('oc_settings_classes', JSON.stringify(loadedClasses)); } catch (e) {}
-      }
-      if (loadedCourses.length > 0) {
-        setCourses(loadedCourses);
-        try { localStorage.setItem('oc_settings_courses', JSON.stringify(loadedCourses)); } catch (e) {}
-      }
+      setBranches(loadedBranches);
+      try { localStorage.setItem('oc_settings_branches', JSON.stringify(loadedBranches)); } catch (e) {}
+
+      setClasses(loadedClasses);
+      try { localStorage.setItem('oc_settings_classes', JSON.stringify(loadedClasses)); } catch (e) {}
+
+      setCourses(loadedCourses);
+      try { localStorage.setItem('oc_settings_courses', JSON.stringify(loadedCourses)); } catch (e) {}
     } catch (err: any) {
       console.warn('同步全域設定中:', err.message);
     }

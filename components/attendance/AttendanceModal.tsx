@@ -22,17 +22,18 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
   courses = [],
   courseItems = [],
 }) => {
-  const [selectedBranch, setSelectedBranch] = useState(branches[0] || '全部分校');
-  const [selectedClass, setSelectedClass] = useState(classes[0] || '全部班別');
-  const [selectedCourse, setSelectedCourse] = useState('全部課程');
+  // ⭐ 需求 2：不要預選學校、班別、課程，初始皆為空
+  const [selectedBranch, setSelectedBranch] = useState('');
+  const [selectedClass, setSelectedClass] = useState('');
+  const [selectedCourse, setSelectedCourse] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [students, setStudents] = useState<StudentAttendance[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // ⭐ 需求 1：課程選擇會因揀選的學校而變更
+  // ⭐ 需求 1 & 2：課程選擇因揀選學校而變更，未選學校時為空，不提供「全部課程」
   const filteredCourseItems = useMemo(() => {
-    if (selectedBranch === '全部分校') return courseItems;
+    if (!selectedBranch) return [];
     return courseItems.filter((c) => {
       if (typeof c === 'string') return true;
       return !c.branch || c.branch === '全部分校' || c.branch === selectedBranch;
@@ -40,13 +41,14 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
   }, [courseItems, selectedBranch]);
 
   const filteredCourses = useMemo(() => {
-    return filteredCourseItems.map((c) => getCourseDisplayName(c));
+    const list = filteredCourseItems.map((c) => getCourseDisplayName(c));
+    return Array.from(new Set(list)).filter(Boolean);
   }, [filteredCourseItems]);
 
-  // 當選擇的學校變更時，若現有選取的課程不在該學校中，自動重設為「全部課程」
+  // 當選擇的學校變更時，若選取的課程不匹配該校，重設課程為空
   useEffect(() => {
-    if (selectedCourse !== '全部課程' && !filteredCourses.includes(selectedCourse)) {
-      setSelectedCourse('全部課程');
+    if (selectedCourse && !filteredCourses.includes(selectedCourse)) {
+      setSelectedCourse('');
     }
   }, [selectedBranch, filteredCourses, selectedCourse]);
 
@@ -75,9 +77,24 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
     setSessionPage(0);
   }, [selectedCourse]);
 
-  // ⭐ 需求 4：讀取真實學生名單，且學生不要預設出席 (預設為 unmarked 待點名)
+  // 當彈窗打開時，重置所有選取狀態，不預選任何學校、班別、課程
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedBranch('');
+      setSelectedClass('');
+      setSelectedCourse('');
+      setStudents([]);
+    }
+  }, [isOpen]);
+
+  // ⭐ 需求 3：當選擇分校、班別及課程後才顯示相對的會員 (未選齊前不顯示學生名冊)
   useEffect(() => {
     if (!isOpen) return;
+
+    if (!selectedBranch || !selectedClass || !selectedCourse) {
+      setStudents([]);
+      return;
+    }
 
     const fetchStudentsForAttendance = async () => {
       setLoading(true);
@@ -103,9 +120,15 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
         );
 
         const matched = (res.documents as any[]).filter((doc) => {
-          const matchBranch = selectedBranch === '全部分校' || !doc.branch || doc.branch === selectedBranch;
+          const matchBranch = !doc.branch || doc.branch === selectedBranch;
           const matchClass = !cleanClass || doc.class_name?.includes(cleanClass) || cleanClass.includes(doc.class_name);
-          return matchBranch && matchClass;
+          const docCourse = (doc.course_name || '').trim();
+          const matchCourse = docCourse && (
+            selectedCourse === docCourse ||
+            selectedCourse.startsWith(docCourse) ||
+            docCourse.startsWith(selectedCourse)
+          );
+          return matchBranch && matchClass && matchCourse;
         });
 
         const uniqueNames = new Set<string>();
@@ -235,14 +258,17 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
 
         {/* 篩選控制器 */}
         <div className="bg-white px-4 py-2.5 border-b border-gray-100 space-y-2">
-          {/* ⭐ 需求 2：第一行學校 (Branch) 與班別 (Class) 平排 */}
+          {/* ⭐ 需求 2：不預選且不含「全部分校 / 全部班別 / 全部課程」 */}
           <div className="grid grid-cols-2 gap-2">
             <select
               value={selectedBranch}
-              onChange={(e) => setSelectedBranch(e.target.value)}
+              onChange={(e) => {
+                setSelectedBranch(e.target.value);
+                setSelectedCourse('');
+              }}
               className="bg-purple-50 text-purple-700 font-semibold text-xs px-2.5 py-2 rounded-xl border-none outline-none truncate"
             >
-              <option value="全部分校">全部分校</option>
+              <option value="" disabled>請選擇學校/分校...</option>
               {branches.map((b) => (
                 <option key={b} value={b}>{b}</option>
               ))}
@@ -253,23 +279,26 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
               onChange={(e) => setSelectedClass(e.target.value)}
               className="bg-purple-50/70 text-purple-700 font-semibold text-xs px-2.5 py-2 rounded-xl border-none outline-none truncate"
             >
-              <option value="全部班別">全部班別</option>
+              <option value="" disabled>請選擇班別...</option>
               {classes.map((c) => (
                 <option key={c} value={c}>{c.endsWith('班') ? c : `${c} 班`}</option>
               ))}
             </select>
           </div>
 
-          {/* ⭐ 需求 2：課程選擇放在下一行獨立滿寬，能有足夠空間顯示全名與時段 */}
+          {/* ⭐ 課程選擇獨立一行滿寬，需先選學校才能選課程 */}
           <div>
             <select
               value={selectedCourse}
+              disabled={!selectedBranch}
               onChange={(e) => setSelectedCourse(e.target.value)}
-              className="w-full bg-indigo-50 text-indigo-700 font-semibold text-xs px-3 py-2 rounded-xl border border-indigo-100 outline-none"
+              className="w-full bg-indigo-50 text-indigo-700 font-semibold text-xs px-3 py-2 rounded-xl border border-indigo-100 outline-none disabled:opacity-50"
             >
-              <option value="全部課程">全部課程 (All Courses)</option>
-              {filteredCourses.map((cr) => (
-                <option key={cr} value={cr}>{cr}</option>
+              <option value="" disabled>
+                {!selectedBranch ? '請先選擇學校/分校' : '請選擇課程...'}
+              </option>
+              {filteredCourses.map((cr, idx) => (
+                <option key={`${cr}_${idx}`} value={cr}>{cr}</option>
               ))}
             </select>
           </div>
@@ -391,12 +420,20 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
         <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
           {loading ? (
             <div className="text-center py-10 text-gray-400 text-xs">載入學生名冊中...</div>
+          ) : (!selectedBranch || !selectedClass || !selectedCourse) ? (
+            <div className="text-center py-12 text-gray-400 text-xs flex flex-col items-center gap-2 bg-white rounded-2xl border border-dashed border-gray-200 p-6">
+              <UserCheck size={34} className="text-indigo-400 animate-pulse" />
+              <p className="font-bold text-gray-700 text-sm">請依序選取學校、班別及課程</p>
+              <p className="text-[11px] text-gray-400 leading-relaxed max-w-[260px]">
+                請在上方選定學校、班別並指定點名課程，系統將自動載入該堂課的學生會員名單
+              </p>
+            </div>
           ) : students.length === 0 ? (
-            <div className="text-center py-12 text-gray-400 text-xs flex flex-col items-center gap-2">
+            <div className="text-center py-12 text-gray-400 text-xs flex flex-col items-center gap-2 bg-white rounded-2xl border border-dashed border-gray-200 p-6">
               <UserCheck size={32} className="text-gray-300" />
-              <p className="font-semibold text-gray-500">暫無此班別之學生名冊記錄</p>
+              <p className="font-semibold text-gray-600">此分校、班別與課程暫無學生登記</p>
               <p className="text-[10px] text-gray-400">
-                請先於「會員目錄 (班級學生管理)」新增學生會員
+                請至「會員目錄」確認學生已登記於該分校、班別及課程
               </p>
             </div>
           ) : (

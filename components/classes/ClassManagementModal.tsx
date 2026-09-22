@@ -331,12 +331,28 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
     }
   };
 
-  // 退出單一課程
-  const handleDeleteEnrollment = async (id: string, sName: string, cName: string) => {
+  // ⭐ 退出單一課程 (當退出所有課程時，保留會員檔案不刪除會員)
+  const handleDeleteEnrollment = async (
+    id: string,
+    sName: string,
+    cName: string,
+    activeCoursesCount: number
+  ) => {
     if (!window.confirm(`確定要為「${sName}」退出課程「${cName}」嗎？`)) return;
     try {
-      await databases.deleteDocument(DATABASE_ID, 'students', id);
-      setExistingStudents((prev) => prev.filter((s) => s.$id !== id));
+      // 若該會員只剩下這 1 個修讀課程，退出時只將課程清空為 ''，保留會員基本資料
+      if (activeCoursesCount <= 1) {
+        await databases.updateDocument(DATABASE_ID, 'students', id, {
+          course_name: '',
+        });
+        setExistingStudents((prev) =>
+          prev.map((s) => (s.$id === id ? { ...s, course_name: '' } : s))
+        );
+      } else {
+        // 若該會員尚有其他課程，則刪除此單門課程註冊紀錄
+        await databases.deleteDocument(DATABASE_ID, 'students', id);
+        setExistingStudents((prev) => prev.filter((s) => s.$id !== id));
+      }
       if (onDataChanged) onDataChanged();
     } catch (err: any) {
       alert('退出失敗：' + err.message);
@@ -864,7 +880,10 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
                                       <span>{en.course_name}</span>
                                       <button
                                         type="button"
-                                        onClick={() => handleDeleteEnrollment(en.id, s.student_name, en.course_name)}
+                                        onClick={() => {
+                                      const validCourses = s.enrollments.filter((e) => e.course_name && e.course_name.trim());
+                                      handleDeleteEnrollment(en.id, s.student_name, en.course_name, validCourses.length);
+                                    }}
                                         className="text-indigo-400 hover:text-red-600 font-bold ml-0.5"
                                         title="退出此課程"
                                       >
@@ -889,8 +908,8 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
                                   ) : (
                                     <>
                                       <option value="" disabled>請選擇要加選的課程...</option>
-                                      {allKnownCourses.map((c) => (
-                                        <option key={c} value={c}>{c}</option>
+                                      {allKnownCourses.map((c, idx) => (
+                                        <option key={`${c}_${idx}`} value={c}>{c}</option>
                                       ))}
                                     </>
                                   )}

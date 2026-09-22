@@ -135,15 +135,19 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
 
   // ⭐ 需求 6：課程內容中，課程選擇會因揀選的學校而變更 (嚴格遵循 React Rules of Hooks，置於 early return 之前)
   const filteredCourses = useMemo(() => {
-    if (selectedBranch === '全部分校') return courses;
-    if (courseItems && courseItems.length > 0) {
+    let list: string[] = [];
+    if (selectedBranch === '全部分校') {
+      list = courses;
+    } else if (courseItems && courseItems.length > 0) {
       const matchedItems = courseItems.filter((c) => {
         if (typeof c === 'string') return true;
         return !c.branch || c.branch === '全部分校' || c.branch === selectedBranch;
       });
-      return matchedItems.map((c) => getCourseDisplayName(c));
+      list = matchedItems.map((c) => getCourseDisplayName(c));
+    } else {
+      list = courses;
     }
-    return courses;
+    return Array.from(new Set(list)).filter(Boolean);
   }, [selectedBranch, courses, courseItems]);
 
   // 當分校變更時，若目前選中課程不在該分校課程中，自動重置為「全部課程」
@@ -737,8 +741,8 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
               className="w-full bg-indigo-50 text-indigo-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-indigo-100 outline-none"
             >
               <option value="全部課程">全部課程 (All Courses)</option>
-              {filteredCourses.map((c) => (
-                <option key={c} value={c}>{c}</option>
+              {filteredCourses.map((c, idx) => (
+                <option key={`${c}_${idx}`} value={c}>{c}</option>
               ))}
             </select>
           </div>

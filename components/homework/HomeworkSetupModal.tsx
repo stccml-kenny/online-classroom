@@ -175,7 +175,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
   // 課程表單欄位
   const [courseFormName, setCourseFormName] = useState('');
   const [courseFormBranch, setCourseFormBranch] = useState(''); // ⭐ 為那間學校/分校的課程
-  const [courseFormStatus, setCourseFormStatus] = useState<CourseStatus>('active');
+  const [courseFormStatus, setCourseFormStatus] = useState<CourseStatus | ''>(''); // ⭐ 預設不預選或填上課程狀態
   const [courseFormTimeSlot, setCourseFormTimeSlot] = useState('');
   const [courseFormStartTime, setCourseFormStartTime] = useState('14:00');
   const [courseFormEndTime, setCourseFormEndTime] = useState('15:30');
@@ -220,22 +220,40 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
   });
 
   // --- ⭐ 課程 (Courses) 相關操作 ---
-  // 打開新增課程表單
+  // ⭐ 需求 1：當離開新增/編輯課程板面時清空所有資料
+  const handleCloseCourseForm = () => {
+    setEditingCourseTargetId(null);
+    setCourseFormName('');
+    setCourseFormBranch('');
+    setCourseFormStatus('');
+    setCourseFormTimeSlot('');
+    setCourseFormStartTime('');
+    setCourseFormEndTime('');
+    setCourseFormTotalSessions(0);
+    setCourseFormSessionDates([]);
+    setSchedStartDate('');
+    setSchedEndDate('');
+    setSchedWeekdays([]);
+    setSchedExcludedDates([]);
+    setSingleDateToAdd('');
+    setSingleDateToExclude('');
+    handleCloseCourseForm();
+  };
+
+  // ⭐ 需求 1：新增課程打開後不要預選學校、課程狀態、時間、節數、排程日期、逢星期幾上課
   const handleOpenAddCourse = () => {
     setEditingCourseTargetId(null);
     setCourseFormName('');
-    setCourseFormBranch(branches[0] || '');
-    setCourseFormStatus('active');
-    setCourseFormTimeSlot('14:00 - 15:30');
-    setCourseFormStartTime('14:00');
-    setCourseFormEndTime('15:30');
-    setCourseFormTotalSessions(8);
+    setCourseFormBranch(''); // 不要預選學校
+    setCourseFormStatus(''); // 不要預選或填上課程狀態
+    setCourseFormTimeSlot(''); // 不要預選或填上課程時間
+    setCourseFormStartTime('');
+    setCourseFormEndTime('');
+    setCourseFormTotalSessions(0); // 不要預選或填上總節數
     setCourseFormSessionDates([]);
-    setSchedStartDate(new Date().toISOString().split('T')[0]);
-    const endD = new Date();
-    endD.setMonth(endD.getMonth() + 2);
-    setSchedEndDate(endD.toISOString().split('T')[0]);
-    setSchedWeekdays([2, 4]);
+    setSchedStartDate(''); // 不要預選或填上自動排程日期
+    setSchedEndDate('');
+    setSchedWeekdays([]); // 不要預選逢星期幾上課
     setSchedExcludedDates([]);
     setSingleDateToAdd('');
     setSingleDateToExclude('');
@@ -291,7 +309,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
         weekdays: schedWeekdays,
         excludedDates: schedExcludedDates,
       },
-      status: courseFormStatus,
+      status: (courseFormStatus as CourseStatus) || 'active',
     };
 
     if (editingCourseTargetId) {
@@ -311,7 +329,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
       onUpdateCourses([...normalizedCourses, newCourseItem]);
     }
 
-    setIsCourseFormOpen(false);
+    handleCloseCourseForm();
   };
 
   // 刪除課程
@@ -485,7 +503,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
         {/* 標籤頁導航：課程 ➔ 學校/分校 ➔ 班別 ➔ 功課範本 */}
         <div className="flex border-b border-gray-100 bg-gray-50 text-xs font-bold overflow-x-auto">
           <button
-            onClick={() => { setActiveTab('courses'); setEditingItem(null); setIsCourseFormOpen(false); }}
+            onClick={() => { setActiveTab('courses'); setEditingItem(null); handleCloseCourseForm(); }}
             className={`flex-1 py-2.5 px-2 text-center border-b-2 whitespace-nowrap transition-colors flex items-center justify-center gap-1 ${
               activeTab === 'courses' ? 'border-indigo-600 text-indigo-600 bg-white' : 'border-transparent text-gray-500'
             }`}
@@ -494,7 +512,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
             課程 ({normalizedCourses.length})
           </button>
           <button
-            onClick={() => { setActiveTab('branches'); setEditingItem(null); setIsCourseFormOpen(false); }}
+            onClick={() => { setActiveTab('branches'); setEditingItem(null); handleCloseCourseForm(); }}
             className={`flex-1 py-2.5 px-2 text-center border-b-2 whitespace-nowrap transition-colors flex items-center justify-center gap-1 ${
               activeTab === 'branches' ? 'border-indigo-600 text-indigo-600 bg-white' : 'border-transparent text-gray-500'
             }`}
@@ -503,7 +521,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
             學校/分校 ({branches.length})
           </button>
           <button
-            onClick={() => { setActiveTab('classes'); setEditingItem(null); setIsCourseFormOpen(false); }}
+            onClick={() => { setActiveTab('classes'); setEditingItem(null); handleCloseCourseForm(); }}
             className={`flex-1 py-2.5 px-2 text-center border-b-2 whitespace-nowrap transition-colors flex items-center justify-center gap-1 ${
               activeTab === 'classes' ? 'border-indigo-600 text-indigo-600 bg-white' : 'border-transparent text-gray-500'
             }`}
@@ -564,7 +582,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                           onChange={(e) => setCourseFormBranch(e.target.value)}
                           className="w-full p-2 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-purple-600 font-semibold text-purple-900"
                         >
-                          <option value="">全部分校 / 不限分校</option>
+                          <option value="">請選擇學校/分校 (未選擇則為不限分校)</option>
                           {branches.map((b) => (
                             <option key={b} value={b}>{b}</option>
                           ))}
@@ -667,11 +685,12 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                         <span className="text-gray-500 font-medium text-[11px]">總節數:</span>
                         <input
                           type="number"
-                          min={1}
+                          min={0}
                           max={100}
-                          value={courseFormTotalSessions}
+                          placeholder="0"
+                          value={courseFormTotalSessions > 0 ? courseFormTotalSessions : ''}
                           onChange={(e) => setCourseFormTotalSessions(parseInt(e.target.value) || 0)}
-                          className="w-14 p-1 bg-indigo-50/60 border border-indigo-200 rounded text-center text-xs font-bold text-indigo-800 outline-none"
+                          className="w-14 p-1 bg-indigo-50/60 border border-indigo-200 rounded text-center text-xs font-bold text-indigo-800 outline-none placeholder:text-gray-400"
                         />
                         <span className="text-gray-500 text-[11px]">節</span>
                       </div>
@@ -869,7 +888,10 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                 </div>
               )}
 
-              {/* ⭐ 需求 5：設定課程版面 Filter 工具列 */}
+              {/* ⭐ 需求：當新增及修改課程時，已設定課程不要顯示，完成或取消後重新出現 */}
+              {!isCourseFormOpen && (
+                <>
+                  {/* ⭐ 需求 5：設定課程版面 Filter 工具列 */}
               {!isCourseFormOpen && normalizedCourses.length > 0 && (
                 <div className="bg-gray-50 p-2.5 rounded-xl border border-gray-200 space-y-2">
                   <div className="grid grid-cols-2 gap-1.5">
@@ -935,14 +957,14 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                   </div>
                 )}
 
-                {filteredNormalizedCourses.map((c) => {
+                {filteredNormalizedCourses.map((c, idx) => {
                   const statusMeta = getCourseStatusMeta(c.status);
                   const isExpanded = expandedCourseIds.includes(c.id);
                   const sessionsCount = c.totalSessions || (c.sessionDates?.length || 0);
 
                   return (
                     <div
-                      key={c.id}
+                      key={c.id || `${c.name}_${idx}`}
                       className="bg-white border border-gray-200 rounded-xl p-3 space-y-2 shadow-2xs hover:border-indigo-300 transition-all text-xs"
                     >
                       {/* 標題與操作列 */}
@@ -1059,6 +1081,8 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                   );
                 })}
               </div>
+                </>
+              )}
             </div>
           )}
 
@@ -1253,14 +1277,17 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
           
         </div>
 
-        <div className="p-3 border-t border-gray-100 bg-gray-50">
-          <button
-            onClick={onClose}
-            className="w-full py-2 bg-gray-800 text-white rounded-xl font-bold text-xs hover:bg-gray-700 transition-colors"
-          >
-            完成設定
-          </button>
-        </div>
+        {/* ⭐ 需求：當新增及修改課程時，完成設定不要顯示，完成新增或修改重新出現 */}
+        {!isCourseFormOpen && (
+          <div className="p-3 border-t border-gray-100 bg-gray-50">
+            <button
+              onClick={onClose}
+              className="w-full py-2 bg-gray-800 text-white rounded-xl font-bold text-xs hover:bg-gray-700 transition-colors"
+            >
+              完成設定
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
