@@ -1411,7 +1411,7 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
         </div>
       </div>
 
-      {/* 課程單元建立 / 編輯彈窗 */}
+      {/* 課程單元建立 / 編輯彈窗 (⭐ 根據所選學校顯示相對應課程) */}
       <CourseUnitFormModal
         isOpen={unitFormOpen}
         onClose={() => {
@@ -1422,9 +1422,12 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
         initialData={editingUnit}
         branches={branches}
         courses={courses}
+        courseItems={courseItems}
+        defaultBranch={selectedBranch !== '全部分校' ? selectedBranch : undefined}
+        defaultCourse={selectedCourse !== '全部課程' ? selectedCourse : undefined}
       />
 
-      {/* 家課建立 / 編輯彈窗 */}
+      {/* 家課建立 / 編輯彈窗 (⭐ 根據所選學校顯示相對應課程) */}
       <HomeworkFormModal
         isOpen={hwFormOpen}
         onClose={() => {
@@ -1436,6 +1439,9 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
         initialData={editingHw}
         branches={branches}
         courses={courses}
+        courseItems={courseItems}
+        defaultBranch={selectedBranch !== '全部分校' ? selectedBranch : undefined}
+        defaultCourse={selectedCourse !== '全部課程' ? selectedCourse : undefined}
         targetUnitId={targetUnitForNewHw?.$id}
         targetUnitTitle={targetUnitForNewHw?.unit_title}
       />

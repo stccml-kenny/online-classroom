@@ -2,6 +2,7 @@
 import { X, Plus, BookOpen, Settings } from 'lucide-react';
 import { HomeworkCard, HomeworkItem } from './HomeworkCard';
 import { HomeworkFormModal } from './HomeworkFormModal';
+import { CourseItem } from './HomeworkSetupModal';
 import { databases, DATABASE_ID } from '@/lib/appwrite';
 import { ID, Query } from 'appwrite';
 
@@ -10,6 +11,7 @@ interface HomeworkModalProps {
   onClose: () => void;
   branches: string[];
   courses: string[];
+  courseItems?: (string | CourseItem)[]; // ⭐ 支援課程物件結構
   onDataChanged?: () => void;
   onOpenSetup?: () => void;
 }
@@ -19,6 +21,7 @@ export const HomeworkModal: React.FC<HomeworkModalProps> = ({
   onClose,
   branches,
   courses,
+  courseItems = [],
   onDataChanged,
   onOpenSetup,
 }) => {
@@ -396,6 +399,9 @@ export const HomeworkModal: React.FC<HomeworkModalProps> = ({
         initialData={editingItem}
         branches={branches}
         courses={courses}
+        courseItems={courseItems}
+        defaultBranch={selectedBranch !== '全部分校' ? selectedBranch : undefined}
+        defaultCourse={selectedCourse !== '全部課程' ? selectedCourse : undefined}
       />
     </div>
   );

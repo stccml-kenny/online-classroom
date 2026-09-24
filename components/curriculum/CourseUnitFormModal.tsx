@@ -1,8 +1,9 @@
-﻿import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  X, Save, GraduationCap, UploadCloud, FileText, Music, Video, Loader2, ExternalLink, Globe, Plus, Calendar
+  X, Save, GraduationCap, UploadCloud, FileText, Music, Video, Loader2, ExternalLink, Globe, Plus, Calendar, MapPin
 } from 'lucide-react';
 import { HomeworkAttachment, extractYoutubeId, getGoogleLinkMeta, YoutubeIcon } from '../homework/HomeworkCard';
+import { CourseItem, getCourseDisplayName } from '../homework/HomeworkSetupModal';
 import { storage, BUCKET_ID } from '@/lib/appwrite';
 import { storeLocalFile } from '@/utils/indexedDB';
 import { ID } from 'appwrite';
@@ -28,6 +29,9 @@ interface CourseUnitFormModalProps {
   initialData?: CourseUnit | null;
   branches: string[];
   courses: string[];
+  courseItems?: (string | CourseItem)[]; // ⭐ 支援課程物件結構以取得所屬學校/分校
+  defaultBranch?: string; // ⭐ 預選分校
+  defaultCourse?: string; // ⭐ 預選課程
 }
 
 export const CourseUnitFormModal: React.FC<CourseUnitFormModalProps> = ({
@@ -37,9 +41,60 @@ export const CourseUnitFormModal: React.FC<CourseUnitFormModalProps> = ({
   initialData,
   branches,
   courses,
+  courseItems = [],
+  defaultBranch,
+  defaultCourse,
 }) => {
-  const [branch, setBranch] = useState(branches[0] || '');
-  const [courseName, setCourseName] = useState(courses[0] || '');
+  const [branch, setBranch] = useState(defaultBranch || branches[0] || '');
+  const [courseName, setCourseName] = useState(defaultCourse || courses[0] || '');
+
+  // ⭐ 需求：新增課程單元時，課程要根據所選學校/分校 (branch) 動態顯示相對應的課程
+  const availableCourses = useMemo(() => {
+    let list: string[] = [];
+    if (!branch || branch === '全部分校') {
+      if (courseItems && courseItems.length > 0) {
+        list = courseItems.map((c) => getCourseDisplayName(c));
+      } else {
+        list = courses;
+      }
+    } else if (courseItems && courseItems.length > 0) {
+      const matched = courseItems.filter((c) => {
+        if (typeof c === 'string') return true;
+        return !c.branch || c.branch === '全部分校' || c.branch === branch;
+      });
+      list = matched.map((c) => getCourseDisplayName(c));
+    } else {
+      list = courses;
+    }
+    const unique = Array.from(new Set(list)).filter(Boolean);
+    return unique.length > 0 ? unique : courses;
+  }, [branch, courses, courseItems]);
+
+  const handleBranchChange = (newBranch: string) => {
+    setBranch(newBranch);
+    // ⭐ 當分校變更時，即時過濾該分校的課程
+    let nextCourses: string[] = [];
+    if (courseItems && courseItems.length > 0 && newBranch && newBranch !== '全部分校') {
+      const matched = courseItems.filter((c) => {
+        if (typeof c === 'string') return true;
+        return !c.branch || c.branch === '全部分校' || c.branch === newBranch;
+      });
+      nextCourses = matched.map((c) => getCourseDisplayName(c));
+    } else if (courseItems && courseItems.length > 0) {
+      nextCourses = courseItems.map((c) => getCourseDisplayName(c));
+    } else {
+      nextCourses = courses;
+    }
+    const unique = Array.from(new Set(nextCourses)).filter(Boolean);
+    if (unique.length > 0) {
+      const isValid = unique.some(
+        (c) => c === courseName || c.startsWith(courseName) || courseName.startsWith(c)
+      );
+      if (!isValid) {
+        setCourseName(unique[0]);
+      }
+    }
+  };
   const [unitTitle, setUnitTitle] = useState('');
   const [description, setDescription] = useState('');
   
@@ -99,8 +154,9 @@ export const CourseUnitFormModal: React.FC<CourseUnitFormModalProps> = ({
 
   useEffect(() => {
     if (initialData) {
-      setBranch(initialData.branch || branches[0] || '');
-      setCourseName(initialData.course_name || courses[0] || '');
+      const targetBranch = initialData.branch || defaultBranch || branches[0] || '';
+      setBranch(targetBranch);
+      setCourseName(initialData.course_name || defaultCourse || courses[0] || '');
       setUnitTitle(initialData.unit_title || '');
       setDescription(initialData.description || '');
       setPublishDate(initialData.publish_date ? initialData.publish_date.split('T')[0] : '');
@@ -148,8 +204,30 @@ export const CourseUnitFormModal: React.FC<CourseUnitFormModalProps> = ({
       setCurrentYtInput('');
       setCurrentGoogleInput('');
     } else {
-      setBranch(branches[0] || '');
-      setCourseName(courses[0] || '');
+      // ⭐ 新增課程單元：預設帶入外層當前所選的分校與課程
+      const targetBranch = defaultBranch && defaultBranch !== '全部分校' ? defaultBranch : (branches[0] || '');
+      setBranch(targetBranch);
+
+      let branchCourses: string[] = [];
+      if (courseItems && courseItems.length > 0 && targetBranch) {
+        const matched = courseItems.filter((c) => {
+          if (typeof c === 'string') return true;
+          return !c.branch || c.branch === '全部分校' || c.branch === targetBranch;
+        });
+        branchCourses = matched.map((c) => getCourseDisplayName(c));
+      } else {
+        branchCourses = courses;
+      }
+      const uniqueBranchCourses = Array.from(new Set(branchCourses)).filter(Boolean);
+
+      if (defaultCourse && defaultCourse !== '全部課程' && uniqueBranchCourses.includes(defaultCourse)) {
+        setCourseName(defaultCourse);
+      } else if (uniqueBranchCourses.length > 0) {
+        setCourseName(uniqueBranchCourses[0]);
+      } else {
+        setCourseName(courses[0] || '');
+      }
+
       setUnitTitle('');
       setDescription('');
       // 新增時上架日期預設留空，方便老師先規劃單元內容，有待之後再安排
@@ -161,7 +239,7 @@ export const CourseUnitFormModal: React.FC<CourseUnitFormModalProps> = ({
       setCurrentYtInput('');
       setCurrentGoogleInput('');
     }
-  }, [initialData, isOpen, branches, courses]);
+  }, [initialData, isOpen, branches, courses, courseItems, defaultBranch, defaultCourse]);
 
   if (!isOpen) return null;
 
@@ -331,13 +409,19 @@ export const CourseUnitFormModal: React.FC<CourseUnitFormModalProps> = ({
         <form onSubmit={handleSubmit} className="p-5 space-y-3.5 overflow-y-auto text-sm">
           {/* 1. 分校 (Branch) */}
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">分校 (Branch)</label>
+            <label className="block text-xs font-semibold text-gray-600 mb-1 flex items-center gap-1">
+              <MapPin size={12} className="text-purple-600" />
+              <span>學校 / 分校 (School / Branch)</span>
+            </label>
             {branches.length > 0 ? (
               <select
                 value={branch}
-                onChange={(e) => setBranch(e.target.value)}
-                className="w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 text-xs outline-none focus:bg-white focus:border-indigo-600"
+                onChange={(e) => handleBranchChange(e.target.value)}
+                className="w-full p-2.5 border border-purple-200 rounded-lg bg-purple-50/50 text-xs font-medium text-gray-800 outline-none focus:bg-white focus:border-indigo-600"
               >
+                {branches.length > 1 && (
+                  <option value="全部分校">全部分校 (全部學校適用)</option>
+                )}
                 {branches.map((b) => (
                   <option key={b} value={b}>{b}</option>
                 ))}
@@ -347,22 +431,37 @@ export const CourseUnitFormModal: React.FC<CourseUnitFormModalProps> = ({
                 type="text"
                 placeholder="例: 分校或校舍名稱"
                 value={branch}
-                onChange={(e) => setBranch(e.target.value)}
+                onChange={(e) => handleBranchChange(e.target.value)}
                 className="w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 text-xs outline-none focus:border-indigo-600"
               />
             )}
           </div>
 
-          {/* 2. 課程 (Course) */}
+          {/* 2. 課程 (Course) - ⭐ 根據所選學校顯示相對應的課程 */}
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">課程 (Course)</label>
-            {courses.length > 0 ? (
+            <div className="flex justify-between items-center mb-1">
+              <label className="block text-xs font-semibold text-gray-600 flex items-center gap-1">
+                <GraduationCap size={12} className="text-indigo-600" />
+                <span>課程 (Course)</span> <span className="text-indigo-600">*</span>
+              </label>
+              {branch && branch !== '全部分校' ? (
+                <span className="text-[10px] text-purple-600 font-bold bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200">
+                  {branch} 專屬課程 ({availableCourses.length})
+                </span>
+              ) : (
+                <span className="text-[10px] text-gray-500 font-medium bg-gray-100 px-1.5 py-0.5 rounded">
+                  全部可用課程 ({availableCourses.length})
+                </span>
+              )}
+            </div>
+            {availableCourses.length > 0 ? (
               <select
                 value={courseName}
                 onChange={(e) => setCourseName(e.target.value)}
-                className="w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 text-xs outline-none focus:bg-white focus:border-indigo-600"
+                className="w-full p-2.5 border border-indigo-200 rounded-lg bg-indigo-50/50 text-xs font-medium text-gray-800 outline-none focus:bg-white focus:border-indigo-600"
+                required
               >
-                {courses.map((c) => (
+                {availableCourses.map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
