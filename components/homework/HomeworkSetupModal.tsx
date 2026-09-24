@@ -379,7 +379,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
       } catch (e) {}
       onUpdateCourses(updated);
       if (oldCourse && oldCourse.name !== finalName && onRenameCourse) {
-        onRenameCourse(oldCourse.name, finalName);
+        onRenameCourse?.(oldCourse.name, finalName);
       }
     } else {
       // 新增 (⭐ 只有相同學校、時段及名稱，才顯示課程已存在)
@@ -509,7 +509,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
     if (val !== oldBranch) {
       const updated = branches.map((b) => (b === oldBranch ? val : b));
       onUpdateBranches(updated);
-      if (onRenameBranch) onRenameBranch(oldBranch, val);
+      if (onRenameBranch) onRenameBranch?.(oldBranch, val);
     }
     setEditingItem(null);
   };
@@ -544,7 +544,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
     if (val !== oldClass) {
       const updated = classes.map((c) => (c === oldClass ? val : c));
       onUpdateClasses(updated);
-      if (onRenameClass) onRenameClass(oldClass, val);
+      if (onRenameClass) onRenameClass?.(oldClass, val);
     }
     setEditingItem(null);
   };

@@ -304,11 +304,8 @@ export default function OnlineClassroomApp() {
           <MoreView
             noticeCount={notices.length}
             onOpenNotices={() => setShowNoticeModal(true)}
-            onOpenHomework={() => setShowCourseContentModal(true)}
-            onOpenCourseContent={() => handleOpenCourseContent('', '全部分校', false)}
             onOpenSetup={() => setShowSetupModal(true)} // ⭐ 設定按鍵開啟「學校/分校及班別設定」彈窗
             onOpenAttendance={() => setShowAttendanceModal(true)}
-            onOpenClasses={() => setActiveTab('members')}
           />
         )}
 

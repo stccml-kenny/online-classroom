@@ -1,8 +1,8 @@
 ﻿import React from 'react';
 import {
-  Users, Radio, Calendar, FileText, BookOpen,
+  Users, Radio, Calendar, FileText,
   UserCheck, MessageSquare, Lock, Mail, Shield,
-  FileCheck, LogOut, GraduationCap, Settings
+  FileCheck, LogOut, Settings
 } from 'lucide-react';
 import { MenuItem } from './MenuItem';
 
@@ -11,18 +11,15 @@ interface MoreViewProps {
   onOpenNotices: () => void;
   onOpenHomework?: () => void;
   onOpenAttendance: () => void;
-  onOpenClasses: () => void;
-  onOpenCourseContent: () => void;
+  onOpenClasses?: () => void;
+  onOpenCourseContent?: () => void;
   onOpenSetup?: () => void; // ⭐ 設定入口
 }
 
 export const MoreView: React.FC<MoreViewProps> = ({
   noticeCount,
   onOpenNotices,
-  onOpenHomework,
   onOpenAttendance,
-  onOpenClasses,
-  onOpenCourseContent,
   onOpenSetup,
 }) => {
   return (
@@ -48,13 +45,6 @@ export const MoreView: React.FC<MoreViewProps> = ({
           badge={noticeCount && noticeCount > 0 ? `${noticeCount}` : undefined}
           onClick={onOpenNotices}
         />
-        {/* 第一層目錄：課程內容 */}
-        <MenuItem
-          icon={<GraduationCap className="text-indigo-600" size={20} />}
-          title="課程內容"
-          badge="新"
-          onClick={onOpenCourseContent}
-        />
         {/* ⭐ 設定按鍵：只保留學校/分校及班別設定 */}
         <MenuItem
           icon={<Settings className="text-[#FF6B57]" size={20} />}
@@ -65,11 +55,6 @@ export const MoreView: React.FC<MoreViewProps> = ({
           icon={<UserCheck className="text-[#FF6B57]" size={20} />}
           title="活動 / 課程點名"
           onClick={onOpenAttendance}
-        />
-        <MenuItem
-          icon={<Users className="text-[#FF6B57]" size={20} />}
-          title="會員目錄"
-          onClick={onOpenClasses}
         />
         <MenuItem icon={<MessageSquare className="text-[#FF6B57]" size={20} />} title="小組訊息" />
       </div>
