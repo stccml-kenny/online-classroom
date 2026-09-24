@@ -9,13 +9,15 @@ import { databases, DATABASE_ID } from '@/lib/appwrite';
 import { ID, Query } from 'appwrite';
 
 interface ClassManagementModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen?: boolean;
+  isInline?: boolean; // ⭐ 支援滿板顯示 (非浮動彈窗)
+  onClose?: () => void;
   branches: string[];
   classes: string[];
   courses: string[];
   courseItems?: (string | CourseItem)[];
   onDataChanged?: () => void;
+  onOpenCourseContent?: (courseName: string, branch?: string, isLocked?: boolean) => void;
 }
 
 export interface StudentRecord {
@@ -35,13 +37,15 @@ interface GroupedStudent {
 }
 
 export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
-  isOpen,
+  isOpen = true,
+  isInline = false,
   onClose,
   branches,
   classes,
   courses,
   courseItems = [],
   onDataChanged,
+  onOpenCourseContent,
 }) => {
   const [activeTab, setActiveTab] = useState<'manual' | 'excel' | 'list'>('manual');
 
@@ -530,18 +534,22 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
   const availableCoursesInList = Array.from(new Set(existingStudents.map((s) => s.course_name).filter(Boolean)));
   const allKnownCourses = Array.from(new Set([...courses, ...availableCoursesInList]));
 
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh]">
+    <div className={isInline ? "w-full flex-1 flex flex-col bg-white overflow-hidden" : "fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"}>
+      <div className={isInline ? "w-full flex-1 flex flex-col overflow-hidden bg-white" : "bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh]"}>
         {/* 頂部標題 */}
-        <div className="bg-[#4A5568] text-white px-5 py-3.5 flex justify-between items-center">
+        <div className="bg-[#4A5568] text-white px-5 py-3.5 flex justify-between items-center shrink-0">
           <div className="flex items-center gap-2">
             <Users size={18} />
             <h4 className="font-bold text-base">會員目錄 (班級課程與學生管理)</h4>
           </div>
-          <button onClick={onClose} className="text-white/80 hover:text-white">
-            <X size={20} />
-          </button>
+          {onClose && !isInline && (
+            <button onClick={onClose} className="text-white/80 hover:text-white">
+              <X size={20} />
+            </button>
+          )}
         </div>
 
         {/* 標籤頁切換：單筆新增 (多課程) 改名為「新增會員」 */}
@@ -1000,16 +1008,25 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
                                   .map((en) => (
                                     <span
                                       key={en.id}
-                                      className="text-[11px] bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full font-semibold flex items-center gap-1"
+                                      onClick={() => {
+                                        if (onOpenCourseContent) {
+                                          onOpenCourseContent(en.course_name, s.branch, true);
+                                        }
+                                      }}
+                                      className={`text-[11px] bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 ${
+                                        onOpenCourseContent ? 'cursor-pointer hover:bg-indigo-100 hover:border-indigo-300 transition-colors' : ''
+                                      }`}
+                                      title={onOpenCourseContent ? "點擊打開此課程的單元與家課" : undefined}
                                     >
                                       <GraduationCap size={10} />
                                       <span>{en.course_name}</span>
                                       <button
                                         type="button"
-                                        onClick={() => {
-                                      const validCourses = s.enrollments.filter((e) => e.course_name && e.course_name.trim());
-                                      handleDeleteEnrollment(en.id, s.student_name, en.course_name, validCourses.length);
-                                    }}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          const validCourses = s.enrollments.filter((e2) => e2.course_name && e2.course_name.trim());
+                                          handleDeleteEnrollment(en.id, s.student_name, en.course_name, validCourses.length);
+                                        }}
                                         className="text-indigo-400 hover:text-red-600 font-bold ml-0.5"
                                         title="退出此課程"
                                       >
@@ -1082,14 +1099,16 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
           )}
         </div>
 
-        <div className="p-3 border-t border-gray-100 bg-gray-50">
-          <button
-            onClick={onClose}
-            className="w-full py-2 bg-gray-800 text-white rounded-xl font-bold text-xs hover:bg-gray-700"
-          >
-            完成
-          </button>
-        </div>
+        {!isInline && onClose && (
+          <div className="p-3 border-t border-gray-100 bg-gray-50 shrink-0">
+            <button
+              onClick={onClose}
+              className="w-full py-2 bg-gray-800 text-white rounded-xl font-bold text-xs hover:bg-gray-700"
+            >
+              完成
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

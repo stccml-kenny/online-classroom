@@ -1,7 +1,7 @@
 ﻿import React from 'react';
-import { Home, MessageCircle, Bell, GraduationCap } from 'lucide-react';
+import { Home, MessageCircle, Users, GraduationCap } from 'lucide-react';
 
-export type TabType = 'home' | 'msg' | 'staff' | 'courses' | 'more';
+export type TabType = 'home' | 'msg' | 'members' | 'courses' | 'more' | 'staff';
 
 interface BottomNavProps {
   activeTab: TabType;
@@ -23,11 +23,12 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange }) 
         active={activeTab === 'msg'}
         onClick={() => onTabChange('msg')}
       />
+      {/* ⭐ 需求：移除底部職員通告改成會員，點擊直接打開會員目錄 */}
       <TabButton
-        icon={<Bell size={22} />}
-        label="職員通告"
-        active={activeTab === 'staff'}
-        onClick={() => onTabChange('staff')}
+        icon={<Users size={22} />}
+        label="會員"
+        active={activeTab === 'members'}
+        onClick={() => onTabChange('members')}
       />
       <TabButton
         icon={<GraduationCap size={22} />}

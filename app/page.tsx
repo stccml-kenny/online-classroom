@@ -288,7 +288,7 @@ export default function OnlineClassroomApp() {
     switch (activeTab) {
       case 'home': return '首頁';
       case 'msg': return '即時訊息';
-      case 'staff': return '職員通告';
+      case 'members': return '會員目錄';
       case 'courses': return '課程管理';
       case 'more': return '更多';
       default: return 'ONLINE CLASSROOM';
@@ -308,7 +308,7 @@ export default function OnlineClassroomApp() {
             onOpenCourseContent={() => handleOpenCourseContent('', '全部分校', false)}
             onOpenSetup={() => setShowSetupModal(true)} // ⭐ 設定按鍵開啟「學校/分校及班別設定」彈窗
             onOpenAttendance={() => setShowAttendanceModal(true)}
-            onOpenClasses={() => setShowClassModal(true)}
+            onOpenClasses={() => setActiveTab('members')}
           />
         )}
 
@@ -330,9 +330,23 @@ export default function OnlineClassroomApp() {
           </div>
         )}
 
+        {/* ⭐ 需求：將會員目錄功能移到底部會員目錄 (滿板顯示) */}
+        {activeTab === 'members' && (
+          <div className="flex-1 w-full bg-[#F8F9FA] flex flex-col overflow-hidden pb-16">
+            <ClassManagementModal
+              isOpen={true}
+              isInline={true}
+              branches={branches}
+              classes={classes}
+              courses={courseNames}
+              courseItems={courses}
+              onOpenCourseContent={handleOpenCourseContent}
+            />
+          </div>
+        )}
+
         {activeTab === 'home' && <div className="p-5 text-center text-gray-400">首頁模組開發中</div>}
         {activeTab === 'msg' && <div className="p-5 text-center text-gray-400">即時訊息模組開發中</div>}
-        {activeTab === 'staff' && <div className="p-5 text-center text-gray-400">職員通告模組開發中</div>}
 
         <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
 
