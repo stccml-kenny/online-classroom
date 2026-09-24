@@ -128,8 +128,9 @@ export const generateSessionDates = (
 };
 
 interface HomeworkSetupModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen?: boolean;
+  isInline?: boolean; // ⭐ 支援滿板顯示 (非浮動彈窗)
+  onClose?: () => void;
   branches: string[];
   classes: string[];
   courses: (string | CourseItem)[];
@@ -142,7 +143,8 @@ interface HomeworkSetupModalProps {
 }
 
 export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
-  isOpen,
+  isOpen = true,
+  isInline = false,
   onClose,
   branches,
   classes,
@@ -154,6 +156,31 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
   onRenameClass,
   onRenameBranch,
 }) => {
+  // ⭐ 需求 2：所有板面離開後或按完成或按取消應該清空或還原預設值
+  const handleResetAllStates = () => {
+    handleCloseCourseForm();
+    setEditingItem(null);
+    setEditValue('');
+    setEditDescValue('');
+    setNewBranch('');
+    setNewClass('');
+    setCourseFilterBranch('全部分校');
+    setCourseFilterStatus('all');
+    setCourseSearchKeyword('');
+    setExpandedCourseIds([]);
+    setActiveTab('courses');
+  };
+
+  const handleCloseModal = () => {
+    handleResetAllStates();
+    if (onClose) onClose();
+  };
+
+  React.useEffect(() => {
+    if (!isOpen && !isInline) {
+      handleResetAllStates();
+    }
+  }, [isOpen, isInline]);
   // 順序：課程、學校/分校、班別、功課範本
   const [activeTab, setActiveTab] = useState<'courses' | 'branches' | 'classes'>('courses');
 
@@ -197,7 +224,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
   const [courseFilterStatus, setCourseFilterStatus] = useState<string>('all');
   const [courseSearchKeyword, setCourseSearchKeyword] = useState('');
 
-  if (!isOpen) return null;
+  if (!isOpen && !isInline) return null;
 
   const normalizedCourses = courses.map(normalizeCourse);
   // ⭐ 需求 5：課程篩選邏輯
@@ -514,22 +541,35 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
     onUpdateClasses([]);
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
-        {/* 頂部標題 */}
-        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-5 py-3.5 flex justify-between items-center">
+  const mainContent = (
+    <div className={`bg-white w-full ${isInline ? 'flex-1 flex flex-col min-h-0' : 'max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]'}`}>
+      {/* 頂部標題 */}
+      {!isInline ? (
+        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-5 py-3.5 flex justify-between items-center shrink-0">
           <div className="flex items-center gap-2">
             <Settings size={18} />
             <div>
-              <h4 className="font-bold text-base leading-tight">設定 (Settings)</h4>
-              <p className="text-[10px] text-white/80">課程時段與排程、學校分校、班別及功課範本</p>
+              <h4 className="font-bold text-base leading-tight">課程與班別設定</h4>
+              <p className="text-[10px] text-white/80">管理各校課程、上課時段、每節排程、學校及班別名冊</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-white/80 hover:text-white p-1">
+          <button onClick={handleCloseModal} className="text-white/80 hover:text-white p-1" title="關閉">
             <X size={20} />
           </button>
         </div>
+      ) : (
+        <div className="bg-white px-4 py-3 border-b border-gray-150 flex justify-between items-center shrink-0 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
+              <GraduationCap size={20} />
+            </div>
+            <div>
+              <h4 className="font-bold text-sm text-gray-800 leading-tight">課程與班級設定</h4>
+              <p className="text-[10px] text-gray-400">管理各校課程、上課時段、自動排程、學校與班別名冊</p>
+            </div>
+          </div>
+        </div>
+      )}
 
         {/* 標籤頁導航：課程 ➔ 學校/分校 ➔ 班別 ➔ 功課範本 */}
         <div className="flex border-b border-gray-100 bg-gray-50 text-xs font-bold overflow-x-auto">
@@ -1332,11 +1372,11 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
           
         </div>
 
-        {/* ⭐ 需求：當新增及修改課程時，完成設定不要顯示，完成新增或修改重新出現 */}
-        {!isCourseFormOpen && (
+        {/* ⭐ 需求：當新增及修改課程時，完成設定不要顯示；滿板模式亦不需佔位完成按鈕 */}
+        {!isCourseFormOpen && !isInline && (
           <div className="p-3 border-t border-gray-100 bg-gray-50">
             <button
-              onClick={onClose}
+              onClick={handleCloseModal}
               className="w-full py-2 bg-gray-800 text-white rounded-xl font-bold text-xs hover:bg-gray-700 transition-colors"
             >
               完成設定
@@ -1344,6 +1384,15 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
           </div>
         )}
       </div>
+  );
+
+  if (isInline) {
+    return <div className="flex-1 w-full bg-[#F8F9FA] flex flex-col overflow-y-auto">{mainContent}</div>;
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+      {mainContent}
     </div>
   );
 };

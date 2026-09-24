@@ -56,6 +56,44 @@ export const HomeworkFormModal: React.FC<HomeworkFormModalProps> = ({
   const [uploadingFiles, setUploadingFiles] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  const handleResetAndClose = () => {
+    setSelectedTitles([]);
+    setCurrentInput('');
+    setDescription('');
+    setDueDate('');
+    setPublishDate('');
+    setUnpublishDate('');
+    setYoutubeUrls([]);
+    setCurrentYtInput('');
+    setGoogleUrls([]);
+    setCurrentGoogleInput('');
+    setAttachments([]);
+    setUploadingFiles(false);
+    setSubmitting(false);
+    setBranch(branches[0] || '');
+    setCourseName(courses[0] || '');
+    onClose();
+  };
+
+  useEffect(() => {
+    if (!isOpen) {
+      setSelectedTitles([]);
+      setCurrentInput('');
+      setDescription('');
+      setDueDate('');
+      setPublishDate('');
+      setUnpublishDate('');
+      setYoutubeUrls([]);
+      setCurrentYtInput('');
+      setGoogleUrls([]);
+      setCurrentGoogleInput('');
+      setAttachments([]);
+      setUploadingFiles(false);
+      setSubmitting(false);
+    }
+  }, [isOpen]);
+
+
   useEffect(() => {
     if (initialData) {
       setBranch(initialData.branch || branches[0] || '');
@@ -823,14 +861,23 @@ export const HomeworkFormModal: React.FC<HomeworkFormModalProps> = ({
             )}
           </div>
 
-          <button
-            type="submit"
-            disabled={submitting || uploadingFiles}
-            className="w-full py-3 bg-[#FF6B57] text-white font-bold rounded-xl text-xs hover:bg-[#e05a48] transition-colors flex items-center justify-center gap-1.5 shadow-md"
-          >
-            <Save size={16} />
-            <span>{submitting ? '儲存中...' : initialData ? '更新家課' : '發布家課'}</span>
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleResetAndClose}
+              className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl text-xs hover:bg-gray-200 transition-colors"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              disabled={submitting || uploadingFiles}
+              className="flex-2 py-3 bg-[#FF6B57] text-white font-bold rounded-xl text-xs hover:bg-[#e05a48] transition-colors flex items-center justify-center gap-1.5 shadow-md"
+            >
+              <Save size={16} />
+              <span>{submitting ? '儲存中...' : initialData ? '更新家課' : '發布家課'}</span>
+            </button>
+          </div>
         </form>
       </div>
     </div>

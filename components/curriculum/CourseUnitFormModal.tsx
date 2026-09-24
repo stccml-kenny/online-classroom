@@ -61,6 +61,40 @@ export const CourseUnitFormModal: React.FC<CourseUnitFormModalProps> = ({
   const [uploadingFiles, setUploadingFiles] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  const handleResetAndClose = () => {
+    setUnitTitle('');
+    setDescription('');
+    setPublishDate('');
+    setUnpublishDate('');
+    setYoutubeUrls([]);
+    setNewYoutubeInput('');
+    setGoogleUrls([]);
+    setNewGoogleInput('');
+    setAttachments([]);
+    setUploadingFiles(false);
+    setSubmitting(false);
+    setBranch(branches[0] || '');
+    setCourseName(courses[0] || '');
+    onClose();
+  };
+
+  useEffect(() => {
+    if (!isOpen) {
+      setUnitTitle('');
+      setDescription('');
+      setPublishDate('');
+      setUnpublishDate('');
+      setYoutubeUrls([]);
+      setNewYoutubeInput('');
+      setGoogleUrls([]);
+      setNewGoogleInput('');
+      setAttachments([]);
+      setUploadingFiles(false);
+      setSubmitting(false);
+    }
+  }, [isOpen]);
+
+
   useEffect(() => {
     if (initialData) {
       setBranch(initialData.branch || branches[0] || '');
@@ -701,14 +735,23 @@ export const CourseUnitFormModal: React.FC<CourseUnitFormModalProps> = ({
             )}
           </div>
 
-          <button
-            type="submit"
-            disabled={submitting || uploadingFiles}
-            className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl text-xs hover:bg-indigo-700 transition-colors flex items-center justify-center gap-1.5 shadow-md"
-          >
-            <Save size={16} />
-            <span>{submitting ? '儲存中...' : initialData ? '更新課程單元' : '確認發布課程單元'}</span>
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleResetAndClose}
+              className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl text-xs hover:bg-gray-200 transition-colors"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              disabled={submitting || uploadingFiles}
+              className="flex-2 py-3 bg-indigo-600 text-white font-bold rounded-xl text-xs hover:bg-indigo-700 transition-colors flex items-center justify-center gap-1.5 shadow-md"
+            >
+              <Save size={16} />
+              <span>{submitting ? '儲存中...' : initialData ? '更新課程單元' : '確認發布課程單元'}</span>
+            </button>
+          </div>
         </form>
       </div>
     </div>

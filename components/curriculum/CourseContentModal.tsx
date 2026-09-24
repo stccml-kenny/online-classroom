@@ -191,6 +191,52 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
   const [resolvedBlobUrls, setResolvedBlobUrls] = useState<Record<string, string>>({});
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
 
+  const handleResetAndClose = () => {
+    setSelectedBranch('全部分校');
+    setSelectedCourse('全部課程');
+    setFilterStatus('all');
+    setSearchKeyword('');
+    setExpandedUnitIds([]);
+    setIsUnitSelectMode(false);
+    setSelectedUnitIds([]);
+    setIsHwSelectMode(false);
+    setSelectedHwIds([]);
+    setBatchEditOpen(false);
+    setUnitFormOpen(false);
+    setEditingUnit(null);
+    setHwFormOpen(false);
+    setEditingHw(null);
+    setTargetUnitForNewHw(null);
+    setHwSelectModalOpen(false);
+    setTargetUnitForHwSelect(null);
+    setPlayingAudioId(null);
+    onClose();
+  };
+
+  useEffect(() => {
+    if (!isOpen) {
+      setSelectedBranch('全部分校');
+      setSelectedCourse('全部課程');
+      setFilterStatus('all');
+      setSearchKeyword('');
+      setExpandedUnitIds([]);
+      setIsUnitSelectMode(false);
+      setSelectedUnitIds([]);
+      setIsHwSelectMode(false);
+      setSelectedHwIds([]);
+      setBatchEditOpen(false);
+      setUnitFormOpen(false);
+      setEditingUnit(null);
+      setHwFormOpen(false);
+      setEditingHw(null);
+      setTargetUnitForNewHw(null);
+      setHwSelectModalOpen(false);
+      setTargetUnitForHwSelect(null);
+      setPlayingAudioId(null);
+    }
+  }, [isOpen]);
+
+
   // 讀取課程單元
   const fetchUnits = async () => {
     try {
@@ -664,7 +710,7 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
             </div>
           </div>
 
-          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600">
+          <button onClick={handleResetAndClose} className="p-1 text-gray-400 hover:text-gray-600" title="關閉">
             <X size={20} />
           </button>
         </div>

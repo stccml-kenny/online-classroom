@@ -48,6 +48,36 @@ export const BatchEditModal: React.FC<BatchEditModalProps> = ({
 
   const [saving, setSaving] = useState(false);
 
+  const handleResetAndClose = () => {
+    setPublishDateAction('keep');
+    setPublishDateValue('');
+    setUnpublishDateAction('keep');
+    setUnpublishDateValue('');
+    setDueDateAction('keep');
+    setDueDateValue('');
+    setBranchAction('keep');
+    setBranchValue(branches[0] || '');
+    setCourseAction('keep');
+    setCourseValue(courses[0] || '');
+    setSaving(false);
+    onClose();
+  };
+
+  React.useEffect(() => {
+    if (!isOpen) {
+      setPublishDateAction('keep');
+      setPublishDateValue('');
+      setUnpublishDateAction('keep');
+      setUnpublishDateValue('');
+      setDueDateAction('keep');
+      setDueDateValue('');
+      setBranchAction('keep');
+      setCourseAction('keep');
+      setSaving(false);
+    }
+  }, [isOpen]);
+
+
   if (!isOpen) return null;
 
   const handleConfirm = async (e: React.FormEvent) => {
@@ -90,7 +120,7 @@ export const BatchEditModal: React.FC<BatchEditModalProps> = ({
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="text-white/80 hover:text-white p-1">
+          <button onClick={handleResetAndClose} className="text-white/80 hover:text-white p-1" title="關閉">
             <X size={20} />
           </button>
         </div>
@@ -313,14 +343,23 @@ export const BatchEditModal: React.FC<BatchEditModalProps> = ({
             )}
           </div>
 
-          <button
-            type="submit"
-            disabled={saving}
-            className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 shadow-md mt-2 disabled:opacity-50"
-          >
-            <Save size={15} />
-            <span>{saving ? '正在套用更新...' : `確認套用至所選的 ${selectedCount} 項`}</span>
-          </button>
+          <div className="flex gap-2 mt-2">
+            <button
+              type="button"
+              onClick={handleResetAndClose}
+              className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl text-xs hover:bg-gray-200 transition-colors"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-2 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 shadow-md disabled:opacity-50"
+            >
+              <Save size={15} />
+              <span>{saving ? '正在套用更新...' : `確認套用 (${selectedCount} 項)`}</span>
+            </button>
+          </div>
         </form>
       </div>
     </div>

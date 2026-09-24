@@ -75,7 +75,64 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
   const [savingEdit, setSavingEdit] = useState(false);
 
   // ⭐ 需求 2：參加課程要因應所選之分校才顯示相對課程
-  const availableCoursesForSelectedBranch = React.useMemo(() => {
+  // ⭐ 需求 2：所有板面離開後或按完成或按取消應該清空或還原預設值
+  const handleResetAllStates = () => {
+    setManualBranch('');
+    setManualClass('');
+    setStudentName('');
+    setSelectedCourses([]);
+    setCustomCourseInput('');
+    setSubmitting(false);
+
+    setEditingStudent(null);
+    setEditStudentName('');
+    setEditStudentClass('');
+    setEditStudentBranch('');
+    setSavingEdit(false);
+
+    setAddingCourseForStudent(null);
+    setSelectedCourseToAdd('');
+
+    setFilterClass('全部班別');
+    setFilterCourse('全部課程');
+
+    setParsedRows([]);
+    setUploading(false);
+
+    setActiveTab('manual');
+  };
+
+  const handleCloseModal = () => {
+    handleResetAllStates();
+    onClose();
+  };
+
+  // 當彈窗關閉時自動重置還原預設值
+  useEffect(() => {
+    if (!isOpen) {
+      handleResetAllStates();
+    }
+  }, [isOpen]);
+
+  // ⭐ 需求 1：在現有會員，加選課程只顯示該學校課程，不要顯示所有學校課程
+  const getAvailableCoursesForStudent = (student: GroupedStudent): string[] => {
+    const sBranch = (student.branch || '').trim();
+    if (courseItems && courseItems.length > 0) {
+      const matched = courseItems.filter((c) => {
+        if (typeof c === 'string') {
+          return !sBranch;
+        }
+        const cBranch = (c.branch || '').trim();
+        if (!sBranch) return true;
+        return !cBranch || cBranch === '全部分校' || cBranch === sBranch;
+      });
+      const formatted = Array.from(new Set(matched.map((c) => getCourseDisplayName(c)))).filter(Boolean);
+      return formatted;
+    }
+    return courses;
+  };
+
+    const availableCoursesForSelectedBranch = React.useMemo(() => {
     if (!manualBranch) return [];
     if (courseItems && courseItems.length > 0) {
       const matched = courseItems.filter((c) => {
@@ -859,7 +916,12 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
                               </button>
                               <button
                                 type="button"
-                                onClick={() => setEditingStudent(null)}
+                                onClick={() => {
+                                  setEditingStudent(null);
+                                  setEditStudentName('');
+                                  setEditStudentClass('');
+                                  setEditStudentBranch('');
+                                }}
                                 className="px-3 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
                               >
                                 取消
@@ -902,9 +964,11 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
                                   onClick={() => {
                                     if (isAdding) {
                                       setAddingCourseForStudent(null);
+                                      setSelectedCourseToAdd('');
                                     } else {
                                       setAddingCourseForStudent(s);
-                                      setSelectedCourseToAdd(allKnownCourses[0] || '');
+                                      const studentCourses = getAvailableCoursesForStudent(s);
+                                      setSelectedCourseToAdd(studentCourses[0] || '');
                                     }
                                   }}
                                   className="text-xs text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5"
@@ -954,44 +1018,57 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
                               )}
                             </div>
 
-                            {/* 加選課程面板 */}
-                            {isAdding && (
-                              <div className="mt-2 p-2.5 bg-indigo-50/60 border border-indigo-200 rounded-xl flex items-center gap-2">
-                                {/* ⭐ 只保留下拉選單，移除多餘的文字輸入框 */}
-                                <select
-                                  value={selectedCourseToAdd}
-                                  onChange={(e) => setSelectedCourseToAdd(e.target.value)}
-                                  className="flex-1 p-2 bg-white border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-900 outline-none focus:border-indigo-600 truncate"
-                                >
-                                  {allKnownCourses.length === 0 ? (
-                                    <option value="" disabled>暫無可選課程</option>
-                                  ) : (
-                                    <>
-                                      <option value="" disabled>請選擇要加選的課程...</option>
-                                      {allKnownCourses.map((c, idx) => (
-                                        <option key={`${c}_${idx}`} value={c}>{c}</option>
-                                      ))}
-                                    </>
-                                  )}
-                                </select>
-                                <button
-                                  type="button"
-                                  disabled={!selectedCourseToAdd}
-                                  onClick={() => handleAddCourseForExistingStudent(s)}
-                                  className="px-3 py-2 bg-indigo-600 text-white rounded-lg font-bold text-xs hover:bg-indigo-700 transition-colors shadow-2xs shrink-0 disabled:opacity-50"
-                                >
-                                  確認
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setAddingCourseForStudent(null)}
-                                  className="p-1.5 text-gray-400 hover:text-gray-600 shrink-0 transition-colors"
-                                  title="取消"
-                                >
-                                  <X size={16} />
-                                </button>
-                              </div>
-                            )}
+                            {/* 加選課程面板 (⭐ 僅顯示該學生所屬學校之課程) */}
+                            {isAdding && (() => {
+                              const studentCourses = getAvailableCoursesForStudent(s);
+                              return (
+                                <div className="mt-2 p-2.5 bg-indigo-50/60 border border-indigo-200 rounded-xl flex items-center gap-2">
+                                  <select
+                                    value={selectedCourseToAdd}
+                                    onChange={(e) => setSelectedCourseToAdd(e.target.value)}
+                                    className={`flex-1 p-2 bg-white border border-indigo-200 rounded-lg text-xs outline-none focus:border-indigo-600 truncate ${
+                                      selectedCourseToAdd ? 'text-black font-semibold' : 'text-gray-500'
+                                    }`}
+                                  >
+                                    {studentCourses.length === 0 ? (
+                                      <option value="" disabled>
+                                        {s.branch ? `學校「${s.branch}」暫無可選課程` : '暫無可選課程'}
+                                      </option>
+                                    ) : (
+                                      <>
+                                        <option value="" className="text-gray-400">
+                                          請選擇加選課程{s.branch ? ` (${s.branch})` : ''}...
+                                        </option>
+                                        {studentCourses.map((c, idx) => (
+                                          <option key={`${c}_${idx}`} value={c} className="text-black font-semibold">
+                                            {c}
+                                          </option>
+                                        ))}
+                                      </>
+                                    )}
+                                  </select>
+                                  <button
+                                    type="button"
+                                    disabled={!selectedCourseToAdd}
+                                    onClick={() => handleAddCourseForExistingStudent(s)}
+                                    className="px-3 py-2 bg-indigo-600 text-white rounded-lg font-bold text-xs hover:bg-indigo-700 transition-colors shadow-2xs shrink-0 disabled:opacity-50"
+                                  >
+                                    確認
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setAddingCourseForStudent(null);
+                                      setSelectedCourseToAdd('');
+                                    }}
+                                    className="p-1.5 text-gray-400 hover:text-gray-600 shrink-0 transition-colors"
+                                    title="取消加選"
+                                  >
+                                    <X size={15} />
+                                  </button>
+                                </div>
+                              );
+                            })()}
                           </>
                         )}
                       </div>

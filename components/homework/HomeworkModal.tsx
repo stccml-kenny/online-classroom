@@ -30,6 +30,28 @@ export const HomeworkModal: React.FC<HomeworkModalProps> = ({
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<HomeworkItem | null>(null);
 
+  const handleResetAndClose = () => {
+    setSelectedBranch('全部');
+    setSelectedCourse('全部');
+    setSelectedStatus('all');
+    setSearchKeyword('');
+    setFormOpen(false);
+    setEditingItem(null);
+    onClose();
+  };
+
+  useEffect(() => {
+    if (!isOpen) {
+      setSelectedBranch('全部');
+      setSelectedCourse('全部');
+      setSelectedStatus('all');
+      setSearchKeyword('');
+      setFormOpen(false);
+      setEditingItem(null);
+    }
+  }, [isOpen]);
+
+
   const fetchHomework = async () => {
     setLoading(true);
     try {

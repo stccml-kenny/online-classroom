@@ -278,7 +278,7 @@ export default function OnlineClassroomApp() {
       case 'home': return '首頁';
       case 'msg': return '即時訊息';
       case 'staff': return '職員通告';
-      case 'email': return '電郵';
+      case 'courses': return '課程管理';
       case 'more': return '更多';
       default: return 'ONLINE CLASSROOM';
     }
@@ -295,16 +295,31 @@ export default function OnlineClassroomApp() {
             onOpenNotices={() => setShowNoticeModal(true)}
             onOpenHomework={() => setShowCourseContentModal(true)}
             onOpenCourseContent={() => setShowCourseContentModal(true)}
-            onOpenSetup={() => setShowSetupModal(true)} // ⭐ 補回第一層設定入口
+            onOpenSetup={() => setActiveTab('courses')} // ⭐ 點擊設定直按跳轉至底部課程滿板頁面
             onOpenAttendance={() => setShowAttendanceModal(true)}
             onOpenClasses={() => setShowClassModal(true)}
           />
         )}
 
+        {/* ⭐ 需求 3：移除底部電郵目錄直接改成課程，並將設定課程功能移到這個課程目錄以滿板顯示 */}
+        {activeTab === 'courses' && (
+          <div className="flex-1 w-full bg-[#F8F9FA] flex flex-col overflow-hidden pb-16">
+            <HomeworkSetupModal
+              isOpen={true}
+              isInline={true}
+              branches={branches}
+              classes={classes}
+              courses={courses}
+              onUpdateBranches={handleUpdateBranches}
+              onUpdateClasses={handleUpdateClasses}
+              onUpdateCourses={handleUpdateCourses}
+            />
+          </div>
+        )}
+
         {activeTab === 'home' && <div className="p-5 text-center text-gray-400">首頁模組開發中</div>}
         {activeTab === 'msg' && <div className="p-5 text-center text-gray-400">即時訊息模組開發中</div>}
         {activeTab === 'staff' && <div className="p-5 text-center text-gray-400">職員通告模組開發中</div>}
-        {activeTab === 'email' && <div className="p-5 text-center text-gray-400">電郵模組開發中</div>}
 
         <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
 

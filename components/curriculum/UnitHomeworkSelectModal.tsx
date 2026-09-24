@@ -27,6 +27,24 @@ export const UnitHomeworkSelectModal: React.FC<UnitHomeworkSelectModalProps> = (
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
+  const handleResetAndClose = () => {
+    setSearchTerm('');
+    setShowAllCourses(false);
+    setSelectedIds([]);
+    setSaving(false);
+    onClose();
+  };
+
+  React.useEffect(() => {
+    if (!isOpen) {
+      setSearchTerm('');
+      setShowAllCourses(false);
+      setSelectedIds([]);
+      setSaving(false);
+    }
+  }, [isOpen]);
+
+
   // 當打開彈窗時，初始化已關聯至此單元的家課 ID
   React.useEffect(() => {
     if (isOpen && unit) {
@@ -102,7 +120,7 @@ export const UnitHomeworkSelectModal: React.FC<UnitHomeworkSelectModalProps> = (
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="text-white/80 hover:text-white p-1">
+          <button onClick={handleResetAndClose} className="text-white/80 hover:text-white p-1" title="關閉">
             <X size={20} />
           </button>
         </div>

@@ -31,6 +31,30 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  const handleResetAndClose = () => {
+    setSelectedBranch('');
+    setSelectedClass('');
+    setSelectedCourse('');
+    setStudents([]);
+    setAttendanceRecords({});
+    setSessionPage(0);
+    setSaving(false);
+    onClose();
+  };
+
+  useEffect(() => {
+    if (!isOpen) {
+      setSelectedBranch('');
+      setSelectedClass('');
+      setSelectedCourse('');
+      setStudents([]);
+      setAttendanceRecords({});
+      setSessionPage(0);
+      setSaving(false);
+    }
+  }, [isOpen]);
+
+
   // ⭐ 需求 1 & 2：課程選擇因揀選學校而變更，未選學校時為空，不提供「全部課程」
   const filteredCourseItems = useMemo(() => {
     if (!selectedBranch) return [];

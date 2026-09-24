@@ -1,7 +1,7 @@
-import React from 'react';
-import { Home, MessageCircle, Bell, Mail } from 'lucide-react';
+﻿import React from 'react';
+import { Home, MessageCircle, Bell, GraduationCap } from 'lucide-react';
 
-export type TabType = 'home' | 'msg' | 'staff' | 'email' | 'more';
+export type TabType = 'home' | 'msg' | 'staff' | 'courses' | 'more';
 
 interface BottomNavProps {
   activeTab: TabType;
@@ -30,10 +30,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange }) 
         onClick={() => onTabChange('staff')}
       />
       <TabButton
-        icon={<Mail size={22} />}
-        label="電郵"
-        active={activeTab === 'email'}
-        onClick={() => onTabChange('email')}
+        icon={<GraduationCap size={22} />}
+        label="課程"
+        active={activeTab === 'courses'}
+        onClick={() => onTabChange('courses')}
       />
       <TabButton
         icon={
