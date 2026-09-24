@@ -295,18 +295,19 @@ export default function OnlineClassroomApp() {
             onOpenNotices={() => setShowNoticeModal(true)}
             onOpenHomework={() => setShowCourseContentModal(true)}
             onOpenCourseContent={() => setShowCourseContentModal(true)}
-            onOpenSetup={() => setActiveTab('courses')} // ⭐ 點擊設定直按跳轉至底部課程滿板頁面
+            onOpenSetup={() => setShowSetupModal(true)} // ⭐ 設定按鍵開啟「學校/分校及班別設定」彈窗
             onOpenAttendance={() => setShowAttendanceModal(true)}
             onOpenClasses={() => setShowClassModal(true)}
           />
         )}
 
-        {/* ⭐ 需求 3：移除底部電郵目錄直接改成課程，並將設定課程功能移到這個課程目錄以滿板顯示 */}
+        {/* ⭐ 課程目錄：滿板顯示，只保留課程設定 */}
         {activeTab === 'courses' && (
           <div className="flex-1 w-full bg-[#F8F9FA] flex flex-col overflow-hidden pb-16">
             <HomeworkSetupModal
               isOpen={true}
               isInline={true}
+              mode="courses_only"
               branches={branches}
               classes={classes}
               courses={courses}
@@ -369,9 +370,10 @@ export default function OnlineClassroomApp() {
           courseItems={courses}
         />
 
-        {/* 6. ⭐ 課程、學校及班別設定彈窗 (可從 More 目錄或課程內容右上角齒輪開啟) */}
+        {/* 6. ⭐ 設定按鍵彈窗 (從「更多」設定開啟：只保留學校/分校及班別設定) */}
         <HomeworkSetupModal
           isOpen={showSetupModal}
+          mode="settings_only"
           onClose={() => setShowSetupModal(false)}
           branches={branches}
           classes={classes}

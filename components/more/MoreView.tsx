@@ -55,10 +55,10 @@ export const MoreView: React.FC<MoreViewProps> = ({
           badge="新"
           onClick={onOpenCourseContent}
         />
-        {/* ⭐ 需求 4：改名為「設定」 */}
+        {/* ⭐ 設定按鍵：只保留學校/分校及班別設定 */}
         <MenuItem
           icon={<Settings className="text-[#FF6B57]" size={20} />}
-          title="設定"
+          title="設定 (學校與班別)"
           onClick={onOpenSetup}
         />
         <MenuItem

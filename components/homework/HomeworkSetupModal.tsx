@@ -130,6 +130,7 @@ export const generateSessionDates = (
 interface HomeworkSetupModalProps {
   isOpen?: boolean;
   isInline?: boolean; // ⭐ 支援滿板顯示 (非浮動彈窗)
+  mode?: 'all' | 'courses_only' | 'settings_only'; // ⭐ 課程目錄中只保留課程設定；設定按鍵只保留學校/分校及班別設定
   onClose?: () => void;
   branches: string[];
   classes: string[];
@@ -145,6 +146,7 @@ interface HomeworkSetupModalProps {
 export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
   isOpen = true,
   isInline = false,
+  mode = 'all',
   onClose,
   branches,
   classes,
@@ -156,9 +158,17 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
   onRenameClass,
   onRenameBranch,
 }) => {
+  // 順序：課程、學校/分校、班別。根據 mode 決定初始分頁
+  const initialTab = mode === 'settings_only' ? 'branches' : 'courses';
+  const [activeTab, setActiveTab] = useState<'courses' | 'branches' | 'classes'>(initialTab);
 
-  // 順序：課程、學校/分校、班別、功課範本
-  const [activeTab, setActiveTab] = useState<'courses' | 'branches' | 'classes'>('courses');
+  React.useEffect(() => {
+    if (mode === 'settings_only' && activeTab === 'courses') {
+      setActiveTab('branches');
+    } else if (mode === 'courses_only' && activeTab !== 'courses') {
+      setActiveTab(mode === 'settings_only' ? 'branches' : 'courses');
+    }
+  }, [mode, activeTab]);
 
   // 學校/分校、班別、功課範本一般輸入狀態
   const [newBranch, setNewBranch] = useState('');
@@ -233,7 +243,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
     setCourseFilterStatus('all');
     setCourseSearchKeyword('');
     setExpandedCourseIds([]);
-    setActiveTab('courses');
+    setActiveTab(mode === 'settings_only' ? 'branches' : 'courses');
   };
 
   const handleCloseModal = () => {
@@ -552,10 +562,14 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
       {!isInline ? (
         <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-5 py-3.5 flex justify-between items-center shrink-0">
           <div className="flex items-center gap-2">
-            <Settings size={18} />
+            {mode === 'settings_only' ? <Settings size={18} /> : <GraduationCap size={18} />}
             <div>
-              <h4 className="font-bold text-base leading-tight">課程與班別設定</h4>
-              <p className="text-[10px] text-white/80">管理各校課程、上課時段、每節排程、學校及班別名冊</p>
+              <h4 className="font-bold text-base leading-tight">
+                {mode === 'settings_only' ? '學校與班別設定' : '課程與班別設定'}
+              </h4>
+              <p className="text-[10px] text-white/80">
+                {mode === 'settings_only' ? '管理學校/分校與班別名冊' : '管理各校課程、上課時段、每節排程、學校及班別名冊'}
+              </p>
             </div>
           </div>
           <button onClick={handleCloseModal} className="text-white/80 hover:text-white p-1" title="關閉">
@@ -569,44 +583,51 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
               <GraduationCap size={20} />
             </div>
             <div>
-              <h4 className="font-bold text-sm text-gray-800 leading-tight">課程與班級設定</h4>
-              <p className="text-[10px] text-gray-400">管理各校課程、上課時段、自動排程、學校與班別名冊</p>
+              <h4 className="font-bold text-sm text-gray-800 leading-tight">
+                {mode === 'courses_only' ? '課程設定與排程管理' : '課程與班級設定'}
+              </h4>
+              <p className="text-[10px] text-gray-400">
+                {mode === 'courses_only' ? '管理各校課程名稱、時段、每節課堂日期與自動排程' : '管理各校課程、上課時段、自動排程、學校與班別名冊'}
+              </p>
             </div>
           </div>
         </div>
       )}
 
-        {/* 標籤頁導航：課程 ➔ 學校/分校 ➔ 班別 ➔ 功課範本 */}
-        <div className="flex border-b border-gray-100 bg-gray-50 text-xs font-bold overflow-x-auto">
-          <button
-            onClick={() => { setActiveTab('courses'); setEditingItem(null); handleCloseCourseForm(); }}
-            className={`flex-1 py-2.5 px-2 text-center border-b-2 whitespace-nowrap transition-colors flex items-center justify-center gap-1 ${
-              activeTab === 'courses' ? 'border-indigo-600 text-indigo-600 bg-white' : 'border-transparent text-gray-500'
-            }`}
-          >
-            <GraduationCap size={13} />
-            課程 ({normalizedCourses.length})
-          </button>
-          <button
-            onClick={() => { setActiveTab('branches'); setEditingItem(null); handleCloseCourseForm(); }}
-            className={`flex-1 py-2.5 px-2 text-center border-b-2 whitespace-nowrap transition-colors flex items-center justify-center gap-1 ${
-              activeTab === 'branches' ? 'border-indigo-600 text-indigo-600 bg-white' : 'border-transparent text-gray-500'
-            }`}
-          >
-            <MapPin size={13} />
-            學校/分校 ({branches.length})
-          </button>
-          <button
-            onClick={() => { setActiveTab('classes'); setEditingItem(null); handleCloseCourseForm(); }}
-            className={`flex-1 py-2.5 px-2 text-center border-b-2 whitespace-nowrap transition-colors flex items-center justify-center gap-1 ${
-              activeTab === 'classes' ? 'border-indigo-600 text-indigo-600 bg-white' : 'border-transparent text-gray-500'
-            }`}
-          >
-            <Layers size={13} />
-            班別 ({classes.length})
-          </button>
-
-        </div>
+        {/* 標籤頁導航 (⭐ 課程目錄中只保留課程設定；設定按鍵只保留學校/分校及班別設定) */}
+        {mode === 'courses_only' ? null : (
+          <div className="flex border-b border-gray-100 bg-gray-50 text-xs font-bold overflow-x-auto">
+            {mode !== 'settings_only' && (
+              <button
+                onClick={() => { setActiveTab('courses'); setEditingItem(null); handleCloseCourseForm(); }}
+                className={`flex-1 py-2.5 px-2 text-center border-b-2 whitespace-nowrap transition-colors flex items-center justify-center gap-1 ${
+                  activeTab === 'courses' ? 'border-indigo-600 text-indigo-600 bg-white' : 'border-transparent text-gray-500'
+                }`}
+              >
+                <GraduationCap size={13} />
+                課程 ({normalizedCourses.length})
+              </button>
+            )}
+            <button
+              onClick={() => { setActiveTab('branches'); setEditingItem(null); handleCloseCourseForm(); }}
+              className={`flex-1 py-2.5 px-2 text-center border-b-2 whitespace-nowrap transition-colors flex items-center justify-center gap-1 ${
+                activeTab === 'branches' ? 'border-purple-600 text-purple-600 bg-white' : 'border-transparent text-gray-500'
+              }`}
+            >
+              <MapPin size={13} />
+              學校/分校 ({branches.length})
+            </button>
+            <button
+              onClick={() => { setActiveTab('classes'); setEditingItem(null); handleCloseCourseForm(); }}
+              className={`flex-1 py-2.5 px-2 text-center border-b-2 whitespace-nowrap transition-colors flex items-center justify-center gap-1 ${
+                activeTab === 'classes' ? 'border-indigo-600 text-indigo-600 bg-white' : 'border-transparent text-gray-500'
+              }`}
+            >
+              <Layers size={13} />
+              班別 ({classes.length})
+            </button>
+          </div>
+        )}
 
         {/* 內容區塊 */}
         <div className="p-4 overflow-y-auto flex-1 text-sm">
