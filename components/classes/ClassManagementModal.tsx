@@ -108,7 +108,7 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
 
   const handleCloseModal = () => {
     handleResetAllStates();
-    onClose();
+    if (onClose) onClose();
   };
 
   // 當彈窗關閉時自動重置還原預設值 (僅在由開變關時觸發，避免初次加載執行)
@@ -1010,7 +1010,7 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
                                       key={en.id}
                                       onClick={() => {
                                         if (onOpenCourseContent) {
-                                          onOpenCourseContent(en.course_name, s.branch, true);
+                                          onOpenCourseContent?.(en.course_name, s.branch, true);
                                         }
                                       }}
                                       className={`text-[11px] bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 ${
