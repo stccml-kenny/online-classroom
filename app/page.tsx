@@ -21,6 +21,15 @@ export default function OnlineClassroomApp() {
   const [showNoticeModal, setShowNoticeModal] = useState(false);
   const [showHomeworkModal, setShowHomeworkModal] = useState(false);
   const [showCourseContentModal, setShowCourseContentModal] = useState(false);
+  const [courseModalInitialCourse, setCourseModalInitialCourse] = useState<string>('');
+  const [courseModalInitialBranch, setCourseModalInitialBranch] = useState<string>('');
+
+  // ⭐ 需求：點擊課程打開課程單元及單元家課
+  const handleOpenCourseContent = (courseName?: string, branch?: string) => {
+    setCourseModalInitialCourse(courseName || '');
+    setCourseModalInitialBranch(branch || '全部分校');
+    setShowCourseContentModal(true);
+  };
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
   const [showClassModal, setShowClassModal] = useState(false);
   const [showSetupModal, setShowSetupModal] = useState(false);
@@ -294,14 +303,14 @@ export default function OnlineClassroomApp() {
             noticeCount={notices.length}
             onOpenNotices={() => setShowNoticeModal(true)}
             onOpenHomework={() => setShowCourseContentModal(true)}
-            onOpenCourseContent={() => setShowCourseContentModal(true)}
+            onOpenCourseContent={() => handleOpenCourseContent()}
             onOpenSetup={() => setShowSetupModal(true)} // ⭐ 設定按鍵開啟「學校/分校及班別設定」彈窗
             onOpenAttendance={() => setShowAttendanceModal(true)}
             onOpenClasses={() => setShowClassModal(true)}
           />
         )}
 
-        {/* ⭐ 課程目錄：滿板顯示，只保留課程設定 */}
+        {/* ⭐ 課程目錄：滿板顯示，只保留課程設定 (點擊課程打開課程單元及單元家課) */}
         {activeTab === 'courses' && (
           <div className="flex-1 w-full bg-[#F8F9FA] flex flex-col overflow-hidden pb-16">
             <HomeworkSetupModal
@@ -314,6 +323,7 @@ export default function OnlineClassroomApp() {
               onUpdateBranches={handleUpdateBranches}
               onUpdateClasses={handleUpdateClasses}
               onUpdateCourses={handleUpdateCourses}
+              onOpenCourseContent={handleOpenCourseContent}
             />
           </div>
         )}
@@ -335,11 +345,17 @@ export default function OnlineClassroomApp() {
         {/* 2. 第一層目錄：課程內容彈窗 (整合單元教材、單元家課與右上角設定齒輪) */}
         <CourseContentModal
           isOpen={showCourseContentModal}
-          onClose={() => setShowCourseContentModal(false)}
+          onClose={() => {
+            setShowCourseContentModal(false);
+            setCourseModalInitialCourse('');
+            setCourseModalInitialBranch('');
+          }}
           branches={branches}
           courses={courseNames}
           classes={classes}
           courseItems={courses}
+          initialCourse={courseModalInitialCourse}
+          initialBranch={courseModalInitialBranch}
         />
 
         {/* 3. 獨立家課彈窗 (備用向下相容) */}

@@ -1,7 +1,8 @@
 ﻿import React, { useState } from 'react';
 import {
   X, Plus, Trash2, Settings, MapPin, GraduationCap, Layers, Edit2, Check, RotateCcw, BookmarkCheck,
-  Clock, Calendar, CheckSquare, Square, ChevronDown, ChevronUp, AlertCircle, Sparkles, Filter
+  Clock, Calendar, CheckSquare, Square, ChevronDown, ChevronUp, AlertCircle, Sparkles, Filter,
+  BookOpen, ChevronRight
 } from 'lucide-react';
 
 export type CourseStatus = 'active' | 'planning' | 'ended' | 'paused';
@@ -132,6 +133,7 @@ interface HomeworkSetupModalProps {
   isInline?: boolean; // ⭐ 支援滿板顯示 (非浮動彈窗)
   mode?: 'all' | 'courses_only' | 'settings_only'; // ⭐ 課程目錄中只保留課程設定；設定按鍵只保留學校/分校及班別設定
   onClose?: () => void;
+  onOpenCourseContent?: (courseName: string, branch?: string) => void; // ⭐ 點擊課程打開課程單元及單元家課
   branches: string[];
   classes: string[];
   courses: (string | CourseItem)[];
@@ -148,6 +150,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
   isInline = false,
   mode = 'all',
   onClose,
+  onOpenCourseContent,
   branches,
   classes,
   courses,
@@ -1084,9 +1087,16 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                       key={c.id || `${c.name}_${idx}`}
                       className="bg-white border border-gray-200 rounded-xl p-3 space-y-2 shadow-2xs hover:border-indigo-300 transition-all text-xs"
                     >
-                      {/* 標題與操作列 */}
+                      {/* 標題與操作列 (⭐ 點擊課程標題或卡片打開單元與家課) */}
                       <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
+                        <div
+                          className="min-w-0 flex-1 cursor-pointer group/title"
+                          onClick={() => {
+                            const displayName = getCourseDisplayName(c);
+                            onOpenCourseContent?.(displayName, c.branch || '全部分校');
+                          }}
+                          title="點擊打開此課程的單元教材與家課"
+                        >
                           <div className="flex items-center gap-1.5 flex-wrap mb-1">
                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${statusMeta.badgeClass}`}>
                               {statusMeta.label}
@@ -1112,8 +1122,8 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                               共 {sessionsCount} 節
                             </span>
                           </div>
-                          {/* ⭐ 需求 2：課程名稱 + (課程時間) */}
-                          <h4 className="font-bold text-gray-900 text-sm leading-snug truncate">
+                          {/* ⭐ 課程名稱 + (課程時間)，懸浮呈現品牌亮色 */}
+                          <h4 className="font-bold text-gray-900 group-hover/title:text-indigo-600 text-sm leading-snug truncate transition-colors flex items-center gap-1.5">
                             <span>{c.name}</span>
                             {c.timeSlot && !c.name.includes(c.timeSlot.trim()) && (
                               <span className="text-indigo-600 font-semibold ml-1.5">
@@ -1125,22 +1135,39 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                         <div className="flex items-center gap-1 shrink-0">
                           <button
                             type="button"
-                            onClick={() => handleOpenEditCourse(c)}
-                            className="text-gray-400 hover:text-indigo-600 p-1 rounded"
+                            onClick={(e) => { e.stopPropagation(); handleOpenEditCourse(c); }}
+                            className="text-gray-400 hover:text-indigo-600 p-1 rounded transition-colors"
                             title="修改課程設定"
                           >
                             <Edit2 size={14} />
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleDeleteCourse(c.id, c.name)}
-                            className="text-gray-400 hover:text-red-500 p-1 rounded"
+                            onClick={(e) => { e.stopPropagation(); handleDeleteCourse(c.id, c.name); }}
+                            className="text-gray-400 hover:text-red-500 p-1 rounded transition-colors"
                             title="刪除課程"
                           >
                             <Trash2 size={14} />
                           </button>
                         </div>
                       </div>
+
+                      {/* ⭐ 需求：點擊課程打開課程單元及單元家課快捷操作按鈕 */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const displayName = getCourseDisplayName(c);
+                          onOpenCourseContent?.(displayName, c.branch || '全部分校');
+                        }}
+                        className="w-full py-1.5 px-2.5 bg-indigo-50/70 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 rounded-lg font-bold text-[11px] flex items-center justify-between transition-all group shadow-2xs"
+                        title="查看並發布此課程之單元教材與單元家課"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <BookOpen size={13} className="text-indigo-600 group-hover:scale-110 transition-transform" />
+                          <span>打開課程單元及單元家課</span>
+                        </span>
+                        <ChevronRight size={13} className="text-indigo-400 group-hover:translate-x-0.5 transition-transform" />
+                      </button>
 
                       {/* 每節課堂日期縮影與展開 */}
                       <div className="pt-1 border-t border-gray-100">

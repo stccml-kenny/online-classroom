@@ -19,6 +19,8 @@ interface CourseContentModalProps {
   courses: string[];
   classes?: string[];
   courseItems?: (string | CourseItem)[];
+  initialCourse?: string; // ⭐ 預選課程
+  initialBranch?: string; // ⭐ 預選分校
 }
 
 export type PublishStatusType = 'published' | 'scheduled' | 'pending' | 'unpublished';
@@ -125,6 +127,8 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
   courses,
   classes = [],
   courseItems = [],
+  initialCourse = '',
+  initialBranch = '',
 }) => {
   const [activeTab, setActiveTab] = useState<'units' | 'homework'>('units');
 
@@ -272,12 +276,12 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setLoading(true);
-      // 打開時重置為全部分校及全部課程
-      setSelectedBranch('全部分校');
-      setSelectedCourse('全部課程');
+      // 打開時若有傳入指定課程或分校則預設套用，否則為全部分校及全部課程
+      setSelectedBranch(initialBranch || '全部分校');
+      setSelectedCourse(initialCourse || '全部課程');
       Promise.all([fetchUnits(), fetchHomework()]).finally(() => setLoading(false));
     }
-  }, [isOpen]);
+  }, [isOpen, initialCourse, initialBranch]);
 
   // 解析單元附件中的本機 Blob 網址
   useEffect(() => {
@@ -680,7 +684,12 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
     // 篩選單元清單
   const filteredUnits = units.filter((u) => {
     const matchBranch = selectedBranch === '全部分校' || !u.branch || u.branch === selectedBranch;
-    const matchCourse = selectedCourse === '全部課程' || !u.course_name || u.course_name === selectedCourse;
+    const matchCourse =
+      selectedCourse === '全部課程' ||
+      !u.course_name ||
+      u.course_name === selectedCourse ||
+      selectedCourse.startsWith(u.course_name) ||
+      u.course_name.startsWith(selectedCourse);
     const { status } = checkPublishStatus(u.publish_date, u.unpublish_date);
     const matchStatus = statusFilter === 'all' || status === statusFilter;
     return matchBranch && matchCourse && matchStatus;
@@ -689,7 +698,12 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
   // 篩選家課清單
   const filteredHomework = homeworkList.filter((hw) => {
     const matchBranch = selectedBranch === '全部分校' || !hw.branch || hw.branch === selectedBranch;
-    const matchCourse = selectedCourse === '全部課程' || !hw.course_name || hw.course_name === selectedCourse;
+    const matchCourse =
+      selectedCourse === '全部課程' ||
+      !hw.course_name ||
+      hw.course_name === selectedCourse ||
+      selectedCourse.startsWith(hw.course_name) ||
+      hw.course_name.startsWith(selectedCourse);
     const { status } = checkPublishStatus(hw.publish_date, hw.unpublish_date);
     const matchStatus = statusFilter === 'all' || status === statusFilter;
     return matchBranch && matchCourse && matchStatus;
