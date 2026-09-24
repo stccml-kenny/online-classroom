@@ -78,8 +78,9 @@ export const CourseUnitFormModal: React.FC<CourseUnitFormModalProps> = ({
     onClose();
   };
 
+  const prevOpenRef = React.useRef(isOpen);
   useEffect(() => {
-    if (!isOpen) {
+    if (prevOpenRef.current && !isOpen) {
       setUnitTitle('');
       setDescription('');
       setPublishDate('');
@@ -92,6 +93,7 @@ export const CourseUnitFormModal: React.FC<CourseUnitFormModalProps> = ({
       setUploadingFiles(false);
       setSubmitting(false);
     }
+    prevOpenRef.current = isOpen;
   }, [isOpen]);
 
 

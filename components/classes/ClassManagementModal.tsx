@@ -107,11 +107,13 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
     onClose();
   };
 
-  // 當彈窗關閉時自動重置還原預設值
+  // 當彈窗關閉時自動重置還原預設值 (僅在由開變關時觸發，避免初次加載執行)
+  const prevOpenRef = React.useRef(isOpen);
   useEffect(() => {
-    if (!isOpen) {
+    if (prevOpenRef.current && !isOpen) {
       handleResetAllStates();
     }
+    prevOpenRef.current = isOpen;
   }, [isOpen]);
 
   // ⭐ 需求 1：在現有會員，加選課程只顯示該學校課程，不要顯示所有學校課程

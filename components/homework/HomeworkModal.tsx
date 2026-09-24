@@ -38,13 +38,15 @@ export const HomeworkModal: React.FC<HomeworkModalProps> = ({
     onClose();
   };
 
+  const prevOpenRef = React.useRef(isOpen);
   useEffect(() => {
-    if (!isOpen) {
+    if (prevOpenRef.current && !isOpen) {
       setSelectedBranch('全部');
       setSelectedCourse('全部');
-          setFormOpen(false);
+      setFormOpen(false);
       setEditingItem(null);
     }
+    prevOpenRef.current = isOpen;
   }, [isOpen]);
 
 

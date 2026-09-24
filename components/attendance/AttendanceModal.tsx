@@ -41,15 +41,17 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
     onClose();
   };
 
+  const prevOpenRef = React.useRef(isOpen);
   useEffect(() => {
-    if (!isOpen) {
+    if (prevOpenRef.current && !isOpen) {
       setSelectedBranch('');
       setSelectedClass('');
       setSelectedCourse('');
       setStudents([]);
-        setSessionPage(0);
+      setSessionPage(0);
       setSaving(false);
     }
+    prevOpenRef.current = isOpen;
   }, [isOpen]);
 
 

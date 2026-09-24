@@ -156,31 +156,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
   onRenameClass,
   onRenameBranch,
 }) => {
-  // ⭐ 需求 2：所有板面離開後或按完成或按取消應該清空或還原預設值
-  const handleResetAllStates = () => {
-    handleCloseCourseForm();
-    setEditingItem(null);
-    setEditValue('');
-    setEditDescValue('');
-    setNewBranch('');
-    setNewClass('');
-    setCourseFilterBranch('全部分校');
-    setCourseFilterStatus('all');
-    setCourseSearchKeyword('');
-    setExpandedCourseIds([]);
-    setActiveTab('courses');
-  };
 
-  const handleCloseModal = () => {
-    handleResetAllStates();
-    if (onClose) onClose();
-  };
-
-  React.useEffect(() => {
-    if (!isOpen && !isInline) {
-      handleResetAllStates();
-    }
-  }, [isOpen, isInline]);
   // 順序：課程、學校/分校、班別、功課範本
   const [activeTab, setActiveTab] = useState<'courses' | 'branches' | 'classes'>('courses');
 
@@ -224,6 +200,55 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
   const [courseFilterStatus, setCourseFilterStatus] = useState<string>('all');
   const [courseSearchKeyword, setCourseSearchKeyword] = useState('');
 
+  // --- ⭐ 課程 (Courses) 相關操作 ---
+  // ⭐ 需求 1：當離開新增/編輯課程板面時清空所有資料
+  const handleCloseCourseForm = () => {
+    setEditingCourseTargetId(null);
+    setCourseFormName('');
+    setCourseFormBranch('');
+    setCourseFormStatus('');
+    setCourseFormTimeSlot('');
+    setCourseFormStartTime('');
+    setCourseFormEndTime('');
+    setCourseFormTotalSessions(0);
+    setCourseFormSessionDates([]);
+    setSchedStartDate('');
+    setSchedEndDate('');
+    setSchedWeekdays([]);
+    setSchedExcludedDates([]);
+    setSingleDateToAdd('');
+    setSingleDateToExclude('');
+    setIsCourseFormOpen(false); // ⭐ 關閉表單，嚴格避免自我遞迴調用
+  };
+
+  // ⭐ 需求 2：所有板面離開後或按完成或按取消應該清空或還原預設值
+  const handleResetAllStates = () => {
+    handleCloseCourseForm();
+    setEditingItem(null);
+    setEditValue('');
+    setEditDescValue('');
+    setNewBranch('');
+    setNewClass('');
+    setCourseFilterBranch('全部分校');
+    setCourseFilterStatus('all');
+    setCourseSearchKeyword('');
+    setExpandedCourseIds([]);
+    setActiveTab('courses');
+  };
+
+  const handleCloseModal = () => {
+    handleResetAllStates();
+    if (onClose) onClose();
+  };
+
+  const prevOpenRef = React.useRef(isOpen);
+  React.useEffect(() => {
+    if (prevOpenRef.current && !isOpen && !isInline) {
+      handleResetAllStates();
+    }
+    prevOpenRef.current = isOpen;
+  }, [isOpen, isInline]);
+
   if (!isOpen && !isInline) return null;
 
   const normalizedCourses = courses.map(normalizeCourse);
@@ -247,26 +272,6 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
   });
 
   // --- ⭐ 課程 (Courses) 相關操作 ---
-  // ⭐ 需求 1：當離開新增/編輯課程板面時清空所有資料
-  const handleCloseCourseForm = () => {
-    setEditingCourseTargetId(null);
-    setCourseFormName('');
-    setCourseFormBranch('');
-    setCourseFormStatus('');
-    setCourseFormTimeSlot('');
-    setCourseFormStartTime('');
-    setCourseFormEndTime('');
-    setCourseFormTotalSessions(0);
-    setCourseFormSessionDates([]);
-    setSchedStartDate('');
-    setSchedEndDate('');
-    setSchedWeekdays([]);
-    setSchedExcludedDates([]);
-    setSingleDateToAdd('');
-    setSingleDateToExclude('');
-    setIsCourseFormOpen(false); // ⭐ 關閉表單，嚴格避免自我遞迴調用
-  };
-
   // ⭐ 需求 1：新增課程打開後不要預選學校、課程狀態、時間、節數、排程日期、逢星期幾上課
   const handleOpenAddCourse = () => {
     setEditingCourseTargetId(null);

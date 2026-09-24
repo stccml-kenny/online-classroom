@@ -35,13 +35,15 @@ export const UnitHomeworkSelectModal: React.FC<UnitHomeworkSelectModalProps> = (
     onClose();
   };
 
+  const prevOpenRef = React.useRef(isOpen);
   React.useEffect(() => {
-    if (!isOpen) {
+    if (prevOpenRef.current && !isOpen) {
       setSearchTerm('');
       setShowAllCourses(false);
       setSelectedIds([]);
       setSaving(false);
     }
+    prevOpenRef.current = isOpen;
   }, [isOpen]);
 
 

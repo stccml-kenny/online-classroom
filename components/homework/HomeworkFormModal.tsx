@@ -75,8 +75,9 @@ export const HomeworkFormModal: React.FC<HomeworkFormModalProps> = ({
     onClose();
   };
 
+  const prevOpenRef = React.useRef(isOpen);
   useEffect(() => {
-    if (!isOpen) {
+    if (prevOpenRef.current && !isOpen) {
       setSelectedTitles([]);
       setCurrentInput('');
       setDescription('');
@@ -91,6 +92,7 @@ export const HomeworkFormModal: React.FC<HomeworkFormModalProps> = ({
       setUploadingFiles(false);
       setSubmitting(false);
     }
+    prevOpenRef.current = isOpen;
   }, [isOpen]);
 
 

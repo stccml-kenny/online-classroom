@@ -212,12 +212,13 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
     onClose();
   };
 
+  const prevOpenRef = React.useRef(isOpen);
   useEffect(() => {
-    if (!isOpen) {
+    if (prevOpenRef.current && !isOpen) {
       setSelectedBranch('全部分校');
       setSelectedCourse('全部課程');
       setStatusFilter('all');
-        setExpandedUnitIds([]);
+      setExpandedUnitIds([]);
       setIsUnitSelectMode(false);
       setSelectedUnitIds([]);
       setIsHwSelectMode(false);
@@ -232,6 +233,7 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
       setTargetUnitForHwSelect(null);
       setPlayingAudioId(null);
     }
+    prevOpenRef.current = isOpen;
   }, [isOpen]);
 
 

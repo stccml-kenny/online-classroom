@@ -63,8 +63,9 @@ export const BatchEditModal: React.FC<BatchEditModalProps> = ({
     onClose();
   };
 
+  const prevOpenRef = React.useRef(isOpen);
   React.useEffect(() => {
-    if (!isOpen) {
+    if (prevOpenRef.current && !isOpen) {
       setPublishDateAction('keep');
       setPublishDateValue('');
       setUnpublishDateAction('keep');
@@ -75,6 +76,7 @@ export const BatchEditModal: React.FC<BatchEditModalProps> = ({
       setCourseAction('keep');
       setSaving(false);
     }
+    prevOpenRef.current = isOpen;
   }, [isOpen]);
 
 
