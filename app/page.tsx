@@ -45,32 +45,44 @@ export default function OnlineClassroomApp() {
     )
   );
 
-  // ⭐ 從 Appwrite homework_settings 表動態讀取雲端學校、課程、班別設定 (絕不再隨意插入預設/假課程)
+  // ⭐ 從 Appwrite homework_settings 表動態讀取雲端學校、課程、班別設定 (具備本地快取保護防消失機制)
   const loadSharedSettings = async () => {
     try {
       let loadedCourses: any[] = [];
       let loadedClasses: string[] = [];
       let loadedBranches: string[] = [];
+      let cloudCoursesFound = false;
+      let cloudClassesFound = false;
+      let cloudBranchesFound = false;
 
-      // 僅讀取 Appwrite 雲端 homework_settings 表中由使用者設定之真實資料，不自動從其他表雜湊注入課程
+      // 讀取 Appwrite 雲端 homework_settings 表
       try {
         const settingsRes = await databases.listDocuments(
           DATABASE_ID,
           'homework_settings',
-          [Query.limit(50)]
+          [Query.limit(100)]
         );
 
         settingsRes.documents.forEach((doc: any) => {
           try {
             if (doc.setting_key === 'courses' && doc.setting_value) {
               const parsed = JSON.parse(doc.setting_value);
-              if (Array.isArray(parsed)) loadedCourses = parsed;
+              if (Array.isArray(parsed)) {
+                loadedCourses = parsed;
+                cloudCoursesFound = true;
+              }
             } else if (doc.setting_key === 'classes' && doc.setting_value) {
               const parsed = JSON.parse(doc.setting_value);
-              if (Array.isArray(parsed)) loadedClasses = parsed;
+              if (Array.isArray(parsed)) {
+                loadedClasses = parsed;
+                cloudClassesFound = true;
+              }
             } else if (doc.setting_key === 'branches' && doc.setting_value) {
               const parsed = JSON.parse(doc.setting_value);
-              if (Array.isArray(parsed)) loadedBranches = parsed;
+              if (Array.isArray(parsed)) {
+                loadedBranches = parsed;
+                cloudBranchesFound = true;
+              }
             }
           } catch (pe) {}
         });
@@ -78,30 +90,105 @@ export default function OnlineClassroomApp() {
         console.warn('讀取 homework_settings 略過或表尚未建立:', err.message);
       }
 
-      // 嚴格去重：避免出現同名或重複 key 衝突
+      // ⭐ 關鍵防丟保護：讀取本地 localStorage 資料
+      let localCourses: any[] = [];
+      try {
+        const saved = localStorage.getItem('oc_settings_courses');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) localCourses = parsed;
+        }
+      } catch (e) {}
+
+      let localBranches: string[] = [];
+      try {
+        const saved = localStorage.getItem('oc_settings_branches');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) localBranches = parsed;
+        }
+      } catch (e) {}
+
+      let localClasses: string[] = [];
+      try {
+        const saved = localStorage.getItem('oc_settings_classes');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) localClasses = parsed;
+        }
+      } catch (e) {}
+
+      // ⭐ 整合課程：若雲端有課程則合併本地；若雲端無課程但本地有則保留本地並補同步
+      let rawCourses: any[] = [];
+      if (cloudCoursesFound && loadedCourses.length > 0) {
+        rawCourses = [...loadedCourses];
+        localCourses.forEach((lc) => {
+          const lcName = (typeof lc === 'string' ? lc : lc.name || '').trim();
+          const lcBranch = (typeof lc === 'object' ? lc.branch || '' : '').trim();
+          const lcTime = (typeof lc === 'object' ? lc.timeSlot || '' : '').trim();
+          const exists = rawCourses.some((fc) => {
+            const fcName = (typeof fc === 'string' ? fc : fc.name || '').trim();
+            const fcBranch = (typeof fc === 'object' ? fc.branch || '' : '').trim();
+            const fcTime = (typeof fc === 'object' ? fc.timeSlot || '' : '').trim();
+            return (
+              fcName.toLowerCase() === lcName.toLowerCase() &&
+              fcBranch.toLowerCase() === lcBranch.toLowerCase() &&
+              fcTime === lcTime
+            );
+          });
+          if (!exists && lcName) rawCourses.push(lc);
+        });
+      } else if (localCourses.length > 0) {
+        rawCourses = localCourses;
+        saveSettingToCloud('courses', rawCourses);
+      } else {
+        rawCourses = loadedCourses;
+      }
+
+      // 精準去重：依「學校 + 時段 + 課程名稱」進行唯一判定，允許同名但在不同分校或不同時段的課程並存
       const uniqueCourses: any[] = [];
-      const seenNames = new Set<string>();
-      loadedCourses.forEach((c) => {
-        const name = typeof c === 'string' ? c.trim() : (c.name || '').trim();
-        if (name && !seenNames.has(name)) {
-          seenNames.add(name);
+      const seenCourseKeys = new Set<string>();
+      rawCourses.forEach((c) => {
+        const name = (typeof c === 'string' ? c : c.name || '').trim();
+        const branch = (typeof c === 'object' ? c.branch || '' : '').trim();
+        const timeSlot = (typeof c === 'object' ? c.timeSlot || '' : '').trim();
+        const key = `${branch.toLowerCase()}:::${timeSlot}:::${name.toLowerCase()}`;
+        if (name && !seenCourseKeys.has(key)) {
+          seenCourseKeys.add(key);
           uniqueCourses.push(c);
         }
       });
-      loadedCourses = uniqueCourses;
 
-      loadedBranches = Array.from(new Set(loadedBranches.map((b) => (typeof b === 'string' ? b.trim() : b)).filter(Boolean)));
-      loadedClasses = Array.from(new Set(loadedClasses.map((c) => (typeof c === 'string' ? c.trim() : c)).filter(Boolean)));
+      // 整合學校/分校與班別
+      let finalBranches: string[] = [];
+      if (cloudBranchesFound && loadedBranches.length > 0) {
+        finalBranches = Array.from(new Set([...loadedBranches, ...localBranches].map((b) => (typeof b === 'string' ? b.trim() : b)).filter(Boolean)));
+      } else if (localBranches.length > 0) {
+        finalBranches = localBranches;
+        saveSettingToCloud('branches', finalBranches);
+      } else {
+        finalBranches = loadedBranches;
+      }
+
+      let finalClasses: string[] = [];
+      if (cloudClassesFound && loadedClasses.length > 0) {
+        finalClasses = Array.from(new Set([...loadedClasses, ...localClasses].map((c) => (typeof c === 'string' ? c.trim() : c)).filter(Boolean)));
+      } else if (localClasses.length > 0) {
+        finalClasses = localClasses;
+        saveSettingToCloud('classes', finalClasses);
+      } else {
+        finalClasses = loadedClasses;
+      }
 
       // 更新全域狀態與本地快取
-      setBranches(loadedBranches);
-      try { localStorage.setItem('oc_settings_branches', JSON.stringify(loadedBranches)); } catch (e) {}
+      setBranches(finalBranches);
+      try { localStorage.setItem('oc_settings_branches', JSON.stringify(finalBranches)); } catch (e) {}
 
-      setClasses(loadedClasses);
-      try { localStorage.setItem('oc_settings_classes', JSON.stringify(loadedClasses)); } catch (e) {}
+      setClasses(finalClasses);
+      try { localStorage.setItem('oc_settings_classes', JSON.stringify(finalClasses)); } catch (e) {}
 
-      setCourses(loadedCourses);
-      try { localStorage.setItem('oc_settings_courses', JSON.stringify(loadedCourses)); } catch (e) {}
+      setCourses(uniqueCourses);
+      try { localStorage.setItem('oc_settings_courses', JSON.stringify(uniqueCourses)); } catch (e) {}
     } catch (err: any) {
       console.warn('同步全域設定中:', err.message);
     }
@@ -112,16 +199,18 @@ export default function OnlineClassroomApp() {
     const jsonStr = JSON.stringify(value);
     try {
       localStorage.setItem(`oc_settings_${key}`, jsonStr);
+      // ⭐ 關鍵修復：改用 limit(100) 獲取全部設定，避免 Query.equal('setting_key', ...) 因 Appwrite 索引未建立而報錯中斷
       const res = await databases.listDocuments(
         DATABASE_ID,
         'homework_settings',
-        [Query.equal('setting_key', key)]
+        [Query.limit(100)]
       );
-      if (res.documents.length > 0) {
+      const existingDoc = res.documents.find((d: any) => d.setting_key === key);
+      if (existingDoc) {
         await databases.updateDocument(
           DATABASE_ID,
           'homework_settings',
-          res.documents[0].$id,
+          existingDoc.$id,
           { setting_value: jsonStr }
         );
       } else {

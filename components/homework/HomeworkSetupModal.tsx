@@ -329,6 +329,9 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
       }
 
       const updated = normalizedCourses.map((c) => (c.id === editingCourseTargetId ? newCourseItem : c));
+      try {
+        localStorage.setItem('oc_settings_courses', JSON.stringify(updated));
+      } catch (e) {}
       onUpdateCourses(updated);
       if (oldCourse && oldCourse.name !== finalName && onRenameCourse) {
         onRenameCourse(oldCourse.name, finalName);
@@ -346,7 +349,11 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
         alert(`${branchMsg}已存在相同時段（${finalTime}）且名稱為「${finalName}」的課程！`);
         return;
       }
-      onUpdateCourses([...normalizedCourses, newCourseItem]);
+      const updated = [...normalizedCourses, newCourseItem];
+      try {
+        localStorage.setItem('oc_settings_courses', JSON.stringify(updated));
+      } catch (e) {}
+      onUpdateCourses(updated);
     }
 
     handleCloseCourseForm();
@@ -356,6 +363,9 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
   const handleDeleteCourse = (targetId: string, targetName: string) => {
     if (!window.confirm(`確定要刪除課程「${targetName}」嗎？`)) return;
     const remaining = normalizedCourses.filter((c) => c.id !== targetId && c.name !== targetName);
+    try {
+      localStorage.setItem('oc_settings_courses', JSON.stringify(remaining));
+    } catch (e) {}
     onUpdateCourses(remaining);
   };
 
