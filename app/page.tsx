@@ -23,11 +23,13 @@ export default function OnlineClassroomApp() {
   const [showCourseContentModal, setShowCourseContentModal] = useState(false);
   const [courseModalInitialCourse, setCourseModalInitialCourse] = useState<string>('');
   const [courseModalInitialBranch, setCourseModalInitialBranch] = useState<string>('');
+  const [courseModalIsLocked, setCourseModalIsLocked] = useState<boolean>(false);
 
-  // ⭐ 需求：點擊課程打開課程單元及單元家課
-  const handleOpenCourseContent = (courseName?: string, branch?: string) => {
+  // ⭐ 需求：點擊課程打開課程單元及單元家課，鎖上該頁的學校及課程選項
+  const handleOpenCourseContent = (courseName?: string, branch?: string, isLocked: boolean = false) => {
     setCourseModalInitialCourse(courseName || '');
     setCourseModalInitialBranch(branch || '全部分校');
+    setCourseModalIsLocked(isLocked);
     setShowCourseContentModal(true);
   };
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
@@ -303,7 +305,7 @@ export default function OnlineClassroomApp() {
             noticeCount={notices.length}
             onOpenNotices={() => setShowNoticeModal(true)}
             onOpenHomework={() => setShowCourseContentModal(true)}
-            onOpenCourseContent={() => handleOpenCourseContent()}
+            onOpenCourseContent={() => handleOpenCourseContent('', '全部分校', false)}
             onOpenSetup={() => setShowSetupModal(true)} // ⭐ 設定按鍵開啟「學校/分校及班別設定」彈窗
             onOpenAttendance={() => setShowAttendanceModal(true)}
             onOpenClasses={() => setShowClassModal(true)}
@@ -349,6 +351,7 @@ export default function OnlineClassroomApp() {
             setShowCourseContentModal(false);
             setCourseModalInitialCourse('');
             setCourseModalInitialBranch('');
+            setCourseModalIsLocked(false);
           }}
           branches={branches}
           courses={courseNames}
@@ -356,6 +359,7 @@ export default function OnlineClassroomApp() {
           courseItems={courses}
           initialCourse={courseModalInitialCourse}
           initialBranch={courseModalInitialBranch}
+          isLocked={courseModalIsLocked}
         />
 
         {/* 3. 獨立家課彈窗 (備用向下相容) */}

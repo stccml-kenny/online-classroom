@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect, useMemo } from 'react';
 import {
-  X, Plus, GraduationCap, BookOpen, Calendar, Edit2, Trash2, Download, FileText, Music, Video, Play, Pause, ExternalLink, CheckCircle2, Clock, Eye, Layers, Unlink, ChevronDown, ChevronUp, CheckSquare, Square, Edit3
+  X, Plus, GraduationCap, BookOpen, Calendar, Edit2, Trash2, Download, FileText, Music, Video, Play, Pause, ExternalLink, CheckCircle2, Clock, Eye, Layers, Unlink, ChevronDown, ChevronUp, CheckSquare, Square, Edit3, Lock
 } from 'lucide-react';
 import { CourseUnit, CourseUnitFormModal } from './CourseUnitFormModal';
 import { HomeworkCard, HomeworkItem, HomeworkAttachment, extractYoutubeId, getGoogleLinkMeta, YoutubeIcon, getHomeworkPublishStatus } from '../homework/HomeworkCard';
@@ -21,6 +21,7 @@ interface CourseContentModalProps {
   courseItems?: (string | CourseItem)[];
   initialCourse?: string; // ⭐ 預選課程
   initialBranch?: string; // ⭐ 預選分校
+  isLocked?: boolean;     // ⭐ 於課程目錄點擊打開時，鎖上學校及課程選項
 }
 
 export type PublishStatusType = 'published' | 'scheduled' | 'pending' | 'unpublished';
@@ -129,6 +130,7 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
   courseItems = [],
   initialCourse = '',
   initialBranch = '',
+  isLocked = false,
 }) => {
   const [activeTab, setActiveTab] = useState<'units' | 'homework'>('units');
 
@@ -149,7 +151,7 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
       });
       list = matchedItems.map((c) => getCourseDisplayName(c));
     } else {
-      list = courses;
+      list = [];
     }
     return Array.from(new Set(list)).filter(Boolean);
   }, [selectedBranch, courses, courseItems]);
@@ -780,33 +782,63 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
           </button>
         </div>
 
-        {/* 篩選工具列：預設全部分校及全部課程 (課程因學校變更，獨立一行完整顯示全名) */}
+        {/* 篩選工具列：預設全部分校及全部課程 (⭐ 需求：於課程目錄中點擊打開，鎖上該頁的學校及課程選項) */}
         <div className="bg-white px-4 py-2 border-b border-gray-100 space-y-1.5">
-          <div className="grid grid-cols-1 gap-1.5">
-            {/* 學校選擇 */}
-            <select
-              value={selectedBranch}
-              onChange={(e) => setSelectedBranch(e.target.value)}
-              className="w-full bg-purple-50 text-purple-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg border-none outline-none"
-            >
-              <option value="全部分校">全部分校 (All Schools)</option>
-              {branches.map((b) => (
-                <option key={b} value={b}>{b}</option>
-              ))}
-            </select>
+          {isLocked ? (
+            <div className="bg-indigo-50/70 border border-indigo-200/80 rounded-xl p-2.5 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                  <Lock size={14} />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] bg-purple-100 text-purple-700 font-bold px-1.5 py-0.2 rounded border border-purple-200">
+                      {selectedBranch}
+                    </span>
+                    <span className="text-[10px] text-indigo-600 font-semibold flex items-center gap-0.5">
+                      <span>已鎖定指定課程</span>
+                    </span>
+                  </div>
+                  <p className="font-bold text-gray-900 truncate text-xs mt-0.5">
+                    {selectedCourse}
+                  </p>
+                </div>
+              </div>
+              <span className="text-[10px] text-gray-400 shrink-0 font-medium ml-2">
+                🔒 選項已鎖定
+              </span>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-1.5">
+              {/* 學校選擇 */}
+              <select
+                value={selectedBranch}
+                onChange={(e) => setSelectedBranch(e.target.value)}
+                className="w-full bg-purple-50 text-purple-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg border-none outline-none"
+              >
+                <option value="全部分校">全部分校 (All Schools)</option>
+                {branches.map((b) => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
 
-            {/* ⭐ 課程選擇因學校變更，獨立行滿寬顯示 */}
-            <select
-              value={selectedCourse}
-              onChange={(e) => setSelectedCourse(e.target.value)}
-              className="w-full bg-indigo-50 text-indigo-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-indigo-100 outline-none"
-            >
-              <option value="全部課程">全部課程 (All Courses)</option>
-              {filteredCourses.map((c, idx) => (
-                <option key={`${c}_${idx}`} value={c}>{c}</option>
-              ))}
-            </select>
-          </div>
+              {/* ⭐ 課程選擇因學校變更，若該學校沒有課程則顯示沒有課程 */}
+              <select
+                value={selectedCourse}
+                onChange={(e) => setSelectedCourse(e.target.value)}
+                className="w-full bg-indigo-50 text-indigo-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-indigo-100 outline-none"
+              >
+                <option value="全部課程">全部課程 (All Courses)</option>
+                {filteredCourses.length === 0 && selectedBranch !== '全部分校' ? (
+                  <option value="" disabled>該學校暫無相關課程 (沒有課程)</option>
+                ) : (
+                  filteredCourses.map((c, idx) => (
+                    <option key={`${c}_${idx}`} value={c}>{c}</option>
+                  ))
+                )}
+              </select>
+            </div>
+          )}
 
           {/* 狀態快捷按鈕 (全部 / 🟢 已上架 / 🟡 預排上架 / 🟣 待安排 / ⚪ 已下架) */}
           <div className="flex items-center gap-1 overflow-x-auto pb-0.5 text-[11px]">
@@ -1411,7 +1443,7 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
         </div>
       </div>
 
-      {/* 課程單元建立 / 編輯彈窗 (⭐ 根據所選學校顯示相對應課程) */}
+      {/* 課程單元建立 / 編輯彈窗 (⭐ 需求：若於該課程新增課程單元鎖上學校及課程選項) */}
       <CourseUnitFormModal
         isOpen={unitFormOpen}
         onClose={() => {
@@ -1425,9 +1457,10 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
         courseItems={courseItems}
         defaultBranch={selectedBranch !== '全部分校' ? selectedBranch : undefined}
         defaultCourse={selectedCourse !== '全部課程' ? selectedCourse : undefined}
+        isLocked={isLocked && selectedCourse !== '全部課程'}
       />
 
-      {/* 家課建立 / 編輯彈窗 (⭐ 根據所選學校顯示相對應課程) */}
+      {/* 家課建立 / 編輯彈窗 (⭐ 需求：若於該課程新增家課鎖上學校及課程選項) */}
       <HomeworkFormModal
         isOpen={hwFormOpen}
         onClose={() => {
@@ -1442,6 +1475,7 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
         courseItems={courseItems}
         defaultBranch={selectedBranch !== '全部分校' ? selectedBranch : undefined}
         defaultCourse={selectedCourse !== '全部課程' ? selectedCourse : undefined}
+        isLocked={isLocked && selectedCourse !== '全部課程'}
         targetUnitId={targetUnitForNewHw?.$id}
         targetUnitTitle={targetUnitForNewHw?.unit_title}
       />

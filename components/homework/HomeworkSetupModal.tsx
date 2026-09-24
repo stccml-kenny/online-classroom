@@ -133,7 +133,7 @@ interface HomeworkSetupModalProps {
   isInline?: boolean; // ⭐ 支援滿板顯示 (非浮動彈窗)
   mode?: 'all' | 'courses_only' | 'settings_only'; // ⭐ 課程目錄中只保留課程設定；設定按鍵只保留學校/分校及班別設定
   onClose?: () => void;
-  onOpenCourseContent?: (courseName: string, branch?: string) => void; // ⭐ 點擊課程打開課程單元及單元家課
+  onOpenCourseContent?: (courseName: string, branch?: string, isLocked?: boolean) => void; // ⭐ 點擊課程打開課程單元及單元家課 (支援鎖定選項)
   branches: string[];
   classes: string[];
   courses: (string | CourseItem)[];
@@ -1093,7 +1093,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                           className="min-w-0 flex-1 cursor-pointer group/title"
                           onClick={() => {
                             const displayName = getCourseDisplayName(c);
-                            onOpenCourseContent?.(displayName, c.branch || '全部分校');
+                            onOpenCourseContent?.(displayName, c.branch || '全部分校', true);
                           }}
                           title="點擊打開此課程的單元教材與家課"
                         >
@@ -1157,7 +1157,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                         type="button"
                         onClick={() => {
                           const displayName = getCourseDisplayName(c);
-                          onOpenCourseContent?.(displayName, c.branch || '全部分校');
+                          onOpenCourseContent?.(displayName, c.branch || '全部分校', true);
                         }}
                         className="w-full py-1.5 px-2.5 bg-indigo-50/70 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 rounded-lg font-bold text-[11px] flex items-center justify-between transition-all group shadow-2xs"
                         title="查看並發布此課程之單元教材與單元家課"

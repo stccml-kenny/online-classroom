@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  X, Save, GraduationCap, UploadCloud, FileText, Music, Video, Loader2, ExternalLink, Globe, Plus, Calendar, MapPin
+  X, Save, GraduationCap, UploadCloud, FileText, Music, Video, Loader2, ExternalLink, Globe, Plus, Calendar, MapPin, Lock
 } from 'lucide-react';
 import { HomeworkAttachment, extractYoutubeId, getGoogleLinkMeta, YoutubeIcon } from '../homework/HomeworkCard';
 import { CourseItem, getCourseDisplayName } from '../homework/HomeworkSetupModal';
@@ -32,6 +32,7 @@ interface CourseUnitFormModalProps {
   courseItems?: (string | CourseItem)[]; // ⭐ 支援課程物件結構以取得所屬學校/分校
   defaultBranch?: string; // ⭐ 預選分校
   defaultCourse?: string; // ⭐ 預選課程
+  isLocked?: boolean;     // ⭐ 鎖上學校及課程選項
 }
 
 export const CourseUnitFormModal: React.FC<CourseUnitFormModalProps> = ({
@@ -44,11 +45,14 @@ export const CourseUnitFormModal: React.FC<CourseUnitFormModalProps> = ({
   courseItems = [],
   defaultBranch,
   defaultCourse,
+  isLocked = false,
 }) => {
   const [branch, setBranch] = useState(defaultBranch || branches[0] || '');
-  const [courseName, setCourseName] = useState(defaultCourse || courses[0] || '');
+  // ⭐ 需求：新增課程單元中不要預選課程 (除非已鎖定指定課程)
+  const [courseName, setCourseName] = useState(isLocked && defaultCourse ? defaultCourse : '');
 
   // ⭐ 需求：新增課程單元時，課程要根據所選學校/分校 (branch) 動態顯示相對應的課程
+  // ⭐ 需求：如果該學校沒有課程，顯示沒有課程 (嚴格不 fallback 回其他學校課程)
   const availableCourses = useMemo(() => {
     let list: string[] = [];
     if (!branch || branch === '全部分校') {
@@ -64,15 +68,15 @@ export const CourseUnitFormModal: React.FC<CourseUnitFormModalProps> = ({
       });
       list = matched.map((c) => getCourseDisplayName(c));
     } else {
-      list = courses;
+      list = [];
     }
-    const unique = Array.from(new Set(list)).filter(Boolean);
-    return unique.length > 0 ? unique : courses;
+    return Array.from(new Set(list)).filter(Boolean);
   }, [branch, courses, courseItems]);
 
   const handleBranchChange = (newBranch: string) => {
+    if (isLocked) return;
     setBranch(newBranch);
-    // ⭐ 當分校變更時，即時過濾該分校的課程
+    // ⭐ 當分校變更時，若目前選中課程不在新分校課程中，重置為未選擇 (不預選)
     let nextCourses: string[] = [];
     if (courseItems && courseItems.length > 0 && newBranch && newBranch !== '全部分校') {
       const matched = courseItems.filter((c) => {
@@ -83,16 +87,14 @@ export const CourseUnitFormModal: React.FC<CourseUnitFormModalProps> = ({
     } else if (courseItems && courseItems.length > 0) {
       nextCourses = courseItems.map((c) => getCourseDisplayName(c));
     } else {
-      nextCourses = courses;
+      nextCourses = [];
     }
     const unique = Array.from(new Set(nextCourses)).filter(Boolean);
-    if (unique.length > 0) {
-      const isValid = unique.some(
-        (c) => c === courseName || c.startsWith(courseName) || courseName.startsWith(c)
-      );
-      if (!isValid) {
-        setCourseName(unique[0]);
-      }
+    const isValid = unique.some(
+      (c) => c === courseName || c.startsWith(courseName) || courseName.startsWith(c)
+    );
+    if (!isValid) {
+      setCourseName(''); // ⭐ 需求：不要預選課程
     }
   };
   const [unitTitle, setUnitTitle] = useState('');
@@ -204,28 +206,15 @@ export const CourseUnitFormModal: React.FC<CourseUnitFormModalProps> = ({
       setCurrentYtInput('');
       setCurrentGoogleInput('');
     } else {
-      // ⭐ 新增課程單元：預設帶入外層當前所選的分校與課程
+      // ⭐ 新增課程單元：帶入外層所選分校
       const targetBranch = defaultBranch && defaultBranch !== '全部分校' ? defaultBranch : (branches[0] || '');
       setBranch(targetBranch);
 
-      let branchCourses: string[] = [];
-      if (courseItems && courseItems.length > 0 && targetBranch) {
-        const matched = courseItems.filter((c) => {
-          if (typeof c === 'string') return true;
-          return !c.branch || c.branch === '全部分校' || c.branch === targetBranch;
-        });
-        branchCourses = matched.map((c) => getCourseDisplayName(c));
-      } else {
-        branchCourses = courses;
-      }
-      const uniqueBranchCourses = Array.from(new Set(branchCourses)).filter(Boolean);
-
-      if (defaultCourse && defaultCourse !== '全部課程' && uniqueBranchCourses.includes(defaultCourse)) {
+      // ⭐ 需求：如果已鎖定課程則帶入該課程；否則新增單元不要預選課程 (留空讓老師選擇)
+      if (isLocked && defaultCourse) {
         setCourseName(defaultCourse);
-      } else if (uniqueBranchCourses.length > 0) {
-        setCourseName(uniqueBranchCourses[0]);
       } else {
-        setCourseName(courses[0] || '');
+        setCourseName('');
       }
 
       setUnitTitle('');
@@ -239,7 +228,7 @@ export const CourseUnitFormModal: React.FC<CourseUnitFormModalProps> = ({
       setCurrentYtInput('');
       setCurrentGoogleInput('');
     }
-  }, [initialData, isOpen, branches, courses, courseItems, defaultBranch, defaultCourse]);
+  }, [initialData, isOpen, branches, courses, courseItems, defaultBranch, defaultCourse, isLocked]);
 
   if (!isOpen) return null;
 
@@ -326,6 +315,16 @@ export const CourseUnitFormModal: React.FC<CourseUnitFormModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!branch.trim()) {
+      alert('請選擇學校/分校！');
+      return;
+    }
+
+    if (!courseName.trim()) {
+      alert('請選擇課程！');
+      return;
+    }
+
     if (!unitTitle.trim()) {
       alert('請填寫單元名稱！');
       return;
@@ -407,75 +406,106 @@ export const CourseUnitFormModal: React.FC<CourseUnitFormModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-3.5 overflow-y-auto text-sm">
-          {/* 1. 分校 (Branch) */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1 flex items-center gap-1">
-              <MapPin size={12} className="text-purple-600" />
-              <span>學校 / 分校 (School / Branch)</span>
-            </label>
-            {branches.length > 0 ? (
-              <select
-                value={branch}
-                onChange={(e) => handleBranchChange(e.target.value)}
-                className="w-full p-2.5 border border-purple-200 rounded-lg bg-purple-50/50 text-xs font-medium text-gray-800 outline-none focus:bg-white focus:border-indigo-600"
-              >
-                {branches.length > 1 && (
-                  <option value="全部分校">全部分校 (全部學校適用)</option>
-                )}
-                {branches.map((b) => (
-                  <option key={b} value={b}>{b}</option>
-                ))}
-              </select>
-            ) : (
-              <input
-                type="text"
-                placeholder="例: 分校或校舍名稱"
-                value={branch}
-                onChange={(e) => handleBranchChange(e.target.value)}
-                className="w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 text-xs outline-none focus:border-indigo-600"
-              />
-            )}
-          </div>
-
-          {/* 2. 課程 (Course) - ⭐ 根據所選學校顯示相對應的課程 */}
-          <div>
-            <div className="flex justify-between items-center mb-1">
-              <label className="block text-xs font-semibold text-gray-600 flex items-center gap-1">
-                <GraduationCap size={12} className="text-indigo-600" />
-                <span>課程 (Course)</span> <span className="text-indigo-600">*</span>
-              </label>
-              {branch && branch !== '全部分校' ? (
-                <span className="text-[10px] text-purple-600 font-bold bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200">
-                  {branch} 專屬課程 ({availableCourses.length})
+          {/* ⭐ 需求：如果於該課程新增課程單元，鎖上該頁的學校及課程選項 */}
+          {isLocked ? (
+            <div className="p-3 bg-indigo-50/70 border border-indigo-200/90 rounded-xl space-y-2">
+              <div className="flex items-center justify-between text-xs text-indigo-900 font-bold">
+                <span className="flex items-center gap-1.5">
+                  <Lock size={13} className="text-indigo-600" />
+                  <span>已鎖定指定學校與課程</span>
                 </span>
-              ) : (
-                <span className="text-[10px] text-gray-500 font-medium bg-gray-100 px-1.5 py-0.5 rounded">
-                  全部可用課程 ({availableCourses.length})
+                <span className="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded-full font-bold shadow-2xs">
+                  專屬此課程
                 </span>
-              )}
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="bg-white p-2.5 rounded-lg border border-indigo-100 shadow-2xs">
+                  <span className="text-[10px] text-gray-400 block mb-0.5">學校 / 分校</span>
+                  <span className="font-bold text-gray-800">{branch || '全部分校'}</span>
+                </div>
+                <div className="bg-white p-2.5 rounded-lg border border-indigo-100 shadow-2xs min-w-0">
+                  <span className="text-[10px] text-gray-400 block mb-0.5">所屬課程</span>
+                  <span className="font-bold text-indigo-700 truncate block">{courseName}</span>
+                </div>
+              </div>
             </div>
-            {availableCourses.length > 0 ? (
-              <select
-                value={courseName}
-                onChange={(e) => setCourseName(e.target.value)}
-                className="w-full p-2.5 border border-indigo-200 rounded-lg bg-indigo-50/50 text-xs font-medium text-gray-800 outline-none focus:bg-white focus:border-indigo-600"
-                required
-              >
-                {availableCourses.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            ) : (
-              <input
-                type="text"
-                placeholder="例: 課程名稱"
-                value={courseName}
-                onChange={(e) => setCourseName(e.target.value)}
-                className="w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 text-xs outline-none focus:border-indigo-600"
-                required
-              />
-            )}
-          </div>
+          ) : (
+            <>
+              {/* 1. 分校 (Branch) */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1 flex items-center gap-1">
+                  <MapPin size={12} className="text-purple-600" />
+                  <span>學校 / 分校 (School / Branch)</span>
+                </label>
+                {branches.length > 0 ? (
+                  <select
+                    value={branch}
+                    onChange={(e) => handleBranchChange(e.target.value)}
+                    className="w-full p-2.5 border border-purple-200 rounded-lg bg-purple-50/50 text-xs font-medium text-gray-800 outline-none focus:bg-white focus:border-indigo-600"
+                  >
+                    {branches.length > 1 && (
+                      <option value="全部分校">全部分校 (全部學校適用)</option>
+                    )}
+                    {branches.map((b) => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    placeholder="例: 分校或校舍名稱"
+                    value={branch}
+                    onChange={(e) => handleBranchChange(e.target.value)}
+                    className="w-full p-2.5 border border-gray-200 rounded-lg bg-gray-50 text-xs outline-none focus:border-indigo-600"
+                  />
+                )}
+              </div>
+
+              {/* 2. 課程 (Course) - ⭐ 需求：不要預選課程；如果該學校沒有課程，顯示沒有課程 */}
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-xs font-semibold text-gray-600 flex items-center gap-1">
+                    <GraduationCap size={12} className="text-indigo-600" />
+                    <span>課程 (Course)</span> <span className="text-indigo-600">*</span>
+                  </label>
+                  {branch && branch !== '全部分校' ? (
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                      availableCourses.length > 0
+                        ? 'text-purple-600 bg-purple-50 border-purple-200'
+                        : 'text-red-600 bg-red-50 border-red-200'
+                    }`}>
+                      {availableCourses.length > 0
+                        ? `${branch} 專屬課程 (${availableCourses.length})`
+                        : `${branch} 暫無課程`}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-gray-500 font-medium bg-gray-100 px-1.5 py-0.5 rounded">
+                      可用課程 ({availableCourses.length})
+                    </span>
+                  )}
+                </div>
+
+                {availableCourses.length > 0 ? (
+                  <select
+                    value={courseName}
+                    onChange={(e) => setCourseName(e.target.value)}
+                    className="w-full p-2.5 border border-indigo-200 rounded-lg bg-indigo-50/50 text-xs font-medium text-gray-800 outline-none focus:bg-white focus:border-indigo-600"
+                    required
+                  >
+                    <option value="">-- 請選擇課程 (Select Course) --</option>
+                    {availableCourses.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="w-full p-2.5 border border-red-200 rounded-lg bg-red-50 text-xs text-red-600 font-medium flex items-center justify-between">
+                    <span>⚠️ 此學校暫無相關課程 (沒有課程)</span>
+                    <span className="text-[10px] text-red-400">請先於課程設定建立</span>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
 
           {/* 3. 單元名稱 */}
           <div>
