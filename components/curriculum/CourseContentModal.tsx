@@ -194,8 +194,7 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
   const handleResetAndClose = () => {
     setSelectedBranch('全部分校');
     setSelectedCourse('全部課程');
-    setFilterStatus('all');
-    setSearchKeyword('');
+    setStatusFilter('all');
     setExpandedUnitIds([]);
     setIsUnitSelectMode(false);
     setSelectedUnitIds([]);
@@ -217,9 +216,8 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
     if (!isOpen) {
       setSelectedBranch('全部分校');
       setSelectedCourse('全部課程');
-      setFilterStatus('all');
-      setSearchKeyword('');
-      setExpandedUnitIds([]);
+      setStatusFilter('all');
+        setExpandedUnitIds([]);
       setIsUnitSelectMode(false);
       setSelectedUnitIds([]);
       setIsHwSelectMode(false);

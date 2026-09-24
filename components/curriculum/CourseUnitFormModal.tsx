@@ -67,9 +67,9 @@ export const CourseUnitFormModal: React.FC<CourseUnitFormModalProps> = ({
     setPublishDate('');
     setUnpublishDate('');
     setYoutubeUrls([]);
-    setNewYoutubeInput('');
+    setCurrentYtInput('');
     setGoogleUrls([]);
-    setNewGoogleInput('');
+    setCurrentGoogleInput('');
     setAttachments([]);
     setUploadingFiles(false);
     setSubmitting(false);
@@ -85,9 +85,9 @@ export const CourseUnitFormModal: React.FC<CourseUnitFormModalProps> = ({
       setPublishDate('');
       setUnpublishDate('');
       setYoutubeUrls([]);
-      setNewYoutubeInput('');
+      setCurrentYtInput('');
       setGoogleUrls([]);
-      setNewGoogleInput('');
+      setCurrentGoogleInput('');
       setAttachments([]);
       setUploadingFiles(false);
       setSubmitting(false);

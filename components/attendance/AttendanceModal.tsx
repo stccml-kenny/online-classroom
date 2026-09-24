@@ -36,7 +36,6 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
     setSelectedClass('');
     setSelectedCourse('');
     setStudents([]);
-    setAttendanceRecords({});
     setSessionPage(0);
     setSaving(false);
     onClose();
@@ -48,8 +47,7 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
       setSelectedClass('');
       setSelectedCourse('');
       setStudents([]);
-      setAttendanceRecords({});
-      setSessionPage(0);
+        setSessionPage(0);
       setSaving(false);
     }
   }, [isOpen]);

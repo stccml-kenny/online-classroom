@@ -33,8 +33,6 @@ export const HomeworkModal: React.FC<HomeworkModalProps> = ({
   const handleResetAndClose = () => {
     setSelectedBranch('全部');
     setSelectedCourse('全部');
-    setSelectedStatus('all');
-    setSearchKeyword('');
     setFormOpen(false);
     setEditingItem(null);
     onClose();
@@ -44,9 +42,7 @@ export const HomeworkModal: React.FC<HomeworkModalProps> = ({
     if (!isOpen) {
       setSelectedBranch('全部');
       setSelectedCourse('全部');
-      setSelectedStatus('all');
-      setSearchKeyword('');
-      setFormOpen(false);
+          setFormOpen(false);
       setEditingItem(null);
     }
   }, [isOpen]);
