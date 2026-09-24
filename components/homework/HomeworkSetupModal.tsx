@@ -166,7 +166,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
     if (mode === 'settings_only' && activeTab === 'courses') {
       setActiveTab('branches');
     } else if (mode === 'courses_only' && activeTab !== 'courses') {
-      setActiveTab(mode === 'settings_only' ? 'branches' : 'courses');
+      setActiveTab('courses');
     }
   }, [mode, activeTab]);
 
