@@ -290,8 +290,9 @@ export default function OnlineClassroomApp() {
       case 'msg': return '即時訊息';
       case 'members': return '會員目錄';
       case 'courses': return '課程管理';
+      case 'attendance': return '課程點名';
       case 'more': return '更多';
-      default: return 'ONLINE CLASSROOM';
+      default: return 'Online-Classroom';
     }
   };
 
@@ -305,8 +306,7 @@ export default function OnlineClassroomApp() {
             noticeCount={notices.length}
             onOpenNotices={() => setShowNoticeModal(true)}
             onOpenSetup={() => setShowSetupModal(true)} // ⭐ 設定按鍵開啟「學校/分校及班別設定」彈窗
-            onOpenAttendance={() => setShowAttendanceModal(true)}
-          />
+            />
         )}
 
         {/* ⭐ 課程目錄：滿板顯示，只保留課程設定 (點擊課程打開課程單元及單元家課) */}
@@ -338,6 +338,20 @@ export default function OnlineClassroomApp() {
               courses={courseNames}
               courseItems={courses}
               onOpenCourseContent={handleOpenCourseContent}
+            />
+          </div>
+        )}
+
+        {/* ⭐ 課程點名：底部導航滿板顯示 */}
+        {activeTab === 'attendance' && (
+          <div className="flex-1 w-full bg-[#F8F9FA] flex flex-col overflow-hidden pb-16">
+            <AttendanceModal
+              isOpen={true}
+              isInline={true}
+              branches={branches}
+              classes={classes}
+              courses={courseNames}
+              courseItems={courses}
             />
           </div>
         )}

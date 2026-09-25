@@ -1,7 +1,7 @@
 ﻿import React from 'react';
 import {
   Users, Radio, Calendar, FileText,
-  UserCheck, MessageSquare, Lock, Mail, Shield,
+  MessageSquare, Lock, Mail, Shield,
   FileCheck, LogOut, Settings
 } from 'lucide-react';
 import { MenuItem } from './MenuItem';
@@ -10,7 +10,7 @@ interface MoreViewProps {
   noticeCount?: number;
   onOpenNotices: () => void;
   onOpenHomework?: () => void;
-  onOpenAttendance: () => void;
+  onOpenAttendance?: () => void;
   onOpenClasses?: () => void;
   onOpenCourseContent?: () => void;
   onOpenSetup?: () => void; // ⭐ 設定入口
@@ -19,7 +19,6 @@ interface MoreViewProps {
 export const MoreView: React.FC<MoreViewProps> = ({
   noticeCount,
   onOpenNotices,
-  onOpenAttendance,
   onOpenSetup,
 }) => {
   return (
@@ -31,7 +30,7 @@ export const MoreView: React.FC<MoreViewProps> = ({
         </div>
         <div>
           <div className="text-xl font-bold text-gray-800">導師</div>
-          <div className="text-xs text-gray-400">ONLINE CLASSROOM 導師端</div>
+          <div className="text-xs text-gray-400">Online-Classroom 導師端</div>
         </div>
       </div>
 
@@ -50,11 +49,6 @@ export const MoreView: React.FC<MoreViewProps> = ({
           icon={<Settings className="text-[#FF6B57]" size={20} />}
           title="設定 (學校與班別)"
           onClick={onOpenSetup}
-        />
-        <MenuItem
-          icon={<UserCheck className="text-[#FF6B57]" size={20} />}
-          title="活動 / 課程點名"
-          onClick={onOpenAttendance}
         />
         <MenuItem icon={<MessageSquare className="text-[#FF6B57]" size={20} />} title="小組訊息" />
       </div>

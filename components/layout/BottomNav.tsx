@@ -1,7 +1,7 @@
 ﻿import React from 'react';
-import { Home, MessageCircle, Users, GraduationCap } from 'lucide-react';
+import { Home, MessageCircle, Users, GraduationCap, UserCheck } from 'lucide-react';
 
-export type TabType = 'home' | 'msg' | 'members' | 'courses' | 'more' | 'staff';
+export type TabType = 'home' | 'msg' | 'members' | 'courses' | 'attendance' | 'more' | 'staff';
 
 interface BottomNavProps {
   activeTab: TabType;
@@ -12,29 +12,36 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange }) 
   return (
     <div className="fixed bottom-0 w-full max-w-md bg-white border-t border-gray-200 flex justify-around py-2 z-20">
       <TabButton
-        icon={<Home size={22} />}
+        icon={<Home size={20} />}
         label="首頁"
         active={activeTab === 'home'}
         onClick={() => onTabChange('home')}
       />
       <TabButton
-        icon={<MessageCircle size={22} />}
+        icon={<MessageCircle size={20} />}
         label="即時訊息"
         active={activeTab === 'msg'}
         onClick={() => onTabChange('msg')}
       />
       {/* ⭐ 需求：移除底部職員通告改成會員，點擊直接打開會員目錄 */}
       <TabButton
-        icon={<Users size={22} />}
+        icon={<Users size={20} />}
         label="會員"
         active={activeTab === 'members'}
         onClick={() => onTabChange('members')}
       />
       <TabButton
-        icon={<GraduationCap size={22} />}
+        icon={<GraduationCap size={20} />}
         label="課程"
         active={activeTab === 'courses'}
         onClick={() => onTabChange('courses')}
+      />
+      {/* ⭐ 需求：將活動/課程點名改名成課程點名，移到底部目錄 */}
+      <TabButton
+        icon={<UserCheck size={20} />}
+        label="課程點名"
+        active={activeTab === 'attendance'}
+        onClick={() => onTabChange('attendance')}
       />
       <TabButton
         icon={
@@ -62,11 +69,11 @@ interface TabButtonProps {
 const TabButton: React.FC<TabButtonProps> = ({ icon, label, active, onClick }) => (
   <button
     onClick={onClick}
-    className={`flex flex-col items-center justify-center w-16 transition-colors ${
+    className={`flex-1 flex flex-col items-center justify-center py-1 px-0.5 transition-colors shrink-0 ${
       active ? 'text-[#FF6B57]' : 'text-gray-400 hover:text-gray-600'
     }`}
   >
-    <div className="h-6 flex items-center justify-center">{icon}</div>
-    <span className="text-[11px] mt-1 font-medium">{label}</span>
+    <div className="h-5 flex items-center justify-center">{icon}</div>
+    <span className="text-[10px] mt-1 font-medium leading-none whitespace-nowrap">{label}</span>
   </button>
 );

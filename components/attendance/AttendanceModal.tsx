@@ -6,8 +6,9 @@ import { databases, DATABASE_ID } from '@/lib/appwrite';
 import { ID, Query } from 'appwrite';
 
 interface AttendanceModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen?: boolean;
+  isInline?: boolean; // ⭐ 支援滿板顯示 (非浮動彈窗)
+  onClose?: () => void;
   branches?: string[];
   classes?: string[];
   courses?: string[];
@@ -15,7 +16,8 @@ interface AttendanceModalProps {
 }
 
 export const AttendanceModal: React.FC<AttendanceModalProps> = ({
-  isOpen,
+  isOpen = true,
+  isInline = false,
   onClose,
   branches = [],
   classes = [],
@@ -38,7 +40,7 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
     setStudents([]);
     setSessionPage(0);
     setSaving(false);
-    onClose();
+    if (onClose) onClose();
   };
 
   const prevOpenRef = React.useRef(isOpen);
@@ -245,7 +247,7 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
     } else {
       alert('✅ 點名記錄已成功保存於本機！');
     }
-    onClose();
+    if (onClose) onClose();
   };
 
   const presentCount = students.filter((s) => s.status === 'present').length;
@@ -257,17 +259,17 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
   const attendanceRate = totalCount > 0 ? Math.round((presentCount / totalCount) * 100) : 0;
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-30 flex items-end justify-center">
-      <div className="bg-[#F8F9FA] w-full max-w-md rounded-t-2xl max-h-[92vh] flex flex-col shadow-2xl">
+    <div className={isInline ? "w-full flex-1 flex flex-col bg-[#F8F9FA] overflow-hidden" : "fixed inset-0 bg-black/50 z-30 flex items-end justify-center"}>
+      <div className={isInline ? "w-full flex-1 flex flex-col overflow-hidden bg-[#F8F9FA]" : "bg-[#F8F9FA] w-full max-w-md rounded-t-2xl max-h-[92vh] flex flex-col shadow-2xl"}>
         {/* 頂部標題列 */}
-        <div className="bg-white px-5 py-3.5 rounded-t-2xl border-b border-gray-100 flex justify-between items-center">
+        <div className={`bg-white px-5 py-3.5 border-b border-gray-100 flex justify-between items-center shrink-0 ${isInline ? '' : 'rounded-t-2xl'}`}>
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-orange-50 text-[#FF6B57] rounded-lg">
               <UserCheck size={20} />
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <h3 className="font-bold text-gray-800 text-lg">活動 / 課程點名</h3>
+                <h3 className="font-bold text-gray-800 text-lg">課程點名</h3>
                 <span title="雲端連線">
                   <Cloud size={14} className="text-blue-500" />
                 </span>
@@ -275,9 +277,11 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
               <p className="text-xs text-gray-400">班別與課程即時學生連線</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600">
-            <X size={20} />
-          </button>
+          {onClose && !isInline && (
+            <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600">
+              <X size={20} />
+            </button>
+          )}
         </div>
 
         {/* 篩選控制器 */}
@@ -472,17 +476,19 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
         </div>
 
         {/* 底部確認儲存 */}
-        <div className="p-3 bg-white border-t border-gray-100 flex gap-2">
-          <button
-            onClick={onClose}
-            className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-medium text-xs hover:bg-gray-50"
-          >
-            取消
-          </button>
+        <div className="p-3 bg-white border-t border-gray-100 flex gap-2 shrink-0">
+          {!isInline && onClose && (
+            <button
+              onClick={onClose}
+              className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-medium text-xs hover:bg-gray-50"
+            >
+              取消
+            </button>
+          )}
           <button
             onClick={handleSaveAttendance}
             disabled={saving || students.length === 0}
-            className="flex-2 py-2.5 bg-[#FF6B57] text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-[#e05a48] shadow-sm disabled:opacity-60"
+            className={`${!isInline && onClose ? 'flex-2' : 'w-full'} py-2.5 bg-[#FF6B57] text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-[#e05a48] shadow-sm disabled:opacity-60`}
           >
             {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
             <span>{saving ? '正在儲存點名記錄...' : '提交並保存點名記錄'}</span>
