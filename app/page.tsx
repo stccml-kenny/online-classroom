@@ -10,13 +10,22 @@ import { CourseContentModal } from '@/components/curriculum/CourseContentModal';
 import { AttendanceModal } from '@/components/attendance/AttendanceModal';
 import { ClassManagementModal } from '@/components/classes/ClassManagementModal';
 import { HomeworkSetupModal, CourseItem } from '@/components/homework/HomeworkSetupModal';
+import { AuthModal, UserProfile } from '@/components/auth/AuthModal';
+import { HomeView } from '@/components/home/HomeView';
 import { databases, DATABASE_ID } from '@/lib/appwrite';
 import { ID, Query } from 'appwrite';
 
 export default function OnlineClassroomApp() {
-  const [activeTab, setActiveTab] = useState<TabType>('more');
+  // ⭐ 需求：首頁要有開始使用，之後要求登入帳戶，預設進入首頁 (home)
+  const [activeTab, setActiveTab] = useState<TabType>('home');
   const [notices, setNotices] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // ⭐ 用戶登記與登入狀態管理 (支援 5 大角色與 8 位數字密碼)
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [usersList, setUsersList] = useState<UserProfile[]>([]);
+  const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
+  const [authDefaultTab, setAuthDefaultTab] = useState<'login' | 'register'>('login');
 
   const [showNoticeModal, setShowNoticeModal] = useState(false);
   const [showHomeworkModal, setShowHomeworkModal] = useState(false);
@@ -93,6 +102,12 @@ export default function OnlineClassroomApp() {
               if (Array.isArray(parsed)) {
                 loadedBranches = parsed;
                 cloudBranchesFound = true;
+              }
+            } else if (doc.setting_key === 'user_accounts' && doc.setting_value) {
+              const parsed = JSON.parse(doc.setting_value);
+              if (Array.isArray(parsed)) {
+                setUsersList(parsed);
+                try { localStorage.setItem('oc_users_list', JSON.stringify(parsed)); } catch (e) {}
               }
             }
           } catch (pe) {}
@@ -249,6 +264,12 @@ export default function OnlineClassroomApp() {
       const savedClasses = localStorage.getItem('oc_settings_classes');
       if (savedClasses) setClasses(JSON.parse(savedClasses));
 
+      const savedUser = localStorage.getItem('oc_current_user');
+      if (savedUser) setCurrentUser(JSON.parse(savedUser));
+
+      const savedUsersList = localStorage.getItem('oc_users_list');
+      if (savedUsersList) setUsersList(JSON.parse(savedUsersList));
+
       localStorage.removeItem('oc_settings_presets');
     } catch (e) {}
 
@@ -272,6 +293,37 @@ export default function OnlineClassroomApp() {
     saveSettingToCloud('classes', newClasses);
   };
 
+  // --- 帳戶驗證與登入/登出處理 ---
+  const handleOpenAuth = (defaultTab: 'login' | 'register' = 'login') => {
+    setAuthDefaultTab(defaultTab);
+    setShowAuthModal(true);
+  };
+
+  const handleLoginSuccess = (user: UserProfile) => {
+    setCurrentUser(user);
+    try {
+      localStorage.setItem('oc_current_user', JSON.stringify(user));
+    } catch (e) {}
+  };
+
+  const handleRegisterSuccess = (user: UserProfile) => {
+    const updated = [...usersList, user];
+    setUsersList(updated);
+    setCurrentUser(user);
+    try {
+      localStorage.setItem('oc_users_list', JSON.stringify(updated));
+      localStorage.setItem('oc_current_user', JSON.stringify(user));
+    } catch (e) {}
+    saveSettingToCloud('user_accounts', updated);
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    try {
+      localStorage.removeItem('oc_current_user');
+    } catch (e) {}
+  };
+
   const loadNotices = async () => {
     setLoading(true);
     try {
@@ -286,7 +338,7 @@ export default function OnlineClassroomApp() {
 
   const getHeaderTitle = () => {
     switch (activeTab) {
-      case 'home': return '首頁';
+      case 'home': return '智能網上教室';
       case 'msg': return '即時訊息';
       case 'members': return '會員目錄';
       case 'courses': return '課程管理';
@@ -299,14 +351,37 @@ export default function OnlineClassroomApp() {
   return (
     <div className="flex justify-center bg-gray-100 min-h-screen">
       <div className="w-full max-w-md bg-white min-h-screen flex flex-col shadow-2xl relative pb-20">
-        <Header title={getHeaderTitle()} />
+        <Header
+          title={getHeaderTitle()}
+          currentUser={currentUser}
+          onOpenAuth={() => handleOpenAuth('login')}
+          onLogout={handleLogout}
+        />
+
+        {/* ⭐ 首頁視窗：具備開始使用入口、5大身分介紹與快捷工作區 */}
+        {activeTab === 'home' && (
+          <HomeView
+            currentUser={currentUser}
+            onOpenAuth={handleOpenAuth}
+            onLogout={handleLogout}
+            onNavigateTab={setActiveTab}
+            onOpenNotices={() => setShowNoticeModal(true)}
+            onOpenSetup={() => setShowSetupModal(true)}
+            noticeCount={notices.length}
+            courseCount={courses.length}
+            memberCount={0}
+          />
+        )}
 
         {activeTab === 'more' && (
           <MoreView
             noticeCount={notices.length}
             onOpenNotices={() => setShowNoticeModal(true)}
             onOpenSetup={() => setShowSetupModal(true)} // ⭐ 設定按鍵開啟「學校/分校及班別設定」彈窗
-            />
+            currentUser={currentUser}
+            onOpenAuth={handleOpenAuth}
+            onLogout={handleLogout}
+          />
         )}
 
         {/* ⭐ 課程目錄：滿板顯示，只保留課程設定 (點擊課程打開課程單元及單元家課) */}
@@ -356,7 +431,7 @@ export default function OnlineClassroomApp() {
           </div>
         )}
 
-        {activeTab === 'home' && <div className="p-5 text-center text-gray-400">首頁模組開發中</div>}
+
         {activeTab === 'msg' && <div className="p-5 text-center text-gray-400">即時訊息模組開發中</div>}
 
         <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
@@ -426,6 +501,20 @@ export default function OnlineClassroomApp() {
           onUpdateBranches={handleUpdateBranches}
           onUpdateClasses={handleUpdateClasses}
           onUpdateCourses={handleUpdateCourses}
+        />
+
+        {/* 7. ⭐ 應用程式登記及登入系統彈窗 (支援 5 大角色與 8 位數字密碼安全驗證) */}
+        <AuthModal
+          isOpen={showAuthModal}
+          onClose={() => setShowAuthModal(false)}
+          defaultTab={authDefaultTab}
+          branches={branches}
+          classes={classes}
+          currentUser={currentUser}
+          usersList={usersList}
+          onLoginSuccess={handleLoginSuccess}
+          onRegisterSuccess={handleRegisterSuccess}
+          onLogout={handleLogout}
         />
       </div>
     </div>
