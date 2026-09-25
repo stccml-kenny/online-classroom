@@ -1,12 +1,13 @@
 ﻿import React from 'react';
-import { Check, X, Clock, AlertCircle } from 'lucide-react';
+import { Check, X, Clock, AlertCircle, User } from 'lucide-react';
 
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused' | 'unmarked';
 
 export interface StudentAttendance {
   id: string;
   name: string;
-  studentNo: string;
+  studentNo?: string;
+  className?: string; // ⭐ 需求：會員名字下改為班別
   status: AttendanceStatus;
 }
 
@@ -19,8 +20,9 @@ export const AttendanceRow: React.FC<AttendanceRowProps> = ({ student, onStatusC
   return (
     <div className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-xl shadow-sm">
       <div className="flex items-center gap-3 min-w-0">
-        <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 font-bold text-xs flex items-center justify-center shrink-0">
-          {student.studentNo}
+        {/* 左側頭像：以學生姓名首字呈現 */}
+        <div className="w-8 h-8 rounded-full bg-purple-50 text-purple-700 font-bold text-xs flex items-center justify-center shrink-0 border border-purple-200">
+          {student.name ? student.name.charAt(0) : <User size={14} />}
         </div>
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
@@ -31,7 +33,11 @@ export const AttendanceRow: React.FC<AttendanceRowProps> = ({ student, onStatusC
               </span>
             )}
           </div>
-          <div className="text-[11px] text-gray-400">學號：{student.studentNo}</div>
+          {/* ⭐ 需求：會員名字下不要學號，改為班別 */}
+          <div className="text-[11px] text-purple-700 font-semibold mt-0.5 flex items-center gap-1">
+            <span className="text-[10px] text-gray-400 font-normal">班別：</span>
+            <span>{student.className || '未設定班別'}</span>
+          </div>
         </div>
       </div>
 
