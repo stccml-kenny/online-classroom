@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect, useMemo } from 'react';
-import { X, UserCheck, Calendar, CheckCircle2, Save, Cloud, Loader2, ChevronLeft, ChevronRight, MapPin, GraduationCap } from 'lucide-react';
+import { X, UserCheck, CheckCircle2, Save, Cloud, Loader2, Calendar, MapPin, GraduationCap } from 'lucide-react';
 import { AttendanceRow, StudentAttendance, AttendanceStatus } from './AttendanceRow';
 import { CourseItem, getCourseDisplayName } from '../homework/HomeworkSetupModal';
 import { databases, DATABASE_ID } from '@/lib/appwrite';
@@ -24,21 +24,19 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
   courses = [],
   courseItems = [],
 }) => {
-  // ⭐ 需求 2：不要預選學校、班別、課程，初始皆為空
+  // ⭐ 需求：課程點名不需篩選班別，不需日子篩選；初始未選時為空
   const [selectedBranch, setSelectedBranch] = useState('');
-  const [selectedClass, setSelectedClass] = useState('');
   const [selectedCourse, setSelectedCourse] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  // 點名日期預設為今天
+  const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [students, setStudents] = useState<StudentAttendance[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const handleResetAndClose = () => {
     setSelectedBranch('');
-    setSelectedClass('');
     setSelectedCourse('');
     setStudents([]);
-    setSessionPage(0);
     setSaving(false);
     if (onClose) onClose();
   };
@@ -47,17 +45,14 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
   useEffect(() => {
     if (prevOpenRef.current && !isOpen) {
       setSelectedBranch('');
-      setSelectedClass('');
       setSelectedCourse('');
       setStudents([]);
-      setSessionPage(0);
       setSaving(false);
     }
     prevOpenRef.current = isOpen;
   }, [isOpen]);
 
-
-  // ⭐ 需求 1 & 2：課程選擇因揀選學校而變更，未選學校時為空，不提供「全部課程」
+  // ⭐ 課程選擇因揀選學校而變更，未選學校時為空
   const filteredCourseItems = useMemo(() => {
     if (!selectedBranch) return [];
     return courseItems.filter((c) => {
@@ -78,10 +73,7 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
     }
   }, [selectedBranch, filteredCourses, selectedCourse]);
 
-  // ⭐ 需求 3：排定堂數 4 節為一行，如多於 4 節以下頁分頁顯示
-  const [sessionPage, setSessionPage] = useState(0);
-  const SESSIONS_PER_PAGE = 4;
-
+  // 取得目前課程排定的堂數日程 (若有的話供老師切換節數)
   const currentCourseSessionDates = useMemo(() => {
     const matched = courseItems.find((c) => {
       if (typeof c === 'string') return c === selectedCourse;
@@ -93,40 +85,29 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
       : [];
   }, [courseItems, selectedCourse]);
 
-  const totalSessionPages = Math.ceil(currentCourseSessionDates.length / SESSIONS_PER_PAGE);
-  const displayedSessions = currentCourseSessionDates.slice(
-    sessionPage * SESSIONS_PER_PAGE,
-    (sessionPage + 1) * SESSIONS_PER_PAGE
-  );
-
-  useEffect(() => {
-    setSessionPage(0);
-  }, [selectedCourse]);
-
-  // 當彈窗打開時，重置所有選取狀態，不預選任何學校、班別、課程
+  // 當打開時重置選取狀態
   useEffect(() => {
     if (isOpen) {
       setSelectedBranch('');
-      setSelectedClass('');
       setSelectedCourse('');
       setStudents([]);
     }
   }, [isOpen]);
 
-  // ⭐ 需求 3：當選擇分校、班別及課程後才顯示相對的會員 (未選齊前不顯示學生名冊)
+  // ⭐ 需求：當選擇分校與課程後即顯示該課程之所有學生 (不需篩選班別)
   useEffect(() => {
     if (!isOpen) return;
 
-    if (!selectedBranch || !selectedClass || !selectedCourse) {
+    if (!selectedBranch || !selectedCourse) {
       setStudents([]);
       return;
     }
 
     const fetchStudentsForAttendance = async () => {
       setLoading(true);
-      const cacheKey = `oc_att_${selectedBranch}_${selectedClass}_${selectedCourse}_${date}`;
+      const cacheKey = `oc_att_${selectedBranch}_${selectedCourse}_${date}`;
 
-      // 1. 若當天已有儲存過的點名快取，優先載入已記錄狀態
+      // 1. 若已有儲存過的點名快取，優先載入已記錄狀態
       const cached = localStorage.getItem(cacheKey);
       if (cached) {
         try {
@@ -136,9 +117,8 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
         } catch (e) {}
       }
 
-      // 2. 從 Appwrite students 資料表讀取學生名冊
+      // 2. 從 Appwrite students 資料表讀取學生名冊 (依分校與課程過濾，不限班別)
       try {
-        const cleanClass = selectedClass === '全部班別' ? '' : selectedClass.replace(' 班', '').trim();
         const res = await databases.listDocuments(
           DATABASE_ID,
           'students',
@@ -147,14 +127,13 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
 
         const matched = (res.documents as any[]).filter((doc) => {
           const matchBranch = !doc.branch || doc.branch === selectedBranch;
-          const matchClass = !cleanClass || doc.class_name?.includes(cleanClass) || cleanClass.includes(doc.class_name);
           const docCourse = (doc.course_name || '').trim();
           const matchCourse = docCourse && (
             selectedCourse === docCourse ||
             selectedCourse.startsWith(docCourse) ||
             docCourse.startsWith(selectedCourse)
           );
-          return matchBranch && matchClass && matchCourse;
+          return matchBranch && matchCourse;
         });
 
         const uniqueNames = new Set<string>();
@@ -165,8 +144,9 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
             studentList.push({
               id: doc.$id || `stu_${idx}`,
               name: doc.student_name,
-              studentNo: String(studentList.length + 1).padStart(2, '0'),
-              status: 'unmarked', // ⭐ 學生不要預設出席，初始為未點名
+              // ⭐ 需求：會員名字下改為班別
+              className: doc.class_name ? (doc.class_name.endsWith('班') ? doc.class_name : `${doc.class_name} 班`) : '未設定班別',
+              status: 'unmarked',
             });
           }
         });
@@ -181,9 +161,7 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
     };
 
     fetchStudentsForAttendance();
-  }, [selectedBranch, selectedClass, selectedCourse, date, isOpen]);
-
-  if (!isOpen) return null;
+  }, [selectedBranch, selectedCourse, date, isOpen]);
 
   const handleStatusChange = (id: string, status: AttendanceStatus) => {
     setStudents((prev) =>
@@ -201,7 +179,7 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
       return;
     }
     setSaving(true);
-    const cacheKey = `oc_att_${selectedBranch}_${selectedClass}_${selectedCourse}_${date}`;
+    const cacheKey = `oc_att_${selectedBranch}_${selectedCourse}_${date}`;
 
     try {
       localStorage.setItem(cacheKey, JSON.stringify(students));
@@ -214,7 +192,7 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
       const promises = students.map(async (s) => {
         const payload: any = {
           branch: selectedBranch,
-          class_name: selectedClass,
+          class_name: s.className || '',
           student_name: s.name,
           date,
           status: s.status,
@@ -258,6 +236,8 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
   const totalCount = students.length;
   const attendanceRate = totalCount > 0 ? Math.round((presentCount / totalCount) * 100) : 0;
 
+  if (!isOpen) return null;
+
   return (
     <div className={isInline ? "w-full flex-1 flex flex-col bg-[#F8F9FA] overflow-hidden" : "fixed inset-0 bg-black/50 z-30 flex items-end justify-center"}>
       <div className={isInline ? "w-full flex-1 flex flex-col overflow-hidden bg-[#F8F9FA]" : "bg-[#F8F9FA] w-full max-w-md rounded-t-2xl max-h-[92vh] flex flex-col shadow-2xl"}>
@@ -274,7 +254,7 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
                   <Cloud size={14} className="text-blue-500" />
                 </span>
               </div>
-              <p className="text-xs text-gray-400">班別與課程即時學生連線</p>
+              <p className="text-xs text-gray-400">課程專屬即時點名與出席統計</p>
             </div>
           </div>
           {onClose && !isInline && (
@@ -284,126 +264,91 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
           )}
         </div>
 
-        {/* 篩選控制器 */}
-        <div className="bg-white px-4 py-2.5 border-b border-gray-100 space-y-2">
-          {/* ⭐ 需求 2：不預選且不含「全部分校 / 全部班別 / 全部課程」 */}
-          <div className="grid grid-cols-2 gap-2">
-            <select
-              value={selectedBranch}
-              onChange={(e) => {
-                setSelectedBranch(e.target.value);
-                setSelectedCourse('');
-              }}
-              className="bg-purple-50 text-purple-700 font-semibold text-xs px-2.5 py-2 rounded-xl border-none outline-none truncate"
-            >
-              <option value="" disabled>請選擇學校/分校...</option>
-              {branches.map((b) => (
-                <option key={b} value={b}>{b}</option>
-              ))}
-            </select>
+        {/* 篩選控制器：⭐ 需求：不需篩選班別、不需日子篩選 */}
+        <div className="bg-white px-4 py-2.5 border-b border-gray-100 space-y-2 shrink-0">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {/* 學校選擇 */}
+            <div>
+              <label className="block text-[11px] font-semibold text-gray-600 mb-1 flex items-center gap-1">
+                <MapPin size={12} className="text-purple-600" />
+                <span>學校 / 分校</span>
+              </label>
+              <select
+                value={selectedBranch}
+                onChange={(e) => {
+                  setSelectedBranch(e.target.value);
+                  setSelectedCourse('');
+                }}
+                className="w-full bg-purple-50 text-purple-700 font-semibold text-xs px-2.5 py-2 rounded-xl border border-purple-100 outline-none truncate"
+              >
+                <option value="" disabled>請選擇學校/分校...</option>
+                {branches.map((b) => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
+            </div>
 
-            <select
-              value={selectedClass}
-              onChange={(e) => setSelectedClass(e.target.value)}
-              className="bg-purple-50/70 text-purple-700 font-semibold text-xs px-2.5 py-2 rounded-xl border-none outline-none truncate"
-            >
-              <option value="" disabled>請選擇班別...</option>
-              {classes.map((c) => (
-                <option key={c} value={c}>{c.endsWith('班') ? c : `${c} 班`}</option>
-              ))}
-            </select>
+            {/* 課程選擇 (不需班別，直接依學校選課) */}
+            <div>
+              <label className="block text-[11px] font-semibold text-gray-600 mb-1 flex items-center gap-1">
+                <GraduationCap size={12} className="text-indigo-600" />
+                <span>課程名稱</span>
+              </label>
+              <select
+                value={selectedCourse}
+                disabled={!selectedBranch}
+                onChange={(e) => setSelectedCourse(e.target.value)}
+                className="w-full bg-indigo-50 text-indigo-700 font-semibold text-xs px-2.5 py-2 rounded-xl border border-indigo-100 outline-none disabled:opacity-50 truncate"
+              >
+                <option value="" disabled>
+                  {!selectedBranch
+                    ? '請先選擇學校/分校'
+                    : filteredCourses.length === 0
+                    ? '此學校暫無相關課程'
+                    : '請選擇點名課程...'}
+                </option>
+                {filteredCourses.map((cr, idx) => (
+                  <option key={`${cr}_${idx}`} value={cr}>{cr}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          {/* ⭐ 課程選擇獨立一行滿寬，需先選學校才能選課程 */}
-          <div>
-            <select
-              value={selectedCourse}
-              disabled={!selectedBranch}
-              onChange={(e) => setSelectedCourse(e.target.value)}
-              className="w-full bg-indigo-50 text-indigo-700 font-semibold text-xs px-3 py-2 rounded-xl border border-indigo-100 outline-none disabled:opacity-50"
-            >
-              <option value="" disabled>
-                {!selectedBranch ? '請先選擇學校/分校' : '請選擇課程...'}
-              </option>
-              {filteredCourses.map((cr, idx) => (
-                <option key={`${cr}_${idx}`} value={cr}>{cr}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* ⭐ 需求 3：排定堂數 4 節為一行，多於 4 節以下頁/上頁分頁切換 */}
-          {currentCourseSessionDates.length > 0 && (
-            <div className="pt-1 border-t border-gray-100 space-y-1.5">
-              <div className="flex justify-between items-center text-[11px] text-gray-500 font-semibold px-0.5">
-                <span className="flex items-center gap-1 text-indigo-950 font-bold">
-                  <Calendar size={12} className="text-indigo-600" />
-                  <span>排定堂數 (共 {currentCourseSessionDates.length} 節)：</span>
-                </span>
-                {totalSessionPages > 1 && (
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      disabled={sessionPage === 0}
-                      onClick={() => setSessionPage((prev) => Math.max(0, prev - 1))}
-                      className="px-2 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 disabled:opacity-30 text-[10px] font-bold transition-colors"
-                    >
-                      ◀ 上頁
-                    </button>
-                    <span className="text-[10px] text-indigo-600 font-bold px-1">
-                      {sessionPage + 1}/{totalSessionPages}
-                    </span>
-                    <button
-                      type="button"
-                      disabled={sessionPage >= totalSessionPages - 1}
-                      onClick={() => setSessionPage((prev) => Math.min(totalSessionPages - 1, prev + 1))}
-                      className="px-2 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 disabled:opacity-30 text-[10px] font-bold transition-colors"
-                    >
-                      下頁 ▶
-                    </button>
-                  </div>
-                )}
+          {/* 堂數快捷選擇 (若課程有排定日程) 與 全體出席按鈕 */}
+          <div className="flex items-center justify-between gap-2 pt-1 border-t border-gray-100">
+            {currentCourseSessionDates.length > 0 ? (
+              <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-x-auto pb-0.5">
+                <span className="text-[11px] text-gray-500 font-bold shrink-0">堂數：</span>
+                <div className="flex items-center gap-1">
+                  {currentCourseSessionDates.map((d, sIdx) => {
+                    const isCurrent = date === d;
+                    return (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setDate(d)}
+                        className={`px-2 py-1 rounded-lg text-xs font-bold shrink-0 transition-all ${
+                          isCurrent
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                        }`}
+                      >
+                        第 {sIdx + 1} 節
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-
-              {/* 4 節為一行 (grid-cols-4) */}
-              <div className="grid grid-cols-4 gap-1.5">
-                {displayedSessions.map((d, localIdx) => {
-                  const globalIdx = sessionPage * SESSIONS_PER_PAGE + localIdx;
-                  const isCurrent = date === d;
-                  return (
-                    <button
-                      key={d}
-                      type="button"
-                      onClick={() => setDate(d)}
-                      className={`py-1.5 px-1 rounded-xl text-center flex flex-col items-center justify-center border transition-all shadow-2xs ${
-                        isCurrent
-                          ? 'bg-indigo-600 text-white border-indigo-600 ring-2 ring-indigo-600/20'
-                          : 'bg-indigo-50/70 hover:bg-indigo-100 text-indigo-700 border-indigo-100'
-                      }`}
-                    >
-                      <span className="text-[11px] font-bold leading-tight">第 {globalIdx + 1} 節</span>
-                      <span className="text-[9px] opacity-80 mt-0.5">({d.slice(5)})</span>
-                    </button>
-                  );
-                })}
+            ) : (
+              <div className="text-[11px] text-gray-500 font-medium">
+                點名進度：即時連線
               </div>
-            </div>
-          )}
+            )}
 
-          {/* 日期選擇與全體出席 */}
-          <div className="flex items-center justify-between gap-2 pt-1">
-            <div className="flex items-center gap-1.5 text-xs text-gray-600 bg-gray-50 px-2.5 py-1.5 rounded-xl border border-gray-200">
-              <Calendar size={13} className="text-[#FF6B57]" />
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="bg-transparent text-xs outline-none"
-              />
-            </div>
             <button
               onClick={handleMarkAllPresent}
               disabled={students.length === 0}
-              className="text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl font-bold flex items-center gap-1 hover:bg-emerald-100 transition-colors disabled:opacity-50"
+              className="text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl font-bold flex items-center gap-1 hover:bg-emerald-100 transition-colors disabled:opacity-50 shrink-0 ml-auto"
             >
               <CheckCircle2 size={13} /> 全體出席
             </button>
@@ -411,7 +356,7 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
         </div>
 
         {/* 即時統計數據面板 */}
-        <div className="bg-white px-4 py-2.5 border-b border-gray-100 flex justify-around text-center text-xs">
+        <div className="bg-white px-4 py-2 border-b border-gray-100 flex justify-around text-center text-xs shrink-0">
           <div>
             <div className="font-bold text-gray-800 text-sm">{totalCount} 人</div>
             <div className="text-[10px] text-gray-400">總人數</div>
@@ -444,24 +389,24 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
           </div>
         </div>
 
-        {/* 學生點名清單 (學生不預設出席，真實呈現) */}
+        {/* 學生點名清單 (名字下顯示所屬班別) */}
         <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
           {loading ? (
             <div className="text-center py-10 text-gray-400 text-xs">載入學生名冊中...</div>
-          ) : (!selectedBranch || !selectedClass || !selectedCourse) ? (
+          ) : (!selectedBranch || !selectedCourse) ? (
             <div className="text-center py-12 text-gray-400 text-xs flex flex-col items-center gap-2 bg-white rounded-2xl border border-dashed border-gray-200 p-6">
               <UserCheck size={34} className="text-indigo-400 animate-pulse" />
-              <p className="font-bold text-gray-700 text-sm">請依序選取學校、班別及課程</p>
+              <p className="font-bold text-gray-700 text-sm">請選取學校及課程</p>
               <p className="text-[11px] text-gray-400 leading-relaxed max-w-[260px]">
-                請在上方選定學校、班別並指定點名課程，系統將自動載入該堂課的學生會員名單
+                選定學校並指定課程後，系統將自動列出該課程的所有學生會員名單與所屬班別
               </p>
             </div>
           ) : students.length === 0 ? (
             <div className="text-center py-12 text-gray-400 text-xs flex flex-col items-center gap-2 bg-white rounded-2xl border border-dashed border-gray-200 p-6">
               <UserCheck size={32} className="text-gray-300" />
-              <p className="font-semibold text-gray-600">此分校、班別與課程暫無學生登記</p>
+              <p className="font-semibold text-gray-600">此課程暫無學生登記</p>
               <p className="text-[10px] text-gray-400">
-                請至「會員目錄」確認學生已登記於該分校、班別及課程
+                可至底部「會員」目錄為學生登記此課程
               </p>
             </div>
           ) : (

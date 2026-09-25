@@ -2,7 +2,7 @@
 import {
   X, Plus, Trash2, Settings, MapPin, GraduationCap, Layers, Edit2, Check, RotateCcw, BookmarkCheck,
   Clock, Calendar, CheckSquare, Square, ChevronDown, ChevronUp, AlertCircle, Sparkles, Filter,
-  BookOpen, ChevronRight
+  BookOpen, ChevronRight, GripVertical
 } from 'lucide-react';
 
 export type CourseStatus = 'active' | 'planning' | 'ended' | 'paused';
@@ -173,6 +173,114 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
     }
   }, [mode, activeTab]);
 
+  // ⭐ 需求：學校與班別設定中學校及班別可以按著拖動更改排序，按完成設定時確定儲存並更新資料庫
+  const [localBranches, setLocalBranches] = useState<string[]>(branches);
+  const [localClasses, setLocalClasses] = useState<string[]>(classes);
+
+  React.useEffect(() => {
+    setLocalBranches(branches);
+  }, [branches, isOpen]);
+
+  React.useEffect(() => {
+    setLocalClasses(classes);
+  }, [classes, isOpen]);
+
+  // 拖動狀態 (Drag & Drop)
+  const [draggedBranchIndex, setDraggedBranchIndex] = useState<number | null>(null);
+  const [dragOverBranchIndex, setDragOverBranchIndex] = useState<number | null>(null);
+
+  const [draggedClassIndex, setDraggedClassIndex] = useState<number | null>(null);
+  const [dragOverClassIndex, setDragOverClassIndex] = useState<number | null>(null);
+
+  // 1. 學校拖動處理
+  const handleBranchDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedBranchIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+  };
+
+  const handleBranchDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverBranchIndex !== index) {
+      setDragOverBranchIndex(index);
+    }
+  };
+
+  const handleBranchDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    if (draggedBranchIndex === null || draggedBranchIndex === targetIndex) {
+      setDraggedBranchIndex(null);
+      setDragOverBranchIndex(null);
+      return;
+    }
+    const updated = [...localBranches];
+    const [moved] = updated.splice(draggedBranchIndex, 1);
+    updated.splice(targetIndex, 0, moved);
+    setLocalBranches(updated);
+    setDraggedBranchIndex(null);
+    setDragOverBranchIndex(null);
+  };
+
+  const handleBranchDragEnd = () => {
+    setDraggedBranchIndex(null);
+    setDragOverBranchIndex(null);
+  };
+
+  // 2. 班別拖動處理
+  const handleClassDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedClassIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+  };
+
+  const handleClassDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverClassIndex !== index) {
+      setDragOverClassIndex(index);
+    }
+  };
+
+  const handleClassDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    if (draggedClassIndex === null || draggedClassIndex === targetIndex) {
+      setDraggedClassIndex(null);
+      setDragOverClassIndex(null);
+      return;
+    }
+    const updated = [...localClasses];
+    const [moved] = updated.splice(draggedClassIndex, 1);
+    updated.splice(targetIndex, 0, moved);
+    setLocalClasses(updated);
+    setDraggedClassIndex(null);
+    setDragOverClassIndex(null);
+  };
+
+  const handleClassDragEnd = () => {
+    setDraggedClassIndex(null);
+    setDragOverClassIndex(null);
+  };
+
+  // 輔助微調移動 (上移 / 下移) - 兼顧手機點擊與極致流暢性
+  const handleMoveBranch = (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= localBranches.length) return;
+    const updated = [...localBranches];
+    const [moved] = updated.splice(index, 1);
+    updated.splice(targetIndex, 0, moved);
+    setLocalBranches(updated);
+  };
+
+  const handleMoveClass = (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= localClasses.length) return;
+    const updated = [...localClasses];
+    const [moved] = updated.splice(index, 1);
+    updated.splice(targetIndex, 0, moved);
+    setLocalClasses(updated);
+  };
+
   // 學校/分校、班別、功課範本一般輸入狀態
   const [newBranch, setNewBranch] = useState('');
   const [newClass, setNewClass] = useState('');
@@ -242,11 +350,25 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
     setEditDescValue('');
     setNewBranch('');
     setNewClass('');
+    setLocalBranches(branches);
+    setLocalClasses(classes);
+    setDraggedBranchIndex(null);
+    setDragOverBranchIndex(null);
+    setDraggedClassIndex(null);
+    setDragOverClassIndex(null);
     setCourseFilterBranch('全部分校');
     setCourseFilterStatus('all');
     setCourseSearchKeyword('');
     setExpandedCourseIds([]);
     setActiveTab(mode === 'settings_only' ? 'branches' : 'courses');
+  };
+
+  // ⭐ 需求：按完成設定時確定儲存並更新資料庫
+  const handleSaveAndConfirmSettings = () => {
+    onUpdateBranches(localBranches);
+    onUpdateClasses(localClasses);
+    alert('✅ 學校與班別設定及排序已成功儲存並更新至資料庫！');
+    handleCloseModal();
   };
 
   const handleCloseModal = () => {
@@ -493,8 +615,12 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
   const handleAddBranch = (e: React.FormEvent) => {
     e.preventDefault();
     const val = newBranch.trim();
-    if (!val || branches.includes(val)) return;
-    onUpdateBranches([...branches, val]);
+    if (!val) return;
+    if (localBranches.includes(val)) {
+      alert('該學校/分校名稱已存在！');
+      return;
+    }
+    setLocalBranches((prev) => [...prev, val]);
     setNewBranch('');
   };
 
@@ -507,8 +633,11 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
     const val = editValue.trim();
     if (!val) return;
     if (val !== oldBranch) {
-      const updated = branches.map((b) => (b === oldBranch ? val : b));
-      onUpdateBranches(updated);
+      if (localBranches.includes(val)) {
+        alert('已存在相同名稱的學校/分校！');
+        return;
+      }
+      setLocalBranches((prev) => prev.map((b) => (b === oldBranch ? val : b)));
       if (onRenameBranch) onRenameBranch?.(oldBranch, val);
     }
     setEditingItem(null);
@@ -516,20 +645,24 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
 
   const handleDeleteBranch = (target: string) => {
     if (!window.confirm(`確定要刪除學校/分校「${target}」嗎？`)) return;
-    onUpdateBranches(branches.filter((b) => b !== target));
+    setLocalBranches((prev) => prev.filter((b) => b !== target));
   };
 
   const handleClearAllBranches = () => {
     if (!window.confirm('確定要清空全部已設定的學校/分校嗎？')) return;
-    onUpdateBranches([]);
+    setLocalBranches([]);
   };
 
   // --- 3. 班別 (Classes) 操作 ---
   const handleAddClass = (e: React.FormEvent) => {
     e.preventDefault();
     const val = newClass.trim();
-    if (!val || classes.includes(val)) return;
-    onUpdateClasses([...classes, val]);
+    if (!val) return;
+    if (localClasses.includes(val)) {
+      alert('該班別名稱已存在！');
+      return;
+    }
+    setLocalClasses((prev) => [...prev, val]);
     setNewClass('');
   };
 
@@ -542,8 +675,11 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
     const val = editValue.trim();
     if (!val) return;
     if (val !== oldClass) {
-      const updated = classes.map((c) => (c === oldClass ? val : c));
-      onUpdateClasses(updated);
+      if (localClasses.includes(val)) {
+        alert('已存在相同名稱的班別！');
+        return;
+      }
+      setLocalClasses((prev) => prev.map((c) => (c === oldClass ? val : c)));
       if (onRenameClass) onRenameClass?.(oldClass, val);
     }
     setEditingItem(null);
@@ -551,12 +687,12 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
 
   const handleDeleteClass = (target: string) => {
     if (!window.confirm(`確定要刪除班別「${target}」嗎？`)) return;
-    onUpdateClasses(classes.filter((c) => c !== target));
+    setLocalClasses((prev) => prev.filter((c) => c !== target));
   };
 
   const handleClearAllClasses = () => {
     if (!window.confirm('確定要清空全部已設定的班別嗎？')) return;
-    onUpdateClasses([]);
+    setLocalClasses([]);
   };
 
   const mainContent = (
@@ -1252,9 +1388,12 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
               </form>
 
               <div className="space-y-1.5 pt-1">
-                {branches.length > 0 && (
+                {localBranches.length > 0 && (
                   <div className="flex justify-between items-center px-1 pb-1">
-                    <span className="text-[11px] text-gray-400">已設定 {branches.length} 個學校/分校</span>
+                    <span className="text-[11px] text-gray-500 font-medium flex items-center gap-1">
+                      <Sparkles size={11} className="text-purple-600" />
+                      <span>已設定 {localBranches.length} 個學校/分校 (按住拖動可更改排序)</span>
+                    </span>
                     <button
                       type="button"
                       onClick={handleClearAllBranches}
@@ -1264,13 +1403,28 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                     </button>
                   </div>
                 )}
-                {branches.length === 0 && (
+                {localBranches.length === 0 && (
                   <p className="text-center text-xs text-gray-400 py-6">尚未設定任何學校或分校</p>
                 )}
-                {branches.map((b) => {
+                {localBranches.map((b, idx) => {
                   const isEditing = editingItem?.type === 'branch' && editingItem?.id === b;
+                  const isDragging = draggedBranchIndex === idx;
+                  const isDragOver = dragOverBranchIndex === idx;
+
                   return (
-                    <div key={b} className="flex justify-between items-center p-2.5 bg-purple-50/40 border border-purple-100 rounded-lg text-xs font-semibold">
+                    <div
+                      key={b}
+                      draggable={!isEditing}
+                      onDragStart={(e) => handleBranchDragStart(e, idx)}
+                      onDragOver={(e) => handleBranchDragOver(e, idx)}
+                      onDrop={(e) => handleBranchDrop(e, idx)}
+                      onDragEnd={handleBranchDragEnd}
+                      className={`flex justify-between items-center p-2.5 bg-purple-50/40 border rounded-lg text-xs font-semibold transition-all ${
+                        isDragging ? 'opacity-40 scale-[0.98]' : ''
+                      } ${
+                        isDragOver ? 'border-purple-600 bg-purple-100/80 shadow-xs' : 'border-purple-100 hover:border-purple-300'
+                      }`}
+                    >
                       {isEditing ? (
                         <div className="flex items-center gap-1.5 flex-1 mr-2">
                           <input
@@ -1297,11 +1451,45 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                         </div>
                       ) : (
                         <>
-                          <span className="flex items-center gap-1.5 text-purple-800">
+                          <div className="flex items-center gap-2 text-purple-900 min-w-0">
+                            {/* 拖動手把 + 上下微調按鈕 */}
+                            <div className="flex items-center gap-0.5 text-gray-400">
+                              <span
+                                className="cursor-grab active:cursor-grabbing p-1 hover:text-purple-600 hover:bg-purple-100/60 rounded transition-colors"
+                                title="按著此處上下拖動更改排序"
+                              >
+                                <GripVertical size={14} />
+                              </span>
+                              <div className="flex flex-col text-[8px] leading-[9px]">
+                                <button
+                                  type="button"
+                                  disabled={idx === 0}
+                                  onClick={() => handleMoveBranch(idx, 'up')}
+                                  className="text-gray-400 hover:text-purple-600 disabled:opacity-20 px-0.5"
+                                  title="上移"
+                                >
+                                  ▲
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={idx === localBranches.length - 1}
+                                  onClick={() => handleMoveBranch(idx, 'down')}
+                                  className="text-gray-400 hover:text-purple-600 disabled:opacity-20 px-0.5"
+                                  title="下移"
+                                >
+                                  ▼
+                                </button>
+                              </div>
+                            </div>
+
+                            <span className="text-[10px] text-purple-500 bg-purple-100 px-1 py-0.2 rounded font-mono font-bold">
+                              #{idx + 1}
+                            </span>
                             <MapPin size={14} className="text-purple-600 shrink-0" />
-                            <span>{b}</span>
-                          </span>
-                          <div className="flex items-center gap-1">
+                            <span className="truncate">{b}</span>
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0">
                             <button
                               onClick={() => handleStartEditBranch(b)}
                               className="text-gray-400 hover:text-purple-600 p-1 rounded"
@@ -1348,9 +1536,12 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
               </form>
 
               <div className="space-y-1.5 pt-1">
-                {classes.length > 0 && (
+                {localClasses.length > 0 && (
                   <div className="flex justify-between items-center px-1 pb-1">
-                    <span className="text-[11px] text-gray-400">已設定 {classes.length} 個班別</span>
+                    <span className="text-[11px] text-gray-500 font-medium flex items-center gap-1">
+                      <Sparkles size={11} className="text-indigo-600" />
+                      <span>已設定 {localClasses.length} 個班別 (按住拖動可更改排序)</span>
+                    </span>
                     <button
                       type="button"
                       onClick={handleClearAllClasses}
@@ -1360,13 +1551,28 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                     </button>
                   </div>
                 )}
-                {classes.length === 0 && (
+                {localClasses.length === 0 && (
                   <p className="text-center text-xs text-gray-400 py-6">尚未設定任何班別，請於上方新增</p>
                 )}
-                {classes.map((c) => {
+                {localClasses.map((c, idx) => {
                   const isEditing = editingItem?.type === 'class' && editingItem?.id === c;
+                  const isDragging = draggedClassIndex === idx;
+                  const isDragOver = dragOverClassIndex === idx;
+
                   return (
-                    <div key={c} className="flex justify-between items-center p-2.5 bg-gray-50 border border-gray-150 rounded-lg text-xs font-semibold">
+                    <div
+                      key={c}
+                      draggable={!isEditing}
+                      onDragStart={(e) => handleClassDragStart(e, idx)}
+                      onDragOver={(e) => handleClassDragOver(e, idx)}
+                      onDrop={(e) => handleClassDrop(e, idx)}
+                      onDragEnd={handleClassDragEnd}
+                      className={`flex justify-between items-center p-2.5 bg-gray-50 border rounded-lg text-xs font-semibold transition-all ${
+                        isDragging ? 'opacity-40 scale-[0.98]' : ''
+                      } ${
+                        isDragOver ? 'border-indigo-600 bg-indigo-50/80 shadow-xs' : 'border-gray-150 hover:border-indigo-300'
+                      }`}
+                    >
                       {isEditing ? (
                         <div className="flex items-center gap-1.5 flex-1 mr-2">
                           <input
@@ -1393,11 +1599,45 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                         </div>
                       ) : (
                         <>
-                          <span className="flex items-center gap-1.5 text-gray-800">
+                          <div className="flex items-center gap-2 text-gray-900 min-w-0">
+                            {/* 拖動手把 + 上下微調按鈕 */}
+                            <div className="flex items-center gap-0.5 text-gray-400">
+                              <span
+                                className="cursor-grab active:cursor-grabbing p-1 hover:text-indigo-600 hover:bg-indigo-100/60 rounded transition-colors"
+                                title="按著此處上下拖動更改排序"
+                              >
+                                <GripVertical size={14} />
+                              </span>
+                              <div className="flex flex-col text-[8px] leading-[9px]">
+                                <button
+                                  type="button"
+                                  disabled={idx === 0}
+                                  onClick={() => handleMoveClass(idx, 'up')}
+                                  className="text-gray-400 hover:text-indigo-600 disabled:opacity-20 px-0.5"
+                                  title="上移"
+                                >
+                                  ▲
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={idx === localClasses.length - 1}
+                                  onClick={() => handleMoveClass(idx, 'down')}
+                                  className="text-gray-400 hover:text-indigo-600 disabled:opacity-20 px-0.5"
+                                  title="下移"
+                                >
+                                  ▼
+                                </button>
+                              </div>
+                            </div>
+
+                            <span className="text-[10px] text-indigo-600 bg-indigo-100 px-1 py-0.2 rounded font-mono font-bold">
+                              #{idx + 1}
+                            </span>
                             <Layers size={14} className="text-gray-400" />
-                            {c} 班
-                          </span>
-                          <div className="flex items-center gap-1">
+                            <span className="truncate">{c.endsWith('班') ? c : `${c} 班`}</span>
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0">
                             <button
                               onClick={() => handleStartEditClass(c)}
                               className="text-gray-400 hover:text-indigo-600 p-1 rounded"
@@ -1425,14 +1665,23 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
           
         </div>
 
-        {/* ⭐ 需求：當新增及修改課程時，完成設定不要顯示；滿板模式亦不需佔位完成按鈕 */}
+        {/* ⭐ 需求：學校與班別設定中學校及班別可以按著拖動更改排序，按完成設定時確定儲存並更新資料庫 */}
         {!isCourseFormOpen && !isInline && (
-          <div className="p-3 border-t border-gray-100 bg-gray-50">
+          <div className="p-3 border-t border-gray-150 bg-gray-50 flex items-center gap-2 shrink-0">
             <button
+              type="button"
               onClick={handleCloseModal}
-              className="w-full py-2 bg-gray-800 text-white rounded-xl font-bold text-xs hover:bg-gray-700 transition-colors"
+              className="py-2.5 px-4 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold rounded-xl text-xs transition-colors"
             >
-              完成設定
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveAndConfirmSettings}
+              className="flex-1 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl font-bold text-xs shadow-md flex items-center justify-center gap-1.5 transition-all"
+            >
+              <Check size={16} />
+              <span>完成設定 (確定儲存並更新資料庫)</span>
             </button>
           </div>
         )}
