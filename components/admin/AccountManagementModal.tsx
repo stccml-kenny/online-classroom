@@ -8,6 +8,8 @@ import {
 } from 'lucide-react';
 import { UserProfile, UserRole, ROLE_CONFIGS, is8DigitNumeric, DEFAULT_DEMO_USERS } from '@/components/auth/AuthModal';
 import { parseBranchInfo } from '@/components/homework/HomeworkSetupModal';
+import { databases, DATABASE_ID } from '@/lib/appwrite';
+import { ID, Query } from 'appwrite';
 
 interface AccountManagementModalProps {
   isOpen: boolean;
@@ -193,6 +195,36 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
     onUpdateUsersList(updated);
     setLastIssuedUser(newUser);
 
+    // ⭐ 需求：帳戶名冊內的學生帳戶要同時間關聯會員目錄中的會員
+    // 當增加學生帳戶時，同步在會員目錄 (students 表) 中建立相對應的會員記錄
+    if (role === 'student') {
+      const studentMemberDoc = {
+        $id: `stu_${Date.now()}`,
+        branch: finalBranch || '',
+        class_name: finalClass || '',
+        course_name: '',
+        student_name: trimmedName,
+      };
+
+      try {
+        const cached = localStorage.getItem('oc_local_students');
+        const list = cached ? JSON.parse(cached) : [];
+        list.unshift(studentMemberDoc);
+        localStorage.setItem('oc_local_students', JSON.stringify(list));
+      } catch (e) {}
+
+      try {
+        databases.createDocument(DATABASE_ID, 'students', ID.unique(), {
+          branch: finalBranch || '',
+          class_name: finalClass || '',
+          course_name: '',
+          student_name: trimmedName,
+        }).catch((err: any) => console.warn('同步寫入雲端 students 表略過:', err.message));
+      } catch (err: any) {
+        console.warn('同步建立會員目錄記錄略過:', err.message);
+      }
+    }
+
     // 清空表單 (⭐ 密碼清空，不預設初始密碼)
     setName('');
     setUsername('');
@@ -216,6 +248,33 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
     }
     const updated = cleanUsersList.filter((u) => u.username !== targetUser.username);
     onUpdateUsersList(updated);
+
+    // ⭐ 需求：當刪除帳戶名冊內的學生帳戶時，同步刪除會員目錄中相對的會員記錄
+    if (targetUser.role === 'student') {
+      // 1. 同步清理本機快取
+      try {
+        const cached = localStorage.getItem('oc_local_students');
+        if (cached) {
+          const list = JSON.parse(cached);
+          const remaining = list.filter((s: any) => s.student_name !== targetUser.name);
+          localStorage.setItem('oc_local_students', JSON.stringify(remaining));
+        }
+      } catch (e) {}
+
+      // 2. 同步刪除 Appwrite students 表中的紀錄
+      try {
+        databases.listDocuments(DATABASE_ID, 'students', [Query.limit(500)]).then((res) => {
+          const docsToDelete = res.documents.filter(
+            (d: any) => d.student_name === targetUser.name
+          );
+          docsToDelete.forEach((doc) => {
+            databases.deleteDocument(DATABASE_ID, 'students', doc.$id).catch(() => {});
+          });
+        }).catch((err) => console.warn('查詢欲刪除的學生記錄略過:', err.message));
+      } catch (err: any) {
+        console.warn('同步刪除會員目錄記錄略過:', err.message);
+      }
+    }
   };
 
   // 重設 8 位密碼
@@ -437,6 +496,36 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
     const updated = [...validNewAccounts, ...cleanUsersList];
     onUpdateUsersList(updated);
     setUploading(false);
+
+    // ⭐ 需求：批次匯入帳戶時，同步將學生帳戶加入會員目錄 (students 表)
+    const newStudentsToSync = validNewAccounts.filter((a) => a.role === 'student');
+    if (newStudentsToSync.length > 0) {
+      try {
+        const cached = localStorage.getItem('oc_local_students');
+        const list = cached ? JSON.parse(cached) : [];
+        newStudentsToSync.forEach((acc, i) => {
+          list.unshift({
+            $id: `stu_imp_${Date.now()}_${i}`,
+            branch: acc.branch || '',
+            class_name: acc.className || '',
+            course_name: '',
+            student_name: acc.name,
+          });
+        });
+        localStorage.setItem('oc_local_students', JSON.stringify(list));
+      } catch (e) {}
+
+      newStudentsToSync.forEach((acc) => {
+        try {
+          databases.createDocument(DATABASE_ID, 'students', ID.unique(), {
+            branch: acc.branch || '',
+            class_name: acc.className || '',
+            course_name: '',
+            student_name: acc.name,
+          }).catch((err: any) => console.warn('批次同步雲端 students 略過:', err.message));
+        } catch (e) {}
+      });
+    }
 
     alert(`🎉 批次匯入完成！成功建立 ${validNewAccounts.length} 個新帳戶${duplicateCount > 0 ? `（略過 ${duplicateCount} 個重複帳號）` : ''}。`);
     setParsedRows([]);

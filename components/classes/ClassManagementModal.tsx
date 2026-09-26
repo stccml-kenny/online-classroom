@@ -152,9 +152,24 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
 
   const fetchStudents = async () => {
     setLoadingList(true);
+    // 1. 先讀取本地快取防白屏
+    try {
+      const cached = localStorage.getItem('oc_local_students');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setExistingStudents(parsed);
+        }
+      }
+    } catch (e) {}
+
+    // 2. 雲端同步
     try {
       const res = await databases.listDocuments(DATABASE_ID, 'students', [Query.limit(500)]);
       setExistingStudents(res.documents as unknown as StudentRecord[]);
+      try {
+        localStorage.setItem('oc_local_students', JSON.stringify(res.documents));
+      } catch (e) {}
     } catch (err: any) {
       console.log('讀取學生清單中:', err.message);
     } finally {
@@ -446,7 +461,7 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
     }
   };
 
-  // 徹底刪除學生
+  // 徹底刪除學生 (同步刪除會員目錄與帳戶名冊中的學生帳戶)
   const handleDeleteStudentAll = async (student: GroupedStudent) => {
     if (!window.confirm(`確定要徹底刪除學生「${student.student_name}」的所有紀錄嗎？`)) return;
     try {
@@ -456,6 +471,29 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
       setExistingStudents((prev) =>
         prev.filter((s) => !student.enrollments.some((en) => en.id === s.$id))
       );
+
+      // 同步清理本地會員快取
+      try {
+        const cached = localStorage.getItem('oc_local_students');
+        if (cached) {
+          const list = JSON.parse(cached);
+          const remaining = list.filter((s: any) => s.student_name !== student.student_name);
+          localStorage.setItem('oc_local_students', JSON.stringify(remaining));
+        }
+      } catch (e) {}
+
+      // ⭐ 需求：同步刪除帳戶名冊中的相對學生帳戶
+      try {
+        const rawUsers = localStorage.getItem('oc_users_list');
+        if (rawUsers) {
+          const users = JSON.parse(rawUsers);
+          const remainingUsers = users.filter(
+            (u: any) => !(u.role === 'student' && u.name === student.student_name)
+          );
+          localStorage.setItem('oc_users_list', JSON.stringify(remainingUsers));
+        }
+      } catch (e) {}
+
       if (onDataChanged) onDataChanged();
     } catch (err: any) {
       alert('刪除失敗：' + err.message);
