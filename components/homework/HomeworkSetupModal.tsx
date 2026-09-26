@@ -1477,9 +1477,8 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                   const isDragging = draggedBranchIndex === idx;
                   const isDragOver = dragOverBranchIndex === idx;
 
+                  const info = parseBranchInfo(b);
                   return (
-                    const info = parseBranchInfo(b);
-                    return (
                     <div
                       key={b}
                       draggable={!isEditing}
