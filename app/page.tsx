@@ -592,6 +592,8 @@ export default function OnlineClassroomApp() {
           onClose={() => setShowAccountMgmtModal(false)}
           branches={branches}
           classes={classes}
+          courses={courses}
+          courseNames={courseNames}
           currentUser={currentUser}
           usersList={usersList}
           onUpdateUsersList={(newUsers) => {

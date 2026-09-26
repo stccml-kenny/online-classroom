@@ -17,6 +17,7 @@ export interface UserProfile {
   className?: string;
   childName?: string;
   childrenUsernames?: string[]; // ⭐ 需求 4：家長帳戶可關聯多於一個學生之登入帳號
+  enrolledCourses?: string[];   // ⭐ 需求：參加課程 (Courses) 移送至帳戶中心
   createdAt: string;
 }
 
