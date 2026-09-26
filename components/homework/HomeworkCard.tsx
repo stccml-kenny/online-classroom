@@ -1,11 +1,10 @@
 ﻿import React, { useState, useEffect } from 'react';
-import { Users,
+import {
   Calendar, Trash2, Edit2, Download, FileText, Music, Video, Play, Pause, ExternalLink, Clock, ChevronDown, ChevronUp, CheckSquare, Square,
-  CheckCircle2, Sparkles, User, AlertCircle, Plus, UploadCloud
+  CheckCircle2, Sparkles, User, Users, AlertCircle, Plus, UploadCloud
 } from 'lucide-react';
-import { Users, UserProfile, ROLE_CONFIGS } from '@/components/auth/AuthModal';
-import { Users, storeLocalFile } from '@/utils/indexedDB';
-import { Users, getLocalFile } from '@/utils/indexedDB';
+import { UserProfile, ROLE_CONFIGS } from '@/components/auth/AuthModal';
+import { storeLocalFile, getLocalFile } from '@/utils/indexedDB';
 
 export interface HomeworkAttachment {
   id: string;
