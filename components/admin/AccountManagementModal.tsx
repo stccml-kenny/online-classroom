@@ -585,8 +585,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
       `"${(u.createdAt || '').replace(/"/g, '""')}"`
     ]);
 
-    const csvContent = '﻿' + [headers.join(','), ...rows.map((r) => r.join(','))].join('
-');
+    const csvContent = String.fromCharCode(0xFEFF) + [headers.join(','), ...rows.map((r) => r.join(','))].join(String.fromCharCode(10));
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -608,8 +607,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
       '導師,張導師,teacher_zhang,12345678,,,,92345678,',
       '助教,李助教,ta_lee,12345678,,,,93456789,'
     ];
-    const csvContent = '﻿' + [headers.join(','), ...sampleRows].join('
-');
+    const csvContent = String.fromCharCode(0xFEFF) + [headers.join(','), ...sampleRows].join(String.fromCharCode(10));
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -640,8 +638,9 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
       try {
         const text = (evt.target?.result as string) || '';
         const lines = text
-          .split('
-')
+          .split(/
+?
+/)
           .map((line) => line.replace('
 ', '').trim())
           .filter((line) => line.length > 0);
