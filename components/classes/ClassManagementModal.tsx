@@ -54,6 +54,7 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
 }) => {
   // ⭐ 需求 2：會員目錄只保留現有會員，刪除新增會員及Excel批次匯入
   const [existingStudents, setExistingStudents] = useState<StudentRecord[]>([]);
+  const [filterBranch, setFilterBranch] = useState('全部分校');
   const [filterClass, setFilterClass] = useState('全部班別');
   const [filterCourse, setFilterCourse] = useState('全部課程');
   const [loadingList, setLoadingList] = useState(false);
@@ -77,6 +78,7 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
     setSavingEdit(false);
     setAddingCourseForStudent(null);
     setSelectedCourseToAdd('');
+    setFilterBranch('全部分校');
     setFilterClass('全部班別');
     setFilterCourse('全部課程');
   };
@@ -400,13 +402,16 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
 
   const groupedStudents = Array.from(groupedStudentsMap.values());
   const filteredGrouped = groupedStudents.filter((s) => {
+    const matchBranch = filterBranch === '全部分校' || s.branch === filterBranch;
     const matchClass = filterClass === '全部班別' || s.class_name === filterClass;
     const matchCourse =
       filterCourse === '全部課程' ||
       s.enrollments.some((e) => e.course_name === filterCourse);
-    return matchClass && matchCourse;
+    return matchBranch && matchClass && matchCourse;
   });
 
+  const availableBranchesInList = Array.from(new Set(existingStudents.map((s) => s.branch).filter(Boolean)));
+  const allKnownBranches = Array.from(new Set([...branches, ...availableBranchesInList]));
   const availableClassesInList = Array.from(new Set(existingStudents.map((s) => s.class_name).filter(Boolean)));
   const availableCoursesInList = Array.from(new Set(existingStudents.map((s) => s.course_name).filter(Boolean)));
   const allKnownCourses = Array.from(new Set([...courses, ...availableCoursesInList]));
@@ -444,7 +449,18 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
 
         {/* 內容區塊：只保留現有會員 */}
         <div className="p-4 sm:p-5 overflow-y-auto flex-1 text-sm space-y-3">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {/* ⭐ 需求：會員目錄提供學校 filter */}
+            <select
+              value={filterBranch}
+              onChange={(e) => setFilterBranch(e.target.value)}
+              className="bg-purple-50 text-purple-700 text-xs font-semibold px-2 py-1.5 rounded-lg border border-purple-100 outline-none"
+            >
+              <option value="全部分校">全部分校 (全部學校)</option>
+              {allKnownBranches.map((b) => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
             <select
               value={filterClass}
               onChange={(e) => setFilterClass(e.target.value)}

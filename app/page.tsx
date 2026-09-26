@@ -177,6 +177,80 @@ export default function OnlineClassroomApp() {
         console.warn('讀取 homework_settings 略過或表尚未建立:', err.message);
       }
 
+      // ⭐ 讀取 Appwrite 雲端 students 表 (會員名冊)，於 app refresh 後與帳戶名冊及database同步
+      try {
+        const studentsRes = await databases.listDocuments(
+          DATABASE_ID,
+          'students',
+          [Query.limit(500)]
+        );
+        const cloudStudents = (studentsRes.documents || []) as any[];
+        if (cloudStudents.length > 0) {
+          try {
+            localStorage.setItem('oc_local_students', JSON.stringify(cloudStudents));
+          } catch (e) {}
+
+          // 彙整會員名冊中每位學生 (以「分校 + 學生姓名」為鍵) 的修讀課程集合
+          const studentCoursesMap = new Map<string, Set<string>>();
+          cloudStudents.forEach((cs) => {
+            const sName = (cs.student_name || '').trim();
+            const sBranch = (cs.branch || '').trim();
+            if (!sName) return;
+            const key = `${sBranch.toLowerCase()}___${sName.toLowerCase()}`;
+            if (!studentCoursesMap.has(key)) {
+              studentCoursesMap.set(key, new Set<string>());
+            }
+            if (cs.course_name && cs.course_name.trim()) {
+              studentCoursesMap.get(key)!.add(cs.course_name.trim());
+            }
+          });
+
+          // 與現有 usersList 進行雙向同步
+          setUsersList((prevUsers) => {
+            let currentList = prevUsers && prevUsers.length > 0 ? [...prevUsers] : [];
+            if (currentList.length === 0) {
+              try {
+                const saved = localStorage.getItem('oc_users_list');
+                if (saved) currentList = JSON.parse(saved);
+              } catch (e) {}
+            }
+
+            let changed = false;
+            const updatedList = currentList.map((u) => {
+              if (u.role === 'student') {
+                const sName = (u.studentName || u.name || u.username || '').trim();
+                const sBranch = (u.branch || '').trim();
+                const key = `${sBranch.toLowerCase()}___${sName.toLowerCase()}`;
+
+                if (studentCoursesMap.has(key)) {
+                  const cloudCourses = Array.from(studentCoursesMap.get(key)!);
+                  const currentCourses = u.enrolledCourses || [];
+                  const isDiff =
+                    cloudCourses.length !== currentCourses.length ||
+                    cloudCourses.some((c) => !currentCourses.includes(c));
+                  if (isDiff) {
+                    changed = true;
+                    return { ...u, enrolledCourses: cloudCourses };
+                  }
+                }
+              }
+              return u;
+            });
+
+            if (changed) {
+              try {
+                localStorage.setItem('oc_users_list', JSON.stringify(updatedList));
+              } catch (e) {}
+              saveSettingToCloud('user_accounts', updatedList);
+              return updatedList;
+            }
+            return currentList;
+          });
+        }
+      } catch (serr: any) {
+        console.warn('讀取 students 表略過或無權限:', serr.message);
+      }
+
       // ⭐ 關鍵防丟保護：讀取本地 localStorage 資料
       let localCourses: any[] = [];
       try {
@@ -373,6 +447,12 @@ export default function OnlineClassroomApp() {
     setShowAuthModal(true);
   };
 
+  const handleUpdateUsersList = (newUsers: UserProfile[]) => {
+    setUsersList(newUsers);
+    try { localStorage.setItem('oc_users_list', JSON.stringify(newUsers)); } catch (e) {}
+    saveSettingToCloud('user_accounts', newUsers);
+  };
+
   const handleLoginSuccess = (user: UserProfile) => {
     setCurrentUser(user);
     try {
@@ -474,6 +554,7 @@ export default function OnlineClassroomApp() {
               classes={classes}
               courses={visibleCourses}
               usersList={usersList}
+              onUpdateUsersList={handleUpdateUsersList}
               onUpdateBranches={handleUpdateBranches}
               onUpdateClasses={handleUpdateClasses}
               onUpdateCourses={handleUpdateCourses}
@@ -590,6 +671,8 @@ export default function OnlineClassroomApp() {
           branches={branches}
           classes={classes}
           courses={courses}
+          usersList={usersList}
+          onUpdateUsersList={handleUpdateUsersList}
           onUpdateBranches={handleUpdateBranches}
           onUpdateClasses={handleUpdateClasses}
           onUpdateCourses={handleUpdateCourses}

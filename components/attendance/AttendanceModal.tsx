@@ -85,6 +85,15 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
       : [];
   }, [courseItems, selectedCourse]);
 
+  // ⭐ 當切換課程時，若該課程有排定課節日期，自動將點名日期切換至最接近今日或第一節課
+  useEffect(() => {
+    if (currentCourseSessionDates.length > 0) {
+      const today = new Date().toISOString().split('T')[0];
+      const foundTodayOrNext = currentCourseSessionDates.find((d) => d >= today);
+      setDate(foundTodayOrNext || currentCourseSessionDates[0]);
+    }
+  }, [selectedCourse, currentCourseSessionDates]);
+
   // 當打開時重置選取狀態
   useEffect(() => {
     if (isOpen) {
@@ -314,44 +323,78 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
             </div>
           </div>
 
-          {/* 堂數快捷選擇 (若課程有排定日程) 與 全體出席按鈕 */}
-          <div className="flex items-center justify-between gap-2 pt-1 border-t border-gray-100">
-            {currentCourseSessionDates.length > 0 ? (
-              <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-x-auto pb-0.5">
-                <span className="text-[11px] text-gray-500 font-bold shrink-0">堂數：</span>
-                <div className="flex items-center gap-1">
-                  {currentCourseSessionDates.map((d, sIdx) => {
-                    const isCurrent = date === d;
-                    return (
-                      <button
-                        key={d}
-                        type="button"
-                        onClick={() => setDate(d)}
-                        className={`px-2 py-1 rounded-lg text-xs font-bold shrink-0 transition-all ${
-                          isCurrent
-                            ? 'bg-indigo-600 text-white shadow-xs'
-                            : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
-                        }`}
-                      >
-                        第 {sIdx + 1} 節
-                      </button>
-                    );
-                  })}
-                </div>
+          {/* ⭐ 需求：課程點名顯示每一節課日期 與 堂數快捷切換 */}
+          <div className="space-y-2 pt-1.5 border-t border-gray-100">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold text-gray-700 flex items-center gap-1 shrink-0">
+                  <Calendar size={13} className="text-indigo-600" />
+                  <span>課節日期：</span>
+                </span>
+                {currentCourseSessionDates.length > 0 ? (
+                  <select
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="bg-indigo-50 text-indigo-800 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-indigo-200 outline-none"
+                    title="選擇課節日期"
+                  >
+                    {currentCourseSessionDates.map((d, sIdx) => (
+                      <option key={d} value={d}>
+                        第 {sIdx + 1} 節 · {d}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="bg-gray-50 text-gray-700 font-bold text-xs px-2.5 py-1 rounded-lg border border-gray-200 outline-none"
+                  />
+                )}
+                {currentCourseSessionDates.length > 0 && (
+                  <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
+                    共 {currentCourseSessionDates.length} 節
+                  </span>
+                )}
               </div>
-            ) : (
-              <div className="text-[11px] text-gray-500 font-medium">
-                點名進度：即時連線
+
+              {/* 全體出席按鈕 */}
+              <button
+                onClick={handleMarkAllPresent}
+                disabled={students.length === 0}
+                className="text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl font-bold flex items-center gap-1 hover:bg-emerald-100 transition-colors disabled:opacity-50 shrink-0 ml-auto"
+              >
+                <CheckCircle2 size={13} /> 全體出席
+              </button>
+            </div>
+
+            {/* 每一節課日期的橫向快速切換按鈕列 (清晰顯示每一節課日期) */}
+            {currentCourseSessionDates.length > 0 && (
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
+                {currentCourseSessionDates.map((d, sIdx) => {
+                  const isCurrent = date === d;
+                  return (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setDate(d)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold shrink-0 transition-all flex items-center gap-1 border ${
+                        isCurrent
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                          : 'bg-white text-gray-700 border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/50'
+                      }`}
+                      title={`第 ${sIdx + 1} 節日期：${d}`}
+                    >
+                      <span>第 {sIdx + 1} 節</span>
+                      <span className={`text-[10px] font-mono ${isCurrent ? 'text-indigo-100 font-bold' : 'text-gray-500'}`}>
+                        ({d})
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             )}
-
-            <button
-              onClick={handleMarkAllPresent}
-              disabled={students.length === 0}
-              className="text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl font-bold flex items-center gap-1 hover:bg-emerald-100 transition-colors disabled:opacity-50 shrink-0 ml-auto"
-            >
-              <CheckCircle2 size={13} /> 全體出席
-            </button>
           </div>
         </div>
 

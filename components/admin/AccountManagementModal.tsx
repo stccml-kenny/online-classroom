@@ -39,6 +39,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
   const [activeTab, setActiveTab] = useState<'issue' | 'excel' | 'list'>('issue');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterRole, setFilterRole] = useState<string>('all');
+  const [filterBranch, setFilterBranch] = useState<string>('all');
 
   // 派發新帳戶單筆表單狀態
   const [role, setRole] = useState<UserRole>('student');
@@ -871,9 +872,21 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
     setActiveTab('list');
   };
 
+  // ⭐ 需求：帳戶名冊依學校/分校過濾
+  const allKnownBranches = React.useMemo(() => {
+    const list = allAccounts.map((u) => u.branch).filter(Boolean) as string[];
+    return Array.from(new Set([...branches, ...list]));
+  }, [branches, allAccounts]);
+
   // 篩選帳號清單
   const filteredAccounts = allAccounts.filter((u) => {
     if (filterRole !== 'all' && u.role !== filterRole) return false;
+    if (filterBranch !== 'all') {
+      const uBranch = (u.branch || '').trim();
+      if (!uBranch || (uBranch !== filterBranch && !uBranch.includes(filterBranch) && !filterBranch.includes(uBranch))) {
+        return false;
+      }
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       const matchName = u.name.toLowerCase().includes(q);
@@ -1461,7 +1474,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
             <div className="space-y-3">
               {/* 頂部操作：搜尋與匯出按鈕 */}
               <div className="space-y-2">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                   <div className="relative flex-1">
                     <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
                     <input
@@ -1472,11 +1485,25 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                       className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-xl text-xs outline-none focus:border-purple-600 placeholder:text-gray-400"
                     />
                   </div>
+
+                  {/* ⭐ 需求：帳戶名冊提供學校 filter */}
+                  <select
+                    value={filterBranch}
+                    onChange={(e) => setFilterBranch(e.target.value)}
+                    className="bg-purple-50 text-purple-700 font-bold text-xs px-2.5 py-2 rounded-xl border border-purple-200 outline-none shrink-0"
+                    title="依學校/分校過濾名冊"
+                  >
+                    <option value="all">全部分校 (全部學校)</option>
+                    {allKnownBranches.map((b) => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
+
                   {/* Excel 匯出按鈕 */}
                   <button
                     type="button"
                     onClick={handleExportAccountsCSV}
-                    className="flex items-center gap-1 text-xs text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-3 py-2 rounded-xl font-bold transition-colors shadow-2xs shrink-0"
+                    className="flex items-center gap-1 text-xs text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-3 py-2 rounded-xl font-bold transition-colors shadow-2xs shrink-0 justify-center"
                     title="匯出為 Excel/CSV 檔案"
                   >
                     <Download size={13} />

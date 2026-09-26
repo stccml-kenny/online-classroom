@@ -1,5 +1,7 @@
 ﻿import React, { useState } from 'react';
 import { UserProfile } from '@/components/auth/AuthModal';
+import { databases, DATABASE_ID } from '@/lib/appwrite';
+import { Query } from 'appwrite';
 import {
   X, Plus, Trash2, Settings, MapPin, GraduationCap, Layers, Edit2, Check, RotateCcw, BookmarkCheck,
   Clock, Calendar, CheckSquare, Square, ChevronDown, ChevronUp, AlertCircle, Sparkles, Filter,
@@ -247,6 +249,7 @@ interface HomeworkSetupModalProps {
   isReadOnly?: boolean;
   currentUser?: UserProfile | null;
   usersList?: UserProfile[]; // ⭐ 需求 7：用以計算各課程已參加學生人數
+  onUpdateUsersList?: (users: UserProfile[]) => void; // ⭐ 課程異動時同步帳戶名冊
 }
 
 export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
@@ -267,6 +270,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
   isReadOnly = false,
   currentUser = null,
   usersList = [],
+  onUpdateUsersList,
 }) => {
   // ⭐ 標準化課程項目清單 (置於 Hook 前以供計算各項指標)
   const normalizedCourses = React.useMemo(() => courses.map(normalizeCourse), [courses]);
@@ -756,20 +760,105 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
     handleCloseCourseForm();
   };
 
-  // 刪除課程
-  const handleDeleteCourse = (targetId: string, targetName: string) => {
-    if (!window.confirm(`確定要刪除課程「${targetName}」嗎？`)) return;
+  // 刪除課程 (⭐ 需求：為揀選該課程的會員剔除該課程，並於會員目錄、帳戶名冊及database同步)
+  const handleDeleteCourse = async (targetId: string, targetName: string) => {
+    if (!window.confirm(`確定要刪除課程「${targetName}」嗎？\n\n系統將自動為所有修讀此課程之學生剔除該課程，並同步更新會員名冊、帳戶名冊與雲端資料庫。`)) return;
+
+    const targetCourse = normalizedCourses.find((c) => c.id === targetId || c.name === targetName);
+    const targetCourseName = targetCourse ? targetCourse.name : targetName;
+    const targetTimeSlot = targetCourse?.timeSlot;
+    const targetBranch = targetCourse?.branch;
+
+    // 1. 從課程清單中移除
     const remaining = normalizedCourses.filter((c) => c.id !== targetId && c.name !== targetName);
     try {
       localStorage.setItem('oc_settings_courses', JSON.stringify(remaining));
     } catch (e) {}
     onUpdateCourses(remaining);
+
+    // 2. 帳戶名冊 (usersList) 剔除該課程並同步
+    if (usersList && usersList.length > 0 && onUpdateUsersList) {
+      const updatedUsers = usersList.map((u) => {
+        if (u.role === 'student' && u.enrolledCourses && u.enrolledCourses.length > 0) {
+          const newCourses = u.enrolledCourses.filter(
+            (ec) => !isCourseMatch(ec, targetCourseName, targetTimeSlot, targetBranch, u.branch)
+          );
+          if (newCourses.length !== u.enrolledCourses.length) {
+            return { ...u, enrolledCourses: newCourses };
+          }
+        }
+        return u;
+      });
+      onUpdateUsersList(updatedUsers);
+    }
+
+    // 3. 會員目錄 (oc_local_students) 剔除該課程並同步
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('oc_local_students');
+        if (raw) {
+          const list: any[] = JSON.parse(raw);
+          const updatedLocalStudents = list.filter((s) => {
+            return !isCourseMatch(s.course_name, targetCourseName, targetTimeSlot, targetBranch, s.branch);
+          });
+          localStorage.setItem('oc_local_students', JSON.stringify(updatedLocalStudents));
+        }
+      } catch (e) {}
+    }
+
+    // 4. Appwrite 雲端資料庫 students 表同步刪除
+    try {
+      const res = await databases.listDocuments(DATABASE_ID, 'students', [Query.limit(500)]);
+      const docsToDelete = (res.documents || []).filter((doc: any) =>
+        isCourseMatch(doc.course_name, targetCourseName, targetTimeSlot, targetBranch, doc.branch)
+      );
+      for (const d of docsToDelete) {
+        try {
+          await databases.deleteDocument(DATABASE_ID, 'students', d.$id);
+        } catch (de) {}
+      }
+    } catch (err: any) {
+      console.warn('雲端刪除修讀記錄略過或無權限:', err.message);
+    }
   };
 
-  // 一鍵清空全部課程
-  const handleClearAllCourses = () => {
-    if (!window.confirm('確定要清空全部已設定的課程嗎？此動作無法還原。')) return;
+  // 一鍵清空全部課程 (⭐ 需求：為所有會員剔除全部課程，並於會員目錄、帳戶名冊及database同步)
+  const handleClearAllCourses = async () => {
+    if (!window.confirm('確定要清空全部已設定的課程嗎？此動作將同時為所有會員剔除修讀課程，無法還原。')) return;
+    try {
+      localStorage.setItem('oc_settings_courses', JSON.stringify([]));
+    } catch (e) {}
     onUpdateCourses([]);
+
+    if (usersList && usersList.length > 0 && onUpdateUsersList) {
+      const updatedUsers = usersList.map((u) => {
+        if (u.role === 'student') {
+          return { ...u, enrolledCourses: [] };
+        }
+        return u;
+      });
+      onUpdateUsersList(updatedUsers);
+    }
+
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('oc_local_students');
+        if (raw) {
+          const list: any[] = JSON.parse(raw);
+          const cleared = list.map((s: any) => ({ ...s, course_name: '' }));
+          localStorage.setItem('oc_local_students', JSON.stringify(cleared));
+        }
+      } catch (e) {}
+    }
+
+    try {
+      const res = await databases.listDocuments(DATABASE_ID, 'students', [Query.limit(500)]);
+      for (const d of (res.documents || [])) {
+        try {
+          await databases.updateDocument(DATABASE_ID, 'students', d.$id, { course_name: '' });
+        } catch (de) {}
+      }
+    } catch (err: any) {}
   };
 
   // 課堂自動生成日期
