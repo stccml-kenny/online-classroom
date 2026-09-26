@@ -638,11 +638,8 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
       try {
         const text = (evt.target?.result as string) || '';
         const lines = text
-          .split(/
-?
-/)
-          .map((line) => line.replace('
-', '').trim())
+          .split(String.fromCharCode(10))
+          .map((line) => line.trim())
           .filter((line) => line.length > 0);
 
         if (lines.length === 0) {
