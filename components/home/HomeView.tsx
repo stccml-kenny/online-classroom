@@ -1,8 +1,8 @@
 ﻿import React from 'react';
 import {
-  GraduationCap, Users, User, Calendar, BookOpen, Clock,
+  GraduationCap, Users, User, BookOpen, Clock,
   Sparkles, CheckCircle2, ChevronRight, LogOut,
-  Shield, Layers, MapPin, Bell, UserPlus, KeyRound
+  Bell, UserPlus
 } from 'lucide-react';
 import { UserProfile, ROLE_CONFIGS } from '@/components/auth/AuthModal';
 import { TabType } from '@/components/layout/BottomNav';
@@ -38,7 +38,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   return (
     <div className="flex-1 overflow-y-auto bg-[#F8F9FA] pb-20">
       
-      {/* 1. HERO 橫幅區：登入介紹與平台簡介 */}
+      {/* 1. HERO 橫幅區：平台品牌與登入入口 */}
       <div className="bg-gradient-to-br from-[#FF6B57] via-[#FF8573] to-[#FF5138] text-white p-5 rounded-b-3xl shadow-md relative overflow-hidden">
         {/* 背景裝飾光暈 */}
         <div className="absolute -right-8 -top-8 w-36 h-36 bg-white/10 rounded-full blur-xl pointer-events-none"></div>
@@ -87,8 +87,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <p className="text-xs text-white/90">
                   {isStudentOrParent
                     ? `您目前的專屬課程：${currentUser.branch || '總校'} · ${currentUser.className || '班別'}`
-                    : `身分：${ROLE_CONFIGS[currentUser.role]?.label} · ${currentUser.branch || '總校'}`}
-                </p>
+                    : `身分：${ROLE_CONFIGS[currentUser.role]?.label} · ${currentUser.branch || '總校'}`}\n                </p>
               </>
             ) : (
               <>
@@ -96,13 +95,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   一站式多角色智能學習與教學平台
                 </p>
                 <p className="text-xs text-white/90 leading-relaxed">
-                  本系統帳戶由學校系統管理人員統一派發，支援導師、助教、學生與家長登入使用。
+                  支援導師、助教、學生與家長登入使用。
                 </p>
               </>
             )}
           </div>
 
-          {/* ⭐ 核心需求：首頁要有開始使用，之後要求登入帳戶 */}
+          {/* 開始使用按鈕 */}
           <div className="pt-1 space-y-2">
             {!currentUser ? (
               <button
@@ -143,192 +142,172 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </div>
       </div>
 
-      {/* 2. 帳戶派發與 5 大角色介紹說明卡片 */}
-      <div className="px-4 -mt-2">
-        <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-gray-150 space-y-2.5">
+      {/* ⭐ 登入前引導卡片（無多餘說明） */}
+      {!currentUser && (
+        <div className="p-5 sm:p-8 max-w-md mx-auto text-center space-y-4 pt-10">
+          <div className="w-16 h-16 rounded-3xl bg-orange-100 text-[#FF6B57] flex items-center justify-center mx-auto shadow-xs">
+            <BookOpen size={30} />
+          </div>
+          <div className="space-y-1.5">
+            <h3 className="text-base font-extrabold text-gray-800">歡迎進入智能網上教室</h3>
+            <p className="text-xs text-gray-500 leading-relaxed">
+              請登入您的帳戶，以存取您的專屬課程、單元教材及在線繳交功課。
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onOpenAuth}
+            className="w-full py-3.5 bg-gradient-to-r from-[#FF6B57] to-[#FF8573] hover:opacity-95 text-white font-extrabold rounded-2xl shadow-md text-sm transition-all active:scale-[0.99] flex items-center justify-center gap-2"
+          >
+            <User size={16} />
+            <span>立即登入帳戶</span>
+          </button>
+        </div>
+      )}
+
+      {/* ⭐ 核心教學功能：嚴格要求「登入前不要顯示 平台核心教學功能」，僅在已登入時呈現 */}
+      {currentUser && (
+        <div className="p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-gray-800 flex items-center gap-1">
-              <Shield size={14} className="text-[#FF6B57]" />
-              <span>系統帳戶統一派發說明</span>
-            </span>
-            {!currentUser && (
-              <button
-                type="button"
-                onClick={onOpenAuth}
-                className="text-[11px] text-[#FF6B57] font-bold hover:underline"
-              >
-                前往登入 →
-              </button>
+            <h2 className="text-xs font-extrabold text-gray-800">平台核心教學功能</h2>
+            <span className="text-[11px] text-gray-400">專屬工作區</span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            {/* 我的課程 / 課程目錄 */}
+            <button
+              type="button"
+              onClick={() => onNavigateTab('courses')}
+              className="p-3.5 bg-white border border-gray-150 rounded-2xl text-left shadow-xs hover:border-[#FF6B57] hover:shadow-sm transition-all group flex flex-col justify-between h-24"
+            >
+              <div className="flex justify-between items-start">
+                <div className="w-8 h-8 rounded-xl bg-orange-100 text-[#FF6B57] flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <BookOpen size={18} />
+                </div>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 font-bold">
+                  {isStudentOrParent ? '我的課程' : courseCount > 0 ? `${courseCount} 堂課` : '查看'}
+                </span>
+              </div>
+              <div>
+                <div className="text-xs font-bold text-gray-800 group-hover:text-[#FF6B57]">
+                  {isStudentOrParent ? '我的課程與單元' : '課程目錄管理'}
+                </div>
+                <div className="text-[10px] text-gray-400">
+                  {isStudentOrParent ? '單元教材與單元家課(唯讀)' : '單元教材與家課發布'}
+                </div>
+              </div>
+            </button>
+
+            {/* 電子通告 */}
+            <button
+              type="button"
+              onClick={onOpenNotices}
+              className="p-3.5 bg-white border border-gray-150 rounded-2xl text-left shadow-xs hover:border-[#FF6B57] hover:shadow-sm transition-all group flex flex-col justify-between h-24"
+            >
+              <div className="flex justify-between items-start">
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <Bell size={18} />
+                </div>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 font-bold">
+                  {noticeCount > 0 ? `${noticeCount} 則` : '最新'}
+                </span>
+              </div>
+              <div>
+                <div className="text-xs font-bold text-gray-800 group-hover:text-emerald-600">電子通告</div>
+                <div className="text-[10px] text-gray-400">校務訊息與活動公告</div>
+              </div>
+            </button>
+
+            {/* 若非學生/家長，顯示課程點名與會員目錄 */}
+            {!isStudentOrParent && (
+              <>
+                {/* 課程點名 */}
+                <button
+                  type="button"
+                  onClick={() => onNavigateTab('attendance')}
+                  className="p-3.5 bg-white border border-gray-150 rounded-2xl text-left shadow-xs hover:border-[#FF6B57] hover:shadow-sm transition-all group flex flex-col justify-between h-24"
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                      <Clock size={18} />
+                    </div>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-50 text-purple-600 font-bold">
+                      考勤
+                    </span>
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-gray-800 group-hover:text-purple-600">課程點名</div>
+                    <div className="text-[10px] text-gray-400">未點名/出席/請假記錄</div>
+                  </div>
+                </button>
+
+                {/* 會員名冊 */}
+                <button
+                  type="button"
+                  onClick={() => onNavigateTab('members')}
+                  className="p-3.5 bg-white border border-gray-150 rounded-2xl text-left shadow-xs hover:border-[#FF6B57] hover:shadow-sm transition-all group flex flex-col justify-between h-24"
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                      <Users size={18} />
+                    </div>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 font-bold">
+                      名冊
+                    </span>
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-gray-800 group-hover:text-blue-600">會員名冊</div>
+                    <div className="text-[10px] text-gray-400">學生資料與班級管理</div>
+                  </div>
+                </button>
+              </>
+            )}
+
+            {/* 若為學生/家長，顯示在線交功課與學習進度 */}
+            {isStudentOrParent && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onNavigateTab('courses')}
+                  className="p-3.5 bg-white border border-gray-150 rounded-2xl text-left shadow-xs hover:border-[#FF6B57] hover:shadow-sm transition-all group flex flex-col justify-between h-24"
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center group-hover:scale-105 transition-transform">
+                      <CheckCircle2 size={18} />
+                    </div>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 font-bold">
+                      提交
+                    </span>
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-gray-800 group-hover:text-amber-700">在線交功課</div>
+                    <div className="text-[10px] text-gray-400">拍照上傳作業與筆記</div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onNavigateTab('more')}
+                  className="p-3.5 bg-white border border-gray-150 rounded-2xl text-left shadow-xs hover:border-[#FF6B57] hover:shadow-sm transition-all group flex flex-col justify-between h-24"
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                      <User size={18} />
+                    </div>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-600 font-bold">
+                      資訊
+                    </span>
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-gray-800 group-hover:text-rose-600">個人與帳號</div>
+                    <div className="text-[10px] text-gray-400">學籍資訊與密碼管理</div>
+                  </div>
+                </button>
+              </>
             )}
           </div>
-          <p className="text-[11px] text-gray-500 leading-relaxed bg-gray-50 p-2.5 rounded-xl border border-gray-150">
-            💡 本平台<span className="font-bold text-gray-700">不設公開自行登記</span>，所有學生、家長、導師及助教帳戶均由校方【系統管理人員】統一建立與派發，並採用 <span className="font-bold text-[#FF6B57]">8 位數字安全密碼</span> 進行登入。
-          </p>
 
-          <div className="grid grid-cols-5 gap-1 text-center pt-1">
-            {Object.entries(ROLE_CONFIGS).map(([k, cfg]) => {
-              const isCurrent = currentUser?.role === k;
-              return (
-                <div
-                  key={k}
-                  className={`p-1.5 rounded-xl border flex flex-col items-center gap-0.5 transition-all ${
-                    isCurrent
-                      ? 'border-[#FF6B57] bg-orange-50 text-[#FF6B57] font-bold shadow-xs'
-                      : 'border-gray-100 bg-gray-50/50 text-gray-600 font-medium'
-                  }`}
-                >
-                  <span className="text-base">{cfg.emoji}</span>
-                  <span className="text-[10px] leading-tight truncate w-full">{cfg.label}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* 3. 核心功能介紹與快捷入口 */}
-      <div className="p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xs font-extrabold text-gray-800">平台核心教學功能</h2>
-          <span className="text-[11px] text-gray-400">登入後即可體驗</span>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          {/* 我的課程 / 課程目錄 */}
-          <button
-            type="button"
-            onClick={() => onNavigateTab('courses')}
-            className="p-3.5 bg-white border border-gray-150 rounded-2xl text-left shadow-xs hover:border-[#FF6B57] hover:shadow-sm transition-all group flex flex-col justify-between h-24"
-          >
-            <div className="flex justify-between items-start">
-              <div className="w-8 h-8 rounded-xl bg-orange-100 text-[#FF6B57] flex items-center justify-center group-hover:scale-105 transition-transform">
-                <BookOpen size={18} />
-              </div>
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 font-bold">
-                {isStudentOrParent ? '我的課程' : courseCount > 0 ? `${courseCount} 堂課` : '查看'}
-              </span>
-            </div>
-            <div>
-              <div className="text-xs font-bold text-gray-800 group-hover:text-[#FF6B57]">
-                {isStudentOrParent ? '我的課程與單元' : '課程目錄管理'}
-              </div>
-              <div className="text-[10px] text-gray-400">
-                {isStudentOrParent ? '單元教材與單元家課(唯讀)' : '單元教材與家課發布'}
-              </div>
-            </div>
-          </button>
-
-          {/* 電子通告 */}
-          <button
-            type="button"
-            onClick={onOpenNotices}
-            className="p-3.5 bg-white border border-gray-150 rounded-2xl text-left shadow-xs hover:border-[#FF6B57] hover:shadow-sm transition-all group flex flex-col justify-between h-24"
-          >
-            <div className="flex justify-between items-start">
-              <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-                <Bell size={18} />
-              </div>
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 font-bold">
-                {noticeCount > 0 ? `${noticeCount} 則` : '最新'}
-              </span>
-            </div>
-            <div>
-              <div className="text-xs font-bold text-gray-800 group-hover:text-emerald-600">電子通告</div>
-              <div className="text-[10px] text-gray-400">校務訊息與活動公告</div>
-            </div>
-          </button>
-
-          {/* 若非學生/家長，顯示課程點名與會員目錄 */}
-          {!isStudentOrParent && (
-            <>
-              {/* 課程點名 */}
-              <button
-                type="button"
-                onClick={() => onNavigateTab('attendance')}
-                className="p-3.5 bg-white border border-gray-150 rounded-2xl text-left shadow-xs hover:border-[#FF6B57] hover:shadow-sm transition-all group flex flex-col justify-between h-24"
-              >
-                <div className="flex justify-between items-start">
-                  <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-                    <Clock size={18} />
-                  </div>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-50 text-purple-600 font-bold">
-                    考勤
-                  </span>
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-gray-800 group-hover:text-purple-600">課程點名</div>
-                  <div className="text-[10px] text-gray-400">未點名/出席/請假記錄</div>
-                </div>
-              </button>
-
-              {/* 會員名冊 */}
-              <button
-                type="button"
-                onClick={() => onNavigateTab('members')}
-                className="p-3.5 bg-white border border-gray-150 rounded-2xl text-left shadow-xs hover:border-[#FF6B57] hover:shadow-sm transition-all group flex flex-col justify-between h-24"
-              >
-                <div className="flex justify-between items-start">
-                  <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-                    <Users size={18} />
-                  </div>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 font-bold">
-                    名冊
-                  </span>
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-gray-800 group-hover:text-blue-600">會員名冊</div>
-                  <div className="text-[10px] text-gray-400">學生資料與班級管理</div>
-                </div>
-              </button>
-            </>
-          )}
-
-          {/* 若為學生/家長，顯示在線交功課與學習進度 */}
-          {isStudentOrParent && (
-            <>
-              <button
-                type="button"
-                onClick={() => onNavigateTab('courses')}
-                className="p-3.5 bg-white border border-gray-150 rounded-2xl text-left shadow-xs hover:border-[#FF6B57] hover:shadow-sm transition-all group flex flex-col justify-between h-24"
-              >
-                <div className="flex justify-between items-start">
-                  <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center group-hover:scale-105 transition-transform">
-                    <CheckCircle2 size={18} />
-                  </div>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 font-bold">
-                    提交
-                  </span>
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-gray-800 group-hover:text-amber-700">在線交功課</div>
-                  <div className="text-[10px] text-gray-400">拍照上傳作業與筆記</div>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => onNavigateTab('more')}
-                className="p-3.5 bg-white border border-gray-150 rounded-2xl text-left shadow-xs hover:border-[#FF6B57] hover:shadow-sm transition-all group flex flex-col justify-between h-24"
-              >
-                <div className="flex justify-between items-start">
-                  <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-                    <User size={18} />
-                  </div>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-600 font-bold">
-                    資訊
-                  </span>
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-gray-800 group-hover:text-rose-600">個人與帳號</div>
-                  <div className="text-[10px] text-gray-400">學籍資訊與密碼管理</div>
-                </div>
-              </button>
-            </>
-          )}
-        </div>
-
-        {/* 4. 登入用戶專屬卡片與登出控制 */}
-        {currentUser && (
+          {/* 4. 登入用戶專屬卡片與登出控制 */}
           <div className="p-4 bg-white border border-gray-150 rounded-2xl shadow-xs space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-gray-700">目前登入身分</span>
@@ -371,9 +350,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
               </button>
             </div>
           </div>
-        )}
 
-      </div>
+        </div>
+      )}
+
     </div>
   );
 };

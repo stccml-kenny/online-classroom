@@ -252,7 +252,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                 <Sparkles size={16} className="text-purple-600 shrink-0 mt-0.5" />
                 <div>
                   <span className="font-bold">統一派發說明：</span>
-                  此 App 不設公開自行登記，所有學生、家長、導師及助教帳戶均由管理員在此建立並指派 8 位數字密碼。
+                  管理員可在本中心為學生、家長、導師及助教建立帳戶並指派 8 位數字密碼。
                 </div>
               </div>
 

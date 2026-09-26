@@ -1,7 +1,7 @@
 ﻿import React, { useState } from 'react';
 import {
   X, User, Lock, Eye, EyeOff, CheckCircle2, AlertCircle,
-  Sparkles, LogOut, Check, Shield
+  Sparkles, LogOut
 } from 'lucide-react';
 
 export type UserRole = 'admin' | 'teacher' | 'assistant' | 'student' | 'parent';
@@ -69,7 +69,7 @@ export const ROLE_CONFIGS: Record<UserRole, {
   }
 };
 
-// 預設 5 大角色示範帳號（密碼均為嚴格 8 位數字）
+// 預設 5 大角色系統底層帳號（密碼均為嚴格 8 位數字，供登入驗證，UI上不作展示）
 export const DEFAULT_DEMO_USERS: UserProfile[] = [
   {
     id: 'demo_admin',
@@ -173,13 +173,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    // ⭐ 需求：密碼必需為要8位數字
+    // ⭐ 需求：密碼必需為8位數字
     if (!is8DigitNumeric(pwd)) {
       alert('⚠️ 密碼必需為嚴格 8 位純數字（例如：12345678）！');
       return;
     }
 
-    // 合併全域已註冊與示範帳號進行查找
+    // 合併全域已註冊與底層帳號進行查找
     const allUsers = [...usersList, ...DEFAULT_DEMO_USERS];
     const found = allUsers.find(
       (u) => u.username.toLowerCase() === uname.toLowerCase() && u.password === pwd
@@ -189,102 +189,97 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       onLoginSuccess(found);
       onClose();
     } else {
-      alert('❌ 登入失敗：帳號不存在或密碼錯誤！\n（請確認帳號是由系統管理員統一派發，且密碼為正確的 8 位純數字）');
+      alert('❌ 登入失敗：帳號不存在或密碼錯誤！\n（請輸入正確的帳號及 8 位純數字密碼）');
     }
   };
 
-  // 快速示範帳號一鍵填入
-  const handleQuickFillDemo = (demo: UserProfile) => {
-    setLoginUsername(demo.username);
-    setLoginPassword(demo.password);
-  };
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-      <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] border border-gray-100 animate-in fade-in duration-200">
-        
-        {/* 彈窗標題列 */}
-        <div className="bg-gradient-to-r from-[#FF6B57] to-[#FF8573] p-4 text-white flex justify-between items-center shrink-0 shadow-sm">
+    <div className="fixed inset-0 z-50 bg-[#F8F9FA] flex flex-col w-full h-full overflow-hidden animate-in fade-in duration-200">
+      
+      {/* 頂部全寬標題列 */}
+      <div className="bg-gradient-to-r from-[#FF6B57] to-[#FF8573] p-4 text-white flex justify-between items-center shrink-0 shadow-sm">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-2xl bg-white/20 flex items-center justify-center shadow-inner">
+            <Sparkles size={20} className="text-white" />
+          </div>
+          <div>
+            <h2 className="font-black text-base sm:text-lg leading-tight">Online Classroom 帳戶登入</h2>
+            <p className="text-xs text-white/90">請輸入派發之帳號及 8 位純數字密碼</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors text-white"
+          title="關閉"
+        >
+          <X size={20} />
+        </button>
+      </div>
+
+      {/* 登入狀態卡片（若已登入） */}
+      {currentUser && (
+        <div className="p-3 bg-amber-50 border-b border-amber-200 flex items-center justify-between text-xs px-4 sm:px-6">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
-              <Sparkles size={18} className="text-white" />
-            </div>
+            <span className="text-base">{ROLE_CONFIGS[currentUser.role]?.emoji || '👤'}</span>
             <div>
-              <h2 className="font-extrabold text-base leading-tight">Online Classroom 帳戶登入</h2>
-              <p className="text-[11px] text-white/90">帳戶統一由系統管理人員派發 · 8位純數字密碼</p>
+              <span className="font-bold text-gray-800">{currentUser.name}</span>
+              <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-200 text-amber-900">
+                {ROLE_CONFIGS[currentUser.role]?.label}
+              </span>
+              <div className="text-[10px] text-gray-500">帳號: {currentUser.username}</div>
             </div>
           </div>
           <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-black/10 hover:bg-black/20 flex items-center justify-center transition-colors"
+            type="button"
+            onClick={() => {
+              if (window.confirm('確定要登出目前帳戶嗎？')) {
+                onLogout();
+              }
+            }}
+            className="px-2.5 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-lg flex items-center gap-1 text-[11px] transition-colors"
           >
-            <X size={18} />
+            <LogOut size={13} />
+            <span>登出</span>
           </button>
         </div>
+      )}
 
-        {/* 登入狀態卡片（若已登入） */}
-        {currentUser && (
-          <div className="p-3 bg-amber-50/80 border-b border-amber-200 flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2">
-              <span className="text-base">{ROLE_CONFIGS[currentUser.role]?.emoji || '👤'}</span>
-              <div>
-                <span className="font-bold text-gray-800">{currentUser.name}</span>
-                <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-200 text-amber-900">
-                  {ROLE_CONFIGS[currentUser.role]?.label}
-                </span>
-                <div className="text-[10px] text-gray-500">帳號: {currentUser.username}</div>
-              </div>
+      {/* ⭐ 滿板登入核心內容區（滿板顯示，無多餘說明與無示範帳號） */}
+      <div className="flex-1 overflow-y-auto flex flex-col justify-center items-center p-4 sm:p-6 w-full">
+        <div className="w-full max-w-md bg-white rounded-3xl shadow-sm border border-gray-200 p-6 sm:p-8 space-y-6">
+          <div className="text-center space-y-1">
+            <div className="w-14 h-14 bg-orange-50 text-[#FF6B57] rounded-3xl mx-auto flex items-center justify-center shadow-xs">
+              <Lock size={28} />
             </div>
-            <button
-              onClick={() => {
-                if (window.confirm('確定要登出目前帳戶嗎？')) {
-                  onLogout();
-                }
-              }}
-              className="px-2.5 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-lg flex items-center gap-1 text-[11px] transition-colors"
-            >
-              <LogOut size={13} />
-              <span>登出</span>
-            </button>
-          </div>
-        )}
-
-        {/* 內容滑動區 */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          
-          {/* ⭐ 需求：此app不設自行登記賬戶，所以賬戶統一於系統管理人員派發 */}
-          <div className="bg-orange-50/70 p-3 rounded-2xl border border-orange-200 text-xs text-orange-950 flex items-start gap-2">
-            <Shield size={16} className="text-[#FF6B57] shrink-0 mt-0.5" />
-            <div>
-              <span className="font-bold text-gray-900">登入提示：</span>
-              本系統不設公開自行登記，所有學生、家長、導師及助教帳戶均由校方<span className="font-bold text-[#FF6B57]">系統管理人員統一派發</span>。請輸入管理員派發的帳號及 8 位數字密碼登入。
-            </div>
+            <h3 className="text-lg font-black text-gray-900 pt-2">歡迎使用智能網上教室</h3>
+            <p className="text-xs text-gray-400">請輸入您的帳號與 8 位純數字密碼進行登入</p>
           </div>
 
-          <form onSubmit={handleLoginSubmit} className="space-y-3.5">
+          <form onSubmit={handleLoginSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">派發之登入帳號 (Username)</label>
+              <label className="block text-xs font-bold text-gray-700 mb-1.5">登入帳號 (Username)</label>
               <div className="relative">
-                <User size={16} className="absolute left-3 top-3 text-gray-400" />
+                <User size={18} className="absolute left-3.5 top-3.5 text-gray-400" />
                 <input
                   type="text"
                   value={loginUsername}
                   onChange={(e) => setLoginUsername(e.target.value)}
-                  placeholder="請輸入帳號 (例：admin 或 student_lok)"
-                  className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#FF6B57] text-black font-semibold placeholder:text-gray-400"
+                  placeholder="請輸入帳號"
+                  className="w-full pl-10 pr-3.5 py-3 border border-gray-200 rounded-2xl text-sm outline-none focus:border-[#FF6B57] text-black font-semibold placeholder:text-gray-400 transition-colors"
                 />
               </div>
             </div>
 
             <div>
-              <div className="flex justify-between items-center mb-1">
-                <label className="text-xs font-bold text-gray-700">8位數字密碼 (Password)</label>
-                <span className="text-[10px] text-gray-400 font-mono">
-                  {loginPassword.length}/8 位純數字
+              <div className="flex justify-between items-center mb-1.5">
+                <label className="text-xs font-bold text-gray-700">8位純數字密碼 (Password)</label>
+                <span className="text-xs text-gray-400 font-mono">
+                  {loginPassword.length}/8 位
                 </span>
               </div>
               <div className="relative">
-                <Lock size={16} className="absolute left-3 top-3 text-gray-400" />
+                <Lock size={18} className="absolute left-3.5 top-3.5 text-gray-400" />
                 <input
                   type={showLoginPassword ? 'text' : 'password'}
                   inputMode="numeric"
@@ -296,25 +291,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     setLoginPassword(val);
                   }}
                   placeholder="請輸入8位純數字密碼"
-                  className="w-full pl-9 pr-10 py-2.5 border border-gray-200 rounded-xl text-xs outline-none focus:border-[#FF6B57] text-black font-bold tracking-widest placeholder:tracking-normal placeholder:text-gray-400 font-mono"
+                  className="w-full pl-10 pr-11 py-3 border border-gray-200 rounded-2xl text-sm outline-none focus:border-[#FF6B57] text-black font-bold tracking-widest placeholder:tracking-normal placeholder:text-gray-400 font-mono transition-colors"
                 />
                 <button
                   type="button"
                   onClick={() => setShowLoginPassword(!showLoginPassword)}
-                  className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3.5 top-3.5 text-gray-400 hover:text-gray-600"
                 >
-                  {showLoginPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  {showLoginPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
               {loginPassword.length > 0 && (
-                <div className="mt-1 flex items-center gap-1 text-[10px]">
+                <div className="mt-1.5 flex items-center gap-1 text-xs">
                   {loginPassword.length === 8 ? (
-                    <span className="text-emerald-600 flex items-center gap-0.5 font-bold">
-                      <CheckCircle2 size={12} /> 符合8位純數字規定
+                    <span className="text-emerald-600 flex items-center gap-1 font-bold">
+                      <CheckCircle2 size={13} /> 符合 8 位純數字格式
                     </span>
                   ) : (
-                    <span className="text-amber-600 flex items-center gap-0.5 font-medium">
-                      <AlertCircle size={12} /> 必需輸入滿 8 位純數字 (還缺 {8 - loginPassword.length} 位)
+                    <span className="text-amber-600 flex items-center gap-1 font-medium">
+                      <AlertCircle size={13} /> 需輸入滿 8 位純數字（還缺 {8 - loginPassword.length} 位）
                     </span>
                   )}
                 </div>
@@ -323,52 +318,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
             <button
               type="submit"
-              className="w-full py-3 bg-gradient-to-r from-[#FF6B57] to-[#FF8573] hover:opacity-95 text-white font-extrabold rounded-xl shadow-md text-xs flex items-center justify-center gap-2 transition-all active:scale-[0.99]"
+              className="w-full py-3.5 bg-gradient-to-r from-[#FF6B57] to-[#FF8573] hover:opacity-95 text-white font-black rounded-2xl shadow-md text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.99] mt-2"
             >
-              <Sparkles size={15} />
+              <Sparkles size={16} />
               <span>確認登入帳戶</span>
             </button>
           </form>
-
-          {/* 快速示範帳號點選 (方便測試 5 大角色) */}
-          <div className="pt-2 border-t border-gray-150">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-bold text-gray-500">⚡ 5大身分示範帳號（點擊直接填入）：</span>
-              <span className="text-[10px] text-gray-400">8位預設密碼</span>
-            </div>
-            <div className="grid grid-cols-2 gap-1.5">
-              {DEFAULT_DEMO_USERS.map((demo) => {
-                const cfg = ROLE_CONFIGS[demo.role];
-                return (
-                  <button
-                    key={demo.id}
-                    type="button"
-                    onClick={() => handleQuickFillDemo(demo)}
-                    className="text-left p-2 rounded-xl border border-gray-200 hover:border-[#FF6B57] hover:bg-orange-50/40 transition-all flex items-center gap-2 group"
-                  >
-                    <span className="text-lg">{cfg.emoji}</span>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[11px] font-bold text-gray-800 truncate group-hover:text-[#FF6B57]">
-                        {cfg.label}
-                      </div>
-                      <div className="text-[10px] text-gray-400 font-mono truncate">
-                        {demo.username} / {demo.password}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
         </div>
 
-        {/* 底部資訊 */}
-        <div className="p-3 bg-gray-50 border-t border-gray-150 text-center shrink-0">
-          <p className="text-[10px] text-gray-400">
-            若遺失帳號或需重設密碼，請聯絡學校系統管理人員 · 密碼格式為 8 位純數字
-          </p>
-        </div>
+        {/* 底部微版權說明 */}
+        <p className="text-xs text-gray-400 text-center mt-6">
+          Online Classroom 智能網上教室 · 密碼格式為 8 位純數字
+        </p>
       </div>
     </div>
   );

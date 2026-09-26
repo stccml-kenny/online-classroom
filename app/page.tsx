@@ -465,7 +465,7 @@ export default function OnlineClassroomApp() {
 
         {activeTab === 'msg' && <div className="p-5 text-center text-gray-400">即時訊息模組開發中</div>}
 
-        <BottomNav activeTab={activeTab} onTabChange={setActiveTab} userRole={currentUser?.role} />
+        {currentUser && <BottomNav activeTab={activeTab} onTabChange={setActiveTab} userRole={currentUser?.role} />}
 
         {/* 1. 電子通告彈窗 */}
         <NoticeModal
