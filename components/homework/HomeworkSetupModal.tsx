@@ -27,6 +27,27 @@ export interface CourseItem {
   status: CourseStatus;     // 課程狀態
 }
 
+// ⭐ 需求 2：學校/分校名稱與代號解析輔助函數
+export interface BranchInfo {
+  name: string;
+  code: string;
+  full: string;
+}
+
+export const parseBranchInfo = (b: string): BranchInfo => {
+  if (!b) return { name: '', code: '', full: '' };
+  const trimmed = b.trim();
+  const match = trimmed.match(/^(.+?)\s*[\(（]([A-Za-z0-9_-]+)[\)）]$/);
+  if (match) {
+    return { name: match[1].trim(), code: match[2].trim().toUpperCase(), full: trimmed };
+  }
+  const prefixMatch = trimmed.match(/^([A-Za-z0-9_-]+)\s*[-_:]\s*(.+)$/);
+  if (prefixMatch) {
+    return { name: prefixMatch[2].trim(), code: prefixMatch[1].trim().toUpperCase(), full: trimmed };
+  }
+  return { name: trimmed, code: '', full: trimmed };
+};
+
 
 
 // 輔助函式：標準化課程項目
@@ -287,8 +308,10 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
     setLocalClasses(updated);
   };
 
-  // 學校/分校、班別、功課範本一般輸入狀態
+  // 學校/分校、班別、功課範本一般輸入狀態 (加入學校代號)
   const [newBranch, setNewBranch] = useState('');
+  const [newBranchCode, setNewBranchCode] = useState('');
+  const [editBranchCode, setEditBranchCode] = useState('');
   const [newClass, setNewClass] = useState('');
   
   
@@ -355,6 +378,8 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
     setEditValue('');
     setEditDescValue('');
     setNewBranch('');
+    setNewBranchCode('');
+    setEditBranchCode('');
     setNewClass('');
     setLocalBranches(branches);
     setLocalClasses(classes);
@@ -617,34 +642,44 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
     );
   };
 
-  // --- 2. 學校 / 分校 (Branches) 操作 ---
+  // --- 2. 學校 / 分校 (Branches) 操作 (支援名稱與代號) ---
   const handleAddBranch = (e: React.FormEvent) => {
     e.preventDefault();
     const val = newBranch.trim();
-    if (!val) return;
-    if (localBranches.includes(val)) {
-      alert('該學校/分校名稱已存在！');
+    if (!val) {
+      alert('請填寫學校/分校名稱！');
       return;
     }
-    setLocalBranches((prev) => [...prev, val]);
+    const code = newBranchCode.trim().toUpperCase();
+    const formatted = code ? `${val} (${code})` : val;
+    if (localBranches.includes(formatted)) {
+      alert('該學校/分校名稱或代號已存在！');
+      return;
+    }
+    setLocalBranches((prev) => [...prev, formatted]);
     setNewBranch('');
+    setNewBranchCode('');
   };
 
   const handleStartEditBranch = (b: string) => {
+    const info = parseBranchInfo(b);
     setEditingItem({ type: 'branch', id: b });
-    setEditValue(b);
+    setEditValue(info.name);
+    setEditBranchCode(info.code);
   };
 
   const handleSaveEditBranch = (oldBranch: string) => {
     const val = editValue.trim();
     if (!val) return;
-    if (val !== oldBranch) {
-      if (localBranches.includes(val)) {
-        alert('已存在相同名稱的學校/分校！');
+    const code = editBranchCode.trim().toUpperCase();
+    const formatted = code ? `${val} (${code})` : val;
+    if (formatted !== oldBranch) {
+      if (localBranches.includes(formatted)) {
+        alert('已存在相同名稱或代號的學校/分校！');
         return;
       }
-      setLocalBranches((prev) => prev.map((b) => (b === oldBranch ? val : b)));
-      if (onRenameBranch) onRenameBranch?.(oldBranch, val);
+      setLocalBranches((prev) => prev.map((b) => (b === oldBranch ? formatted : b)));
+      if (onRenameBranch) onRenameBranch?.(oldBranch, formatted);
     }
     setEditingItem(null);
   };
@@ -1388,25 +1423,34 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
             </div>
           )}
 
-          {/* TAB 2: 學校 / 分校設定 (Branches) */}
+          {/* TAB 2: 學校 / 分校設定 (Branches，支援學校代號) */}
           {activeTab === 'branches' && (
             <div className="space-y-3">
-              <form onSubmit={handleAddBranch} className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="新學校/分校名稱 (例：總校、沙田分校)"
-                  value={newBranch}
-                  onChange={(e) => setNewBranch(e.target.value)}
-                  className={`flex-1 p-2 border border-gray-200 rounded-lg text-xs outline-none focus:border-purple-600 placeholder:text-gray-400 ${
-                    newBranch.trim() ? 'text-black font-semibold' : 'text-gray-500'
-                  }`}
-                />
-                <button
-                  type="submit"
-                  className="bg-purple-600 text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-purple-700 transition-colors"
-                >
-                  <Plus size={14} /> 新增
-                </button>
+              <form onSubmit={handleAddBranch} className="space-y-2">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="學校/分校名稱 (例：沙田分校)"
+                    value={newBranch}
+                    onChange={(e) => setNewBranch(e.target.value)}
+                    className={`flex-1 p-2 border border-gray-200 rounded-lg text-xs outline-none focus:border-purple-600 placeholder:text-gray-400 ${
+                      newBranch.trim() ? 'text-black font-semibold' : 'text-gray-500'
+                    }`}
+                  />
+                  <input
+                    type="text"
+                    placeholder="學校代號 (例：ST)"
+                    value={newBranchCode}
+                    onChange={(e) => setNewBranchCode(e.target.value.toUpperCase())}
+                    className="w-32 p-2 border border-purple-200 bg-purple-50/50 rounded-lg text-xs outline-none focus:border-purple-600 text-purple-900 font-bold uppercase font-mono placeholder:text-gray-400"
+                  />
+                  <button
+                    type="submit"
+                    className="bg-purple-600 text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-purple-700 transition-colors shrink-0 shadow-xs"
+                  >
+                    <Plus size={14} /> 新增
+                  </button>
+                </div>
               </form>
 
               <div className="space-y-1.5 pt-1">
@@ -1434,6 +1478,8 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                   const isDragOver = dragOverBranchIndex === idx;
 
                   return (
+                    const info = parseBranchInfo(b);
+                    return (
                     <div
                       key={b}
                       draggable={!isEditing}
@@ -1453,8 +1499,16 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                             type="text"
                             value={editValue}
                             onChange={(e) => setEditValue(e.target.value)}
+                            placeholder="學校名稱"
                             className="flex-1 p-1 bg-white border border-purple-500 rounded text-xs outline-none text-black font-semibold"
                             autoFocus
+                          />
+                          <input
+                            type="text"
+                            value={editBranchCode}
+                            onChange={(e) => setEditBranchCode(e.target.value.toUpperCase())}
+                            placeholder="代號 (例: ST)"
+                            className="w-24 p-1 bg-white border border-purple-500 rounded text-xs outline-none text-purple-900 font-bold font-mono uppercase"
                           />
                           <button
                             onClick={() => handleSaveEditBranch(b)}
@@ -1508,7 +1562,12 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                               #{idx + 1}
                             </span>
                             <MapPin size={14} className="text-purple-600 shrink-0" />
-                            <span className="truncate">{b}</span>
+                            <span className="truncate">{info.name}</span>
+                            {info.code && (
+                              <span className="px-1.5 py-0.5 rounded font-mono font-bold text-[10px] bg-purple-100 text-purple-700 shrink-0 border border-purple-200">
+                                代號: {info.code}
+                              </span>
+                            )}
                           </div>
 
                           <div className="flex items-center gap-1 shrink-0">

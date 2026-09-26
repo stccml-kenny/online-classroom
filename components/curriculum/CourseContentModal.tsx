@@ -717,8 +717,8 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
   });
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-30 flex items-end justify-center">
-      <div className="bg-[#F8F9FA] w-full max-w-md rounded-t-2xl max-h-[92vh] flex flex-col shadow-2xl relative">
+    <div className="fixed inset-0 bg-[#F8F9FA] z-40 flex flex-col w-full h-full overflow-hidden animate-in fade-in duration-200">
+      <div className="w-full flex-1 flex flex-col overflow-hidden max-w-3xl mx-auto bg-white shadow-sm relative">
         {/* 頂部導航列 (⭐ 需求 3：已移除設定齒輪，純粹專注課程單元與進度) */}
         <div className="bg-white px-5 py-3.5 rounded-t-2xl border-b border-gray-100 flex justify-between items-center">
           <div className="flex items-center gap-2.5">

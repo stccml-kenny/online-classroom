@@ -16,6 +16,7 @@ export interface UserProfile {
   branch?: string;
   className?: string;
   childName?: string;
+  childrenUsernames?: string[]; // ⭐ 需求 4：家長帳戶可關聯多於一個學生之登入帳號
   createdAt: string;
 }
 

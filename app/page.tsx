@@ -54,28 +54,50 @@ export default function OnlineClassroomApp() {
 
   const isStudentOrParent = currentUser?.role === 'student' || currentUser?.role === 'parent';
 
-  // ⭐ 需求：家長及學生賬戶只可顯示自己的課程 (根據所屬分校與班別過濾)
+  // ⭐ 需求：家長及學生賬戶只可顯示自己的課程 (學生依所屬分校與班別過濾；家長依所關聯之多個子女帳號過濾)
   const visibleCourses = React.useMemo(() => {
     if (!currentUser || !isStudentOrParent) {
       return courses;
     }
-    const userBranch = (currentUser.branch || '').trim().toLowerCase();
-    const userClass = (currentUser.className || '').trim().toLowerCase();
+
+    let targetBranches: string[] = [];
+    let targetClasses: string[] = [];
+
+    if (currentUser.role === 'parent') {
+      const linkedUsernames = (currentUser.childrenUsernames || []).map((u) => u.trim().toLowerCase());
+      const matchedChildren = usersList.filter((u) =>
+        linkedUsernames.includes((u.username || '').toLowerCase()) ||
+        (currentUser.childName && u.name === currentUser.childName)
+      );
+
+      matchedChildren.forEach((child) => {
+        if (child.branch && child.branch.trim()) targetBranches.push(child.branch.trim().toLowerCase());
+        if (child.className && child.className.trim()) targetClasses.push(child.className.trim().toLowerCase());
+      });
+
+      if (targetBranches.length === 0 && currentUser.branch) targetBranches.push(currentUser.branch.trim().toLowerCase());
+      if (targetClasses.length === 0 && currentUser.className) targetClasses.push(currentUser.className.trim().toLowerCase());
+    } else {
+      if (currentUser.branch) targetBranches.push(currentUser.branch.trim().toLowerCase());
+      if (currentUser.className) targetClasses.push(currentUser.className.trim().toLowerCase());
+    }
 
     return courses.filter((c) => {
       const cItem: CourseItem | null = typeof c === 'object' && c !== null ? (c as CourseItem) : null;
       const cBranch = (cItem ? cItem.branch || '' : '').trim().toLowerCase();
-      const branchMatch = !cBranch || cBranch === '全部分校' || cBranch === userBranch;
+      
+      const branchMatch = !cBranch || cBranch === '全部分校' || targetBranches.length === 0 || targetBranches.some((tb) => cBranch.includes(tb) || tb.includes(cBranch));
       if (!branchMatch) return false;
 
       if (cItem && cItem.targetClasses && cItem.targetClasses.length > 0) {
-        if (userClass && userClass !== '全體' && userClass !== '全校') {
-          return cItem.targetClasses.some((tc) => tc.trim().toLowerCase() === userClass);
+        const hasValidTarget = targetClasses.some((tc) => tc !== '全體' && tc !== '全校');
+        if (hasValidTarget) {
+          return cItem.targetClasses.some((tc) => targetClasses.includes(tc.trim().toLowerCase()));
         }
       }
       return true;
     });
-  }, [courses, currentUser, isStudentOrParent]);
+  }, [courses, currentUser, usersList, isStudentOrParent]);
 
   // ⭐ 輔助取得純字串課程名稱清單供全域選單使用：格式為「課程名稱 + (課程時間)」，並嚴格去重防 key 衝突
   const courseNames = Array.from(
