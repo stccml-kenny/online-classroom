@@ -90,6 +90,38 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
   const [parsedRows, setParsedRows] = useState<UserProfile[]>([]);
   const [uploading, setUploading] = useState(false);
 
+  // ⭐ 需求 1：讀取 database 之會員資料 (students 表) 並自動整合進帳戶名冊
+  const [dbStudents, setDbStudents] = useState<any[]>([]);
+
+  useEffect(() => {
+    // 1. 優先從本地快取載入會員名冊
+    try {
+      const cached = localStorage.getItem('oc_local_students');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setDbStudents(parsed);
+        }
+      }
+    } catch (e) {}
+
+    // 2. 雲端同步 Appwrite students 表
+    const fetchStudentsCloud = async () => {
+      try {
+        const res = await databases.listDocuments(DATABASE_ID, 'students', [Query.limit(500)]);
+        if (res.documents && res.documents.length > 0) {
+          setDbStudents(res.documents);
+          try {
+            localStorage.setItem('oc_local_students', JSON.stringify(res.documents));
+          } catch (e) {}
+        }
+      } catch (err: any) {
+        console.warn('帳戶管理讀取 students 表:', err.message);
+      }
+    };
+    fetchStudentsCloud();
+  }, []);
+
   // 清除舊 dummy 帳號
   const cleanUsersList = React.useMemo(() => {
     return usersList.filter(
@@ -97,16 +129,98 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
     );
   }, [usersList]);
 
-  // 顯示所有帳號（含唯一預設 admin 與已派發帳號）
+  // ⭐ 需求 1：將 database 之會員自動合併進帳戶名冊，未派發帳號者自動生成標準帳號與8位密碼
   const allAccounts = React.useMemo(() => {
     const list = [...cleanUsersList];
+
+    // 建立現有學生帳號索引 (以 分校 + 姓名 比對)
+    const existingStudentKeys = new Set(
+      cleanUsersList
+        .filter((u) => u.role === 'student')
+        .map((u) => `${(u.branch || '').toLowerCase()}___${(u.name || '').toLowerCase()}`)
+    );
+
+    // 彙整資料庫會員名冊 (students 表)
+    const groupedDbMembers = new Map<string, {
+      student_name: string;
+      branch: string;
+      class_name: string;
+      courses: Set<string>;
+    }>();
+
+    dbStudents.forEach((doc: any) => {
+      const sName = (doc.student_name || '').trim();
+      const sBranch = (doc.branch || '').trim();
+      const sClass = (doc.class_name || '').trim();
+      if (!sName) return;
+
+      const key = `${sBranch.toLowerCase()}___${sName.toLowerCase()}`;
+      if (!groupedDbMembers.has(key)) {
+        groupedDbMembers.set(key, {
+          student_name: sName,
+          branch: sBranch,
+          class_name: sClass,
+          courses: new Set<string>()
+        });
+      }
+      if (doc.course_name && doc.course_name.trim()) {
+        groupedDbMembers.get(key)!.courses.add(doc.course_name.trim());
+      }
+    });
+
+    // 檢查是否有尚未在 cleanUsersList 中的資料庫會員，自動為其產生標準帳號
+    let autoIndex = 101;
+    groupedDbMembers.forEach((member, key) => {
+      if (!existingStudentKeys.has(key)) {
+        const code = parseBranchInfo(member.branch).code || 'ST';
+        let autoUsername = `${code}_${autoIndex}`;
+        while (list.some((u) => u.username.toLowerCase() === autoUsername.toLowerCase())) {
+          autoIndex++;
+          autoUsername = `${code}_${autoIndex}`;
+        }
+        autoIndex++;
+
+        list.push({
+          id: `user_db_${encodeURIComponent(key)}`,
+          username: autoUsername,
+          name: member.student_name,
+          role: 'student',
+          password: '12345678', // 預設 8 位數字密碼
+          branch: member.branch || (branches[0] || '總校'),
+          className: member.class_name || (classes[0] || '未分班'),
+          enrolledCourses: Array.from(member.courses),
+          createdAt: new Date().toISOString()
+        });
+      } else {
+        // 若該學生已在 usersList 中，確保其 enrolledCourses 同步包含資料庫中的最新課程
+        const idx = list.findIndex(
+          (u) =>
+            u.role === 'student' &&
+            `${(u.branch || '').toLowerCase()}___${(u.name || '').toLowerCase()}` === key
+        );
+        if (idx !== -1) {
+          const u = list[idx];
+          const mergedCourses = Array.from(
+            new Set([...(u.enrolledCourses || []), ...Array.from(member.courses)])
+          );
+          list[idx] = {
+            ...u,
+            branch: u.branch || member.branch,
+            className: u.className || member.class_name,
+            enrolledCourses: mergedCourses
+          };
+        }
+      }
+    });
+
     DEFAULT_DEMO_USERS.forEach((demo) => {
       if (!list.some((u) => u.username.toLowerCase() === demo.username.toLowerCase())) {
         list.push(demo);
       }
     });
+
     return list;
-  }, [cleanUsersList]);
+  }, [cleanUsersList, dbStudents, branches, classes]);
 
   // 若偵測到傳入的 usersList 中含有舊 dummy 帳號，自動清理
   useEffect(() => {
