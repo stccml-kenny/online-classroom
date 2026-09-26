@@ -41,6 +41,16 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
   const [filterRole, setFilterRole] = useState<string>('all');
   const [filterBranch, setFilterBranch] = useState<string>('all');
 
+  // ⭐ 需求：帳戶名冊批次選擇、修改與刪除狀態
+  const [selectedUsernames, setSelectedUsernames] = useState<string[]>([]);
+  const [showBatchModal, setShowBatchModal] = useState<boolean>(false);
+  const [batchActionType, setBatchActionType] = useState<'branch' | 'class' | 'add_course' | 'remove_course' | 'password'>('branch');
+  const [batchTargetBranch, setBatchTargetBranch] = useState<string>('');
+  const [batchTargetClass, setBatchTargetClass] = useState<string>('');
+  const [batchTargetCourse, setBatchTargetCourse] = useState<string>('');
+  const [batchTargetPassword, setBatchTargetPassword] = useState<string>('12345678');
+  const [batchProcessing, setBatchProcessing] = useState<boolean>(false);
+
   // 派發新帳戶單筆表單狀態
   const [role, setRole] = useState<UserRole>('student');
   const [name, setName] = useState('');
@@ -730,7 +740,339 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  // 下載 Excel / CSV 批次匯入空白範本
+  // ⭐ 批次選擇邏輯
+  const selectableAccounts = filteredAccounts.filter((u) => u.username !== 'admin');
+  const isAllSelected =
+    selectableAccounts.length > 0 &&
+    selectableAccounts.every((u) => selectedUsernames.includes(u.username));
+
+  const handleToggleSelectUser = (uName: string) => {
+    if (uName === 'admin') return;
+    setSelectedUsernames((prev) =>
+      prev.includes(uName) ? prev.filter((x) => x !== uName) : [...prev, uName]
+    );
+  };
+
+  const handleToggleSelectAll = () => {
+    if (isAllSelected) {
+      const currentShown = new Set(selectableAccounts.map((u) => u.username));
+      setSelectedUsernames((prev) => prev.filter((un) => !currentShown.has(un)));
+    } else {
+      const newSelected = new Set([...selectedUsernames, ...selectableAccounts.map((u) => u.username)]);
+      setSelectedUsernames(Array.from(newSelected));
+    }
+  };
+
+  // ⭐ 批次刪除
+  const handleBatchDelete = async () => {
+    const targetUsernames = selectedUsernames.filter((un) => un !== 'admin');
+    if (targetUsernames.length === 0) {
+      alert('請先勾選要刪除的帳號（管理員帳號無法刪除）！');
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `⚠️ 確定要批次刪除選取的 ${targetUsernames.length} 個帳戶嗎？\n\n此動作將同步從帳戶名冊中刪除帳號，並同步從會員名冊與雲端資料庫中移除相關記錄。此動作無法還原！`
+      )
+    ) {
+      return;
+    }
+
+    setBatchProcessing(true);
+    try {
+      const updatedUsers = cleanUsersList.filter((u) => !targetUsernames.includes(u.username));
+      onUpdateUsersList(updatedUsers);
+      try {
+        localStorage.setItem('oc_users_list', JSON.stringify(updatedUsers));
+      } catch (e) {}
+
+      const deletedStudentNames = new Set(
+        allAccounts
+          .filter((u) => targetUsernames.includes(u.username) && u.role === 'student')
+          .map((u) => u.name)
+      );
+
+      if (typeof window !== 'undefined') {
+        try {
+          const cached = localStorage.getItem('oc_local_students');
+          if (cached) {
+            const list = JSON.parse(cached);
+            const remaining = list.filter((s: any) => !deletedStudentNames.has(s.student_name));
+            localStorage.setItem('oc_local_students', JSON.stringify(remaining));
+            setDbStudents(remaining);
+          }
+        } catch (e) {}
+      }
+
+      for (const sName of deletedStudentNames) {
+        try {
+          const res = await databases.listDocuments(DATABASE_ID, 'students', [
+            Query.equal('student_name', sName),
+            Query.limit(100),
+          ]);
+          for (const doc of res.documents) {
+            try {
+              await databases.deleteDocument(DATABASE_ID, 'students', doc.$id);
+            } catch (de) {}
+          }
+        } catch (err: any) {
+          console.warn('雲端刪除學生記錄略過:', err.message);
+        }
+      }
+
+      setSelectedUsernames([]);
+      alert(`🎉 成功批次刪除 ${targetUsernames.length} 個帳戶！`);
+    } catch (err: any) {
+      alert('批次刪除失敗：' + err.message);
+    } finally {
+      setBatchProcessing(false);
+    }
+  };
+
+  // ⭐ 批次修改
+  const handleApplyBatchModify = async () => {
+    const targetUsernames = selectedUsernames.filter((un) => un !== 'admin');
+    if (targetUsernames.length === 0) return;
+
+    setBatchProcessing(true);
+    try {
+      let updatedUsers = [...cleanUsersList];
+
+      if (batchActionType === 'branch') {
+        if (!batchTargetBranch) {
+          alert('請選擇目標學校/分校！');
+          setBatchProcessing(false);
+          return;
+        }
+        updatedUsers = updatedUsers.map((u) => {
+          if (targetUsernames.includes(u.username)) {
+            return { ...u, branch: batchTargetBranch };
+          }
+          return u;
+        });
+
+        const studentNamesToUpdate = new Set(
+          updatedUsers
+            .filter((u) => targetUsernames.includes(u.username) && u.role === 'student')
+            .map((u) => u.name)
+        );
+        if (typeof window !== 'undefined') {
+          try {
+            const cached = localStorage.getItem('oc_local_students');
+            if (cached) {
+              const list = JSON.parse(cached);
+              const modified = list.map((s: any) =>
+                studentNamesToUpdate.has(s.student_name) ? { ...s, branch: batchTargetBranch } : s
+              );
+              localStorage.setItem('oc_local_students', JSON.stringify(modified));
+              setDbStudents(modified);
+            }
+          } catch (e) {}
+        }
+        for (const sName of studentNamesToUpdate) {
+          try {
+            const res = await databases.listDocuments(DATABASE_ID, 'students', [
+              Query.equal('student_name', sName),
+              Query.limit(50),
+            ]);
+            for (const doc of res.documents) {
+              await databases.updateDocument(DATABASE_ID, 'students', doc.$id, { branch: batchTargetBranch });
+            }
+          } catch (e) {}
+        }
+      } else if (batchActionType === 'class') {
+        if (!batchTargetClass) {
+          alert('請選擇目標班別！');
+          setBatchProcessing(false);
+          return;
+        }
+        updatedUsers = updatedUsers.map((u) => {
+          if (targetUsernames.includes(u.username)) {
+            return { ...u, className: batchTargetClass };
+          }
+          return u;
+        });
+
+        const studentNamesToUpdate = new Set(
+          updatedUsers
+            .filter((u) => targetUsernames.includes(u.username) && u.role === 'student')
+            .map((u) => u.name)
+        );
+        if (typeof window !== 'undefined') {
+          try {
+            const cached = localStorage.getItem('oc_local_students');
+            if (cached) {
+              const list = JSON.parse(cached);
+              const modified = list.map((s: any) =>
+                studentNamesToUpdate.has(s.student_name) ? { ...s, class_name: batchTargetClass } : s
+              );
+              localStorage.setItem('oc_local_students', JSON.stringify(modified));
+              setDbStudents(modified);
+            }
+          } catch (e) {}
+        }
+        for (const sName of studentNamesToUpdate) {
+          try {
+            const res = await databases.listDocuments(DATABASE_ID, 'students', [
+              Query.equal('student_name', sName),
+              Query.limit(50),
+            ]);
+            for (const doc of res.documents) {
+              await databases.updateDocument(DATABASE_ID, 'students', doc.$id, { class_name: batchTargetClass });
+            }
+          } catch (e) {}
+        }
+      } else if (batchActionType === 'add_course') {
+        if (!batchTargetCourse) {
+          alert('請選擇要加選的課程！');
+          setBatchProcessing(false);
+          return;
+        }
+        updatedUsers = updatedUsers.map((u) => {
+          if (targetUsernames.includes(u.username) && u.role === 'student') {
+            const cur = u.enrolledCourses || [];
+            if (!cur.includes(batchTargetCourse)) {
+              return { ...u, enrolledCourses: [...cur, batchTargetCourse] };
+            }
+          }
+          return u;
+        });
+
+        const studentsToEnroll = updatedUsers.filter(
+          (u) => targetUsernames.includes(u.username) && u.role === 'student'
+        );
+        if (typeof window !== 'undefined') {
+          try {
+            const cached = localStorage.getItem('oc_local_students');
+            const list = cached ? JSON.parse(cached) : [];
+            studentsToEnroll.forEach((stu, sIdx) => {
+              const alreadyHas = list.some(
+                (s: any) => s.student_name === stu.name && s.course_name === batchTargetCourse
+              );
+              if (!alreadyHas) {
+                list.unshift({
+                  $id: `stu_batch_${Date.now()}_${sIdx}`,
+                  branch: stu.branch || '',
+                  class_name: stu.className || '',
+                  course_name: batchTargetCourse,
+                  student_name: stu.name,
+                });
+              }
+            });
+            localStorage.setItem('oc_local_students', JSON.stringify(list));
+            setDbStudents(list);
+          } catch (e) {}
+        }
+        for (const stu of studentsToEnroll) {
+          try {
+            await databases.createDocument(DATABASE_ID, 'students', ID.unique(), {
+              branch: stu.branch || '',
+              class_name: stu.className || '',
+              course_name: batchTargetCourse,
+              student_name: stu.name,
+            });
+          } catch (e) {}
+        }
+      } else if (batchActionType === 'remove_course') {
+        if (!batchTargetCourse) {
+          alert('請選擇要退選的課程！');
+          setBatchProcessing(false);
+          return;
+        }
+        updatedUsers = updatedUsers.map((u) => {
+          if (targetUsernames.includes(u.username) && u.role === 'student') {
+            const cur = u.enrolledCourses || [];
+            return { ...u, enrolledCourses: cur.filter((c) => c !== batchTargetCourse) };
+          }
+          return u;
+        });
+
+        const studentsToUnenroll = updatedUsers.filter(
+          (u) => targetUsernames.includes(u.username) && u.role === 'student'
+        );
+        const stuNames = new Set(studentsToUnenroll.map((u) => u.name));
+
+        if (typeof window !== 'undefined') {
+          try {
+            const cached = localStorage.getItem('oc_local_students');
+            if (cached) {
+              const list = JSON.parse(cached);
+              const studentCounts = new Map<string, number>();
+              list.forEach((s: any) => {
+                if (stuNames.has(s.student_name)) {
+                  studentCounts.set(s.student_name, (studentCounts.get(s.student_name) || 0) + 1);
+                }
+              });
+
+              const modified: any[] = [];
+              list.forEach((s: any) => {
+                if (stuNames.has(s.student_name) && s.course_name === batchTargetCourse) {
+                  const cnt = studentCounts.get(s.student_name) || 1;
+                  if (cnt <= 1) {
+                    modified.push({ ...s, course_name: '' });
+                  } else {
+                    studentCounts.set(s.student_name, cnt - 1);
+                  }
+                } else {
+                  modified.push(s);
+                }
+              });
+              localStorage.setItem('oc_local_students', JSON.stringify(modified));
+              setDbStudents(modified);
+            }
+          } catch (e) {}
+        }
+
+        for (const stu of studentsToUnenroll) {
+          try {
+            const res = await databases.listDocuments(DATABASE_ID, 'students', [
+              Query.equal('student_name', stu.name),
+              Query.limit(50),
+            ]);
+            const totalDocs = res.documents.length;
+            for (const doc of res.documents) {
+              if (doc.course_name === batchTargetCourse) {
+                if (totalDocs <= 1) {
+                  await databases.updateDocument(DATABASE_ID, 'students', doc.$id, { course_name: '' });
+                } else {
+                  await databases.deleteDocument(DATABASE_ID, 'students', doc.$id);
+                }
+              }
+            }
+          } catch (e) {}
+        }
+      } else if (batchActionType === 'password') {
+        const cleanedPwd = batchTargetPassword.replace(/\D/g, '').slice(0, 8);
+        if (cleanedPwd.length !== 8) {
+          alert('密碼必須為 8 位純數字！');
+          setBatchProcessing(false);
+          return;
+        }
+        updatedUsers = updatedUsers.map((u) => {
+          if (targetUsernames.includes(u.username)) {
+            return { ...u, password: cleanedPwd };
+          }
+          return u;
+        });
+      }
+
+      onUpdateUsersList(updatedUsers);
+      try {
+        localStorage.setItem('oc_users_list', JSON.stringify(updatedUsers));
+      } catch (e) {}
+
+      setShowBatchModal(false);
+      setSelectedUsernames([]);
+      alert(`🎉 批次修改已成功套用至 ${targetUsernames.length} 個帳戶！`);
+    } catch (err: any) {
+      alert('批次修改失敗：' + err.message);
+    } finally {
+      setBatchProcessing(false);
+    }
+  };
+
+    // 下載 Excel / CSV 批次匯入空白範本
   const handleDownloadTemplate = () => {
     // ⭐ 需求 2：範本排位與匯出名冊完全一致
     const headers = [
@@ -1659,6 +2001,65 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
 
               {/* 帳戶列表 */}
               <div className="space-y-2">
+                {/* ⭐ 批次操作工具列 (當有勾選項目時自動浮現) */}
+                {selectedUsernames.length > 0 && (
+                  <div className="bg-purple-50 border border-purple-200 rounded-2xl p-3 flex flex-wrap items-center justify-between gap-2 shadow-sm animate-in fade-in slide-in-from-top-1">
+                    <div className="flex items-center gap-2">
+                      <span className="bg-purple-700 text-white font-bold text-xs px-2.5 py-1 rounded-full flex items-center gap-1 shadow-2xs">
+                        <CheckSquare size={13} />
+                        已選取 {selectedUsernames.length} 個帳戶
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleToggleSelectAll}
+                        className="text-xs text-purple-700 hover:text-purple-900 font-bold underline cursor-pointer"
+                      >
+                        {isAllSelected ? '取消全選' : `全選目前顯示 (${selectableAccounts.length})`}
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (branches.length > 0 && !batchTargetBranch) setBatchTargetBranch(branches[0]);
+                          if (classes.length > 0 && !batchTargetClass) setBatchTargetClass(classes[0]);
+                          if (courseNames.length > 0 && !batchTargetCourse) setBatchTargetCourse(courseNames[0]);
+                          setShowBatchModal(true);
+                        }}
+                        className="px-3 py-1.5 bg-gradient-to-r from-purple-700 to-indigo-700 text-white font-bold text-xs rounded-xl shadow-2xs hover:opacity-95 flex items-center gap-1.5 transition-all"
+                      >
+                        <Edit2 size={13} />
+                        <span>批次修改</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleBatchDelete}
+                        disabled={batchProcessing}
+                        className="px-3 py-1.5 bg-rose-600 text-white font-bold text-xs rounded-xl shadow-2xs hover:bg-rose-700 flex items-center gap-1.5 transition-all disabled:opacity-50"
+                      >
+                        <Trash2 size={13} />
+                        <span>批次刪除</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* 全選列與數量統計 */}
+                <div className="flex justify-between items-center px-1 text-xs text-gray-500">
+                  <label className="flex items-center gap-2 cursor-pointer font-bold select-none hover:text-purple-700">
+                    <input
+                      type="checkbox"
+                      checked={isAllSelected}
+                      onChange={handleToggleSelectAll}
+                      className="w-4 h-4 rounded text-purple-700 accent-purple-700 cursor-pointer"
+                    />
+                    <span>全選目前篩選名冊 ({selectableAccounts.length})</span>
+                  </label>
+                  <span>顯示 {filteredAccounts.length} 個帳號</span>
+                </div>
+
                 {filteredAccounts.length === 0 ? (
                   <div className="text-center py-8 text-gray-400 text-xs">
                     沒有找到符合條件的帳號記錄
@@ -1921,6 +2322,19 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                             {/* 一般展示檢視 */}
                             <div className="flex items-start justify-between">
                               <div className="flex items-center gap-2">
+                                {u.username !== 'admin' && (
+                                  <label
+                                    className="flex items-center cursor-pointer p-0.5 select-none"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedUsernames.includes(u.username)}
+                                      onChange={() => handleToggleSelectUser(u.username)}
+                                      className="w-4 h-4 rounded text-purple-700 accent-purple-700 cursor-pointer"
+                                    />
+                                  </label>
+                                )}
                                 <span className="text-xl">{cfg.emoji}</span>
                                 <div>
                                   <div className="font-extrabold text-gray-900 flex items-center gap-1.5">
@@ -2128,6 +2542,207 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
             完成並關閉
           </button>
         </div>
+        {/* ⭐ 批次修改彈窗 */}
+        {showBatchModal && (
+          <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 animate-in fade-in">
+            <div className="bg-white rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl overflow-hidden animate-in zoom-in-95">
+              <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-purple-100 text-purple-700 rounded-xl">
+                    <Sliders size={18} />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-sm text-gray-900">批次修改帳戶資料</h3>
+                    <p className="text-[11px] text-gray-500">已選取 {selectedUsernames.filter((un) => un !== 'admin').length} 個帳戶</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowBatchModal(false)}
+                  className="p-1 text-gray-400 hover:text-gray-600 rounded-lg"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* 選擇修改操作類型 */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-gray-700">請選擇要批次執行的修改動作：</label>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setBatchActionType('branch')}
+                    className={`p-2.5 rounded-xl border text-left font-bold transition-all ${
+                      batchActionType === 'branch'
+                        ? 'border-purple-600 bg-purple-50 text-purple-900 ring-2 ring-purple-100'
+                        : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                    }`}
+                  >
+                    🏫 變更學校/分校
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBatchActionType('class')}
+                    className={`p-2.5 rounded-xl border text-left font-bold transition-all ${
+                      batchActionType === 'class'
+                        ? 'border-purple-600 bg-purple-50 text-purple-900 ring-2 ring-purple-100'
+                        : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                    }`}
+                  >
+                    🎒 變更班別
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBatchActionType('add_course')}
+                    className={`p-2.5 rounded-xl border text-left font-bold transition-all ${
+                      batchActionType === 'add_course'
+                        ? 'border-purple-600 bg-purple-50 text-purple-900 ring-2 ring-purple-100'
+                        : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                    }`}
+                  >
+                    ➕ 集體加選課程
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBatchActionType('remove_course')}
+                    className={`p-2.5 rounded-xl border text-left font-bold transition-all ${
+                      batchActionType === 'remove_course'
+                        ? 'border-purple-600 bg-purple-50 text-purple-900 ring-2 ring-purple-100'
+                        : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                    }`}
+                  >
+                    ➖ 集體退選課程
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBatchActionType('password')}
+                    className={`col-span-2 p-2.5 rounded-xl border text-left font-bold transition-all ${
+                      batchActionType === 'password'
+                        ? 'border-purple-600 bg-purple-50 text-purple-900 ring-2 ring-purple-100'
+                        : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                    }`}
+                  >
+                    🔑 統一重設 8 位數字密碼
+                  </button>
+                </div>
+              </div>
+
+              {/* 依動作顯示具體選項 */}
+              <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-xl space-y-2">
+                {batchActionType === 'branch' && (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">目標學校/分校：</label>
+                    <select
+                      value={batchTargetBranch}
+                      onChange={(e) => setBatchTargetBranch(e.target.value)}
+                      className="w-full bg-white border border-gray-300 rounded-xl p-2 text-xs font-semibold outline-none focus:border-purple-600"
+                    >
+                      <option value="" disabled>請選擇要指派的學校/分校...</option>
+                      {branches.map((b) => (
+                        <option key={b} value={b}>{b}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {batchActionType === 'class' && (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">目標班別：</label>
+                    <select
+                      value={batchTargetClass}
+                      onChange={(e) => setBatchTargetClass(e.target.value)}
+                      className="w-full bg-white border border-gray-300 rounded-xl p-2 text-xs font-semibold outline-none focus:border-purple-600"
+                    >
+                      <option value="" disabled>請選擇要指派的班別...</option>
+                      {classes.map((c) => (
+                        <option key={c} value={c}>{c} 班</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {batchActionType === 'add_course' && (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">要加選的課程：</label>
+                    <select
+                      value={batchTargetCourse}
+                      onChange={(e) => setBatchTargetCourse(e.target.value)}
+                      className="w-full bg-white border border-gray-300 rounded-xl p-2 text-xs font-semibold outline-none focus:border-purple-600"
+                    >
+                      <option value="" disabled>請選擇要為選取學生集體加選的課程...</option>
+                      {courseNames.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {batchActionType === 'remove_course' && (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">要退選的課程：</label>
+                    <select
+                      value={batchTargetCourse}
+                      onChange={(e) => setBatchTargetCourse(e.target.value)}
+                      className="w-full bg-white border border-gray-300 rounded-xl p-2 text-xs font-semibold outline-none focus:border-purple-600"
+                    >
+                      <option value="" disabled>請選擇要為選取學生集體退選的課程...</option>
+                      {courseNames.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-gray-500 mt-1">退選後將保留學生會員身分及帳戶，絕不刪除會員。</p>
+                  </div>
+                )}
+
+                {batchActionType === 'password' && (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">新設定的 8 位數字密碼：</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        maxLength={8}
+                        value={batchTargetPassword}
+                        onChange={(e) => setBatchTargetPassword(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                        placeholder="8 位純數字"
+                        className="flex-1 bg-white border border-gray-300 rounded-xl p-2 text-xs font-mono font-bold outline-none focus:border-purple-600"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          let rand = '';
+                          for (let i = 0; i < 8; i++) rand += Math.floor(Math.random() * 10).toString();
+                          setBatchTargetPassword(rand);
+                        }}
+                        className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold shrink-0 transition-colors"
+                      >
+                        隨機生成
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 操作按鈕 */}
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowBatchModal(false)}
+                  className="px-4 py-2 border border-gray-200 text-gray-600 rounded-xl text-xs font-bold hover:bg-gray-50 transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApplyBatchModify}
+                  disabled={batchProcessing}
+                  className="px-5 py-2 bg-gradient-to-r from-purple-700 to-indigo-700 text-white rounded-xl text-xs font-bold hover:opacity-95 shadow-md transition-all disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {batchProcessing ? '處理中...' : '確認套用批次修改'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
