@@ -12,6 +12,7 @@ import { ClassManagementModal } from '@/components/classes/ClassManagementModal'
 import { HomeworkSetupModal, CourseItem } from '@/components/homework/HomeworkSetupModal';
 import { AuthModal, UserProfile } from '@/components/auth/AuthModal';
 import { HomeView } from '@/components/home/HomeView';
+import { AccountManagementModal } from '@/components/admin/AccountManagementModal';
 import { databases, DATABASE_ID } from '@/lib/appwrite';
 import { ID, Query } from 'appwrite';
 
@@ -26,6 +27,7 @@ export default function OnlineClassroomApp() {
   const [usersList, setUsersList] = useState<UserProfile[]>([]);
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [authDefaultTab, setAuthDefaultTab] = useState<'login' | 'register'>('login');
+  const [showAccountMgmtModal, setShowAccountMgmtModal] = useState<boolean>(false);
 
   const [showNoticeModal, setShowNoticeModal] = useState(false);
   const [showHomeworkModal, setShowHomeworkModal] = useState(false);
@@ -50,10 +52,34 @@ export default function OnlineClassroomApp() {
   const [classes, setClasses] = useState<string[]>([]);
   const [courses, setCourses] = useState<(string | CourseItem)[]>([]);
 
+  const isStudentOrParent = currentUser?.role === 'student' || currentUser?.role === 'parent';
+
+  // ⭐ 需求：家長及學生賬戶只可顯示自己的課程 (根據所屬分校與班別過濾)
+  const visibleCourses = React.useMemo(() => {
+    if (!currentUser || !isStudentOrParent) {
+      return courses;
+    }
+    const userBranch = (currentUser.branch || '').trim().toLowerCase();
+    const userClass = (currentUser.className || '').trim().toLowerCase();
+
+    return courses.filter((c) => {
+      const cBranch = (typeof c === 'object' ? c.branch || '' : '').trim().toLowerCase();
+      const branchMatch = !cBranch || cBranch === '全部分校' || cBranch === userBranch;
+      if (!branchMatch) return false;
+
+      if (typeof c === 'object' && c.targetClasses && c.targetClasses.length > 0) {
+        if (userClass && userClass !== '全體' && userClass !== '全校') {
+          return c.targetClasses.some((tc) => tc.trim().toLowerCase() === userClass);
+        }
+      }
+      return true;
+    });
+  }, [courses, currentUser, isStudentOrParent]);
+
   // ⭐ 輔助取得純字串課程名稱清單供全域選單使用：格式為「課程名稱 + (課程時間)」，並嚴格去重防 key 衝突
   const courseNames = Array.from(
     new Set(
-      courses.map((c) => {
+      visibleCourses.map((c) => {
         if (typeof c === 'string') return c.trim();
         if (c.timeSlot && c.timeSlot.trim()) {
           const slot = c.timeSlot.trim();
@@ -358,17 +384,18 @@ export default function OnlineClassroomApp() {
           onLogout={handleLogout}
         />
 
-        {/* ⭐ 首頁視窗：具備開始使用入口、5大身分介紹與快捷工作區 */}
+        {/* ⭐ 首頁視窗：登入介紹、開始使用入口、5大身分說明與快捷工作區 */}
         {activeTab === 'home' && (
           <HomeView
             currentUser={currentUser}
-            onOpenAuth={handleOpenAuth}
+            onOpenAuth={() => handleOpenAuth('login')}
             onLogout={handleLogout}
             onNavigateTab={setActiveTab}
             onOpenNotices={() => setShowNoticeModal(true)}
             onOpenSetup={() => setShowSetupModal(true)}
+            onOpenAccountMgmt={() => setShowAccountMgmtModal(true)}
             noticeCount={notices.length}
-            courseCount={courses.length}
+            courseCount={visibleCourses.length}
             memberCount={0}
           />
         )}
@@ -377,14 +404,15 @@ export default function OnlineClassroomApp() {
           <MoreView
             noticeCount={notices.length}
             onOpenNotices={() => setShowNoticeModal(true)}
-            onOpenSetup={() => setShowSetupModal(true)} // ⭐ 設定按鍵開啟「學校/分校及班別設定」彈窗
+            onOpenSetup={() => setShowSetupModal(true)}
+            onOpenAccountMgmt={() => setShowAccountMgmtModal(true)}
             currentUser={currentUser}
             onOpenAuth={handleOpenAuth}
             onLogout={handleLogout}
           />
         )}
 
-        {/* ⭐ 課程目錄：滿板顯示，只保留課程設定 (點擊課程打開課程單元及單元家課) */}
+        {/* ⭐ 課程目錄：滿板顯示 (學生/家長唯讀且只顯示自己的課程) */}
         {activeTab === 'courses' && (
           <div className="flex-1 w-full bg-[#F8F9FA] flex flex-col overflow-hidden pb-16">
             <HomeworkSetupModal
@@ -393,11 +421,13 @@ export default function OnlineClassroomApp() {
               mode="courses_only"
               branches={branches}
               classes={classes}
-              courses={courses}
+              courses={visibleCourses}
               onUpdateBranches={handleUpdateBranches}
               onUpdateClasses={handleUpdateClasses}
               onUpdateCourses={handleUpdateCourses}
               onOpenCourseContent={handleOpenCourseContent}
+              isReadOnly={isStudentOrParent}
+              currentUser={currentUser}
             />
           </div>
         )}
@@ -434,7 +464,7 @@ export default function OnlineClassroomApp() {
 
         {activeTab === 'msg' && <div className="p-5 text-center text-gray-400">即時訊息模組開發中</div>}
 
-        <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+        <BottomNav activeTab={activeTab} onTabChange={setActiveTab} userRole={currentUser?.role} />
 
         {/* 1. 電子通告彈窗 */}
         <NoticeModal
@@ -444,7 +474,7 @@ export default function OnlineClassroomApp() {
           loading={loading}
         />
 
-        {/* 2. 第一層目錄：課程內容彈窗 (整合單元教材、單元家課與右上角設定齒輪) */}
+        {/* 2. 第一層目錄：課程內容彈窗 (學生/家長唯讀並提供交功課功能) */}
         <CourseContentModal
           isOpen={showCourseContentModal}
           onClose={() => {
@@ -456,10 +486,12 @@ export default function OnlineClassroomApp() {
           branches={branches}
           courses={courseNames}
           classes={classes}
-          courseItems={courses}
+          courseItems={visibleCourses}
           initialCourse={courseModalInitialCourse}
           initialBranch={courseModalInitialBranch}
           isLocked={courseModalIsLocked}
+          isReadOnly={isStudentOrParent}
+          currentUser={currentUser}
         />
 
         {/* 3. 獨立家課彈窗 (備用向下相容) */}
@@ -503,7 +535,7 @@ export default function OnlineClassroomApp() {
           onUpdateCourses={handleUpdateCourses}
         />
 
-        {/* 7. ⭐ 應用程式登記及登入系統彈窗 (支援 5 大角色與 8 位數字密碼安全驗證) */}
+        {/* 7. ⭐ 應用程式登入系統彈窗 (8位數字密碼安全驗證 · 由管理員統一派發) */}
         <AuthModal
           isOpen={showAuthModal}
           onClose={() => setShowAuthModal(false)}
@@ -515,6 +547,21 @@ export default function OnlineClassroomApp() {
           onLoginSuccess={handleLoginSuccess}
           onRegisterSuccess={handleRegisterSuccess}
           onLogout={handleLogout}
+        />
+
+        {/* 8. 👑 系統管理員專屬：帳戶管理與派發中心 (統一派發5大身分帳號) */}
+        <AccountManagementModal
+          isOpen={showAccountMgmtModal}
+          onClose={() => setShowAccountMgmtModal(false)}
+          branches={branches}
+          classes={classes}
+          currentUser={currentUser}
+          usersList={usersList}
+          onUpdateUsersList={(newUsers) => {
+            setUsersList(newUsers);
+            try { localStorage.setItem('oc_users_list', JSON.stringify(newUsers)); } catch (e) {}
+            saveSettingToCloud('user_accounts', newUsers);
+          }}
         />
       </div>
     </div>

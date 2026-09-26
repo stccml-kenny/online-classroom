@@ -1,14 +1,18 @@
 ﻿import React from 'react';
 import { Home, MessageCircle, Users, GraduationCap, UserCheck } from 'lucide-react';
+import { UserRole } from '@/components/auth/AuthModal';
 
 export type TabType = 'home' | 'msg' | 'members' | 'courses' | 'attendance' | 'more' | 'staff';
 
 interface BottomNavProps {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
+  userRole?: UserRole;
 }
 
-export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange }) => {
+export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange, userRole }) => {
+  const isStudentOrParent = userRole === 'student' || userRole === 'parent';
+
   return (
     <div className="fixed bottom-0 w-full max-w-md bg-white border-t border-gray-200 flex justify-around py-2 z-20">
       <TabButton
@@ -23,26 +27,29 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange }) 
         active={activeTab === 'msg'}
         onClick={() => onTabChange('msg')}
       />
-      {/* ⭐ 需求：移除底部職員通告改成會員，點擊直接打開會員目錄 */}
-      <TabButton
-        icon={<Users size={20} />}
-        label="會員"
-        active={activeTab === 'members'}
-        onClick={() => onTabChange('members')}
-      />
+      {/* ⭐ 需求：家長及學生只顯示自己的課程，不顯示管理員/導師之會員與點名 */}
+      {!isStudentOrParent && (
+        <TabButton
+          icon={<Users size={20} />}
+          label="會員"
+          active={activeTab === 'members'}
+          onClick={() => onTabChange('members')}
+        />
+      )}
       <TabButton
         icon={<GraduationCap size={20} />}
-        label="課程"
+        label={isStudentOrParent ? "我的課程" : "課程"}
         active={activeTab === 'courses'}
         onClick={() => onTabChange('courses')}
       />
-      {/* ⭐ 需求：將活動/課程點名改名成課程點名，移到底部目錄 */}
-      <TabButton
-        icon={<UserCheck size={20} />}
-        label="課程點名"
-        active={activeTab === 'attendance'}
-        onClick={() => onTabChange('attendance')}
-      />
+      {!isStudentOrParent && (
+        <TabButton
+          icon={<UserCheck size={20} />}
+          label="課程點名"
+          active={activeTab === 'attendance'}
+          onClick={() => onTabChange('attendance')}
+        />
+      )}
       <TabButton
         icon={
           <div className="flex flex-col gap-0.5">

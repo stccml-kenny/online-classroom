@@ -11,6 +11,7 @@ import { CourseItem, getCourseDisplayName } from '../homework/HomeworkSetupModal
 import { databases, DATABASE_ID } from '@/lib/appwrite';
 import { ID, Query } from 'appwrite';
 import { getLocalFile } from '@/utils/indexedDB';
+import { UserProfile } from '@/components/auth/AuthModal';
 
 interface CourseContentModalProps {
   isOpen: boolean;
@@ -22,6 +23,8 @@ interface CourseContentModalProps {
   initialCourse?: string; // ⭐ 預選課程
   initialBranch?: string; // ⭐ 預選分校
   isLocked?: boolean;     // ⭐ 於課程目錄點擊打開時，鎖上學校及課程選項
+  isReadOnly?: boolean;   // ⭐ 學生與家長帳戶唯讀模式
+  currentUser?: UserProfile | null;
 }
 
 export type PublishStatusType = 'published' | 'scheduled' | 'pending' | 'unpublished';
@@ -131,6 +134,8 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
   initialCourse = '',
   initialBranch = '',
   isLocked = false,
+  isReadOnly = false,
+  currentUser = null,
 }) => {
   const [activeTab, setActiveTab] = useState<'units' | 'homework'>('units');
 
@@ -759,27 +764,29 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
             </button>
           </div>
 
-          {/* 多選管理模式切換按鈕 */}
-          <button
-            type="button"
-            onClick={() => {
-              if (activeTab === 'units') {
-                setIsUnitSelectMode(!isUnitSelectMode);
-                setSelectedUnitIds([]);
-              } else {
-                setIsHwSelectMode(!isHwSelectMode);
-                setSelectedHwIds([]);
-              }
-            }}
-            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 shadow-2xs ${
-              (activeTab === 'units' ? isUnitSelectMode : isHwSelectMode)
-                ? 'bg-indigo-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            <CheckSquare size={13} />
-            <span>{(activeTab === 'units' ? isUnitSelectMode : isHwSelectMode) ? '退出多選' : '多選管理'}</span>
-          </button>
+          {/* 多選管理模式切換按鈕 (唯讀模式隱藏) */}
+          {!isReadOnly && (
+            <button
+              type="button"
+              onClick={() => {
+                if (activeTab === 'units') {
+                  setIsUnitSelectMode(!isUnitSelectMode);
+                  setSelectedUnitIds([]);
+                } else {
+                  setIsHwSelectMode(!isHwSelectMode);
+                  setSelectedHwIds([]);
+                }
+              }}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 shadow-2xs ${
+                (activeTab === 'units' ? isUnitSelectMode : isHwSelectMode)
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              <CheckSquare size={13} />
+              <span>{(activeTab === 'units' ? isUnitSelectMode : isHwSelectMode) ? '退出多選' : '多選管理'}</span>
+            </button>
+          )}
         </div>
 
         {/* 篩選工具列：預設全部分校及全部課程 (⭐ 需求：於課程目錄中點擊打開，鎖上該頁的學校及課程選項) */}
@@ -1023,29 +1030,31 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1 text-gray-400 shrink-0">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingUnit(u);
-                            setUnitFormOpen(true);
-                          }}
-                          className="p-1 hover:text-indigo-600 transition-colors"
-                          title="編輯單元"
-                        >
-                          <Edit2 size={15} />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            u.$id && handleDeleteUnit(u.$id);
-                          }}
-                          className="p-1 hover:text-red-600 transition-colors"
-                          title="刪除單元"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
+                      {!isReadOnly && (
+                        <div className="flex items-center gap-1 text-gray-400 shrink-0">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingUnit(u);
+                              setUnitFormOpen(true);
+                            }}
+                            className="p-1 hover:text-indigo-600 transition-colors"
+                            title="編輯單元"
+                          >
+                            <Edit2 size={15} />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              u.$id && handleDeleteUnit(u.$id);
+                            }}
+                            className="p-1 hover:text-red-600 transition-colors"
+                            title="刪除單元"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* ⭐ 需求 1 & 2：展開後的完整內容、YouTube 影片、Google 文件與實體附件 */}
@@ -1278,18 +1287,20 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
                               <span>單元關聯家課 ({linkedHws.length} 項)</span>
                             </span>
 
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setTargetUnitForHwSelect(u);
-                                setHwSelectModalOpen(true);
-                              }}
-                              className="px-2.5 py-1 bg-orange-50 hover:bg-orange-100 text-[#FF6B57] border border-orange-200 rounded-lg font-bold text-[11px] transition-colors flex items-center gap-1 shadow-2xs"
-                              title="於已儲存家課庫中勾選，或建立新家課"
-                            >
-                              <Layers size={12} />
-                              <span>揀選 / 發布單元家課</span>
-                            </button>
+                            {!isReadOnly && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTargetUnitForHwSelect(u);
+                                  setHwSelectModalOpen(true);
+                                }}
+                                className="px-2.5 py-1 bg-orange-50 hover:bg-orange-100 text-[#FF6B57] border border-orange-200 rounded-lg font-bold text-[11px] transition-colors flex items-center gap-1 shadow-2xs"
+                                title="於已儲存家課庫中勾選，或建立新家課"
+                              >
+                                <Layers size={12} />
+                                <span>揀選 / 發布單元家課</span>
+                              </button>
+                            )}
                           </div>
 
                           {linkedHws.length > 0 && (
@@ -1312,14 +1323,16 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
 
                                     <div className="flex items-center gap-2 shrink-0 text-[10px] text-gray-400">
                                       <span>截止: {lh.due_date ? lh.due_date.split('T')[0] : '未設'}</span>
-                                      <button
-                                        type="button"
-                                        onClick={() => lh.$id && handleUnlinkHomework(lh.$id)}
-                                        className="text-gray-300 hover:text-red-500 p-0.5 transition-colors"
-                                        title="解除與此單元的關聯"
-                                      >
-                                        <Unlink size={13} />
-                                      </button>
+                                      {!isReadOnly && (
+                                        <button
+                                          type="button"
+                                          onClick={() => lh.$id && handleUnlinkHomework(lh.$id)}
+                                          className="text-gray-300 hover:text-red-500 p-0.5 transition-colors"
+                                          title="解除與此單元的關聯"
+                                        >
+                                          <Unlink size={13} />
+                                        </button>
+                                      )}
                                     </div>
                                   </div>
                                 );
@@ -1346,7 +1359,7 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
                 <HomeworkCard
                   key={item.$id || idx}
                   item={item}
-                  selectable={isHwSelectMode}
+                  selectable={!isReadOnly && isHwSelectMode}
                   isSelected={item.$id ? selectedHwIds.includes(item.$id) : false}
                   onToggleSelect={(id) => {
                     setSelectedHwIds((prev) =>
@@ -1359,6 +1372,8 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
                     setHwFormOpen(true);
                   }}
                   onDelete={handleDeleteHomework}
+                  isReadOnly={isReadOnly}
+                  currentUser={currentUser}
                 />
               ))
             )
@@ -1416,31 +1431,33 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
           </div>
         )}
 
-        {/* 底部功能按鈕列 */}
-        <div className="p-3.5 bg-white border-t border-gray-100 flex gap-2">
-          <button
-            onClick={() => {
-              setEditingUnit(null);
-              setUnitFormOpen(true);
-            }}
-            className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
-          >
-            <Plus size={15} />
-            <span>新增課程單元</span>
-          </button>
+        {/* 底部功能按鈕列 (唯讀模式隱藏新增單元與新增家課) */}
+        {!isReadOnly && (
+          <div className="p-3.5 bg-white border-t border-gray-100 flex gap-2">
+            <button
+              onClick={() => {
+                setEditingUnit(null);
+                setUnitFormOpen(true);
+              }}
+              className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+            >
+              <Plus size={15} />
+              <span>新增課程單元</span>
+            </button>
 
-          <button
-            onClick={() => {
-              setEditingHw(null);
-              setTargetUnitForNewHw(null);
-              setHwFormOpen(true);
-            }}
-            className="flex-1 py-2.5 bg-[#FF6B57] hover:bg-[#e05a48] text-white font-bold rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
-          >
-            <Plus size={15} />
-            <span>發布新家課</span>
-          </button>
-        </div>
+            <button
+              onClick={() => {
+                setEditingHw(null);
+                setTargetUnitForNewHw(null);
+                setHwFormOpen(true);
+              }}
+              className="flex-1 py-2.5 bg-[#FF6B57] hover:bg-[#e05a48] text-white font-bold rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+            >
+              <Plus size={15} />
+              <span>發布新家課</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 課程單元建立 / 編輯彈窗 (⭐ 需求：若於該課程新增課程單元鎖上學校及課程選項) */}

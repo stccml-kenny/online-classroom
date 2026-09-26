@@ -1,8 +1,11 @@
 ﻿import React, { useState, useEffect } from 'react';
-import {
-  Calendar, Trash2, Edit2, Download, FileText, Music, Video, Play, Pause, ExternalLink, Clock, ChevronDown, ChevronUp, CheckSquare, Square
+import { Users,
+  Calendar, Trash2, Edit2, Download, FileText, Music, Video, Play, Pause, ExternalLink, Clock, ChevronDown, ChevronUp, CheckSquare, Square,
+  CheckCircle2, Sparkles, User, AlertCircle, Plus, UploadCloud
 } from 'lucide-react';
-import { getLocalFile } from '@/utils/indexedDB';
+import { Users, UserProfile, ROLE_CONFIGS } from '@/components/auth/AuthModal';
+import { Users, storeLocalFile } from '@/utils/indexedDB';
+import { Users, getLocalFile } from '@/utils/indexedDB';
 
 export interface HomeworkAttachment {
   id: string;
@@ -31,6 +34,28 @@ export interface HomeworkItem {
   google_urls?: string[];
 }
 
+export interface HomeworkSubmissionRecord {
+  id: string;
+  homeworkId: string;
+  studentUsername: string;
+  studentName: string;
+  role: string;
+  branch?: string;
+  className?: string;
+  submittedAt: string;
+  comment: string;
+  attachments: {
+    id: string;
+    name: string;
+    size: number;
+    type: string;
+    url?: string;
+  }[];
+  teacherScore?: string;
+  teacherFeedback?: string;
+  reviewedAt?: string;
+}
+
 interface HomeworkCardProps {
   item: HomeworkItem;
   onEdit: (item: HomeworkItem) => void;
@@ -39,6 +64,8 @@ interface HomeworkCardProps {
   isSelected?: boolean;
   onToggleSelect?: (id: string) => void;
   defaultExpanded?: boolean;
+  isReadOnly?: boolean;
+  currentUser?: UserProfile | null;
 }
 
 // 內建專屬 YouTube SVG 圖示
@@ -128,6 +155,8 @@ export const HomeworkCard: React.FC<HomeworkCardProps> = ({
   isSelected = false,
   onToggleSelect,
   defaultExpanded = false,
+  isReadOnly = false,
+  currentUser = null,
 }) => {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
@@ -212,6 +241,147 @@ export const HomeworkCard: React.FC<HomeworkCardProps> = ({
 
   const [resolvedBlobUrls, setResolvedBlobUrls] = useState<Record<string, string>>({});
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+
+  // ⭐ 學生在線交功課與導師批閱狀態
+  const hwId = item.$id || item.title;
+  const isStudentOrParent = currentUser?.role === 'student' || currentUser?.role === 'parent';
+  const currentStudentKey = currentUser ? currentUser.username : 'guest';
+
+  // 讀取本機全部提交記錄
+  const [allSubmissions, setAllSubmissions] = useState<HomeworkSubmissionRecord[]>([]);
+  const [mySubmission, setMySubmission] = useState<HomeworkSubmissionRecord | null>(null);
+
+  // 交功課輸入表單
+  const [isSubmittingFormOpen, setIsSubmittingFormOpen] = useState(false);
+  const [submitComment, setSubmitComment] = useState('');
+  const [submitFiles, setSubmitFiles] = useState<{ id: string; name: string; size: number; type: string; fileBlob?: Blob }[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+
+  // 導師批閱留言
+  const [reviewScore, setReviewScore] = useState('🌟 優秀');
+  const [reviewFeedback, setReviewFeedback] = useState('');
+  const [selectedSubForReview, setSelectedSubForReview] = useState<string | null>(null);
+
+  // 載入提交記錄
+  const loadSubmissions = () => {
+    try {
+      const raw = localStorage.getItem(`oc_submissions_${hwId}`);
+      if (raw) {
+        const parsed: HomeworkSubmissionRecord[] = JSON.parse(raw);
+        setAllSubmissions(parsed);
+        const mine = parsed.find((s) => s.studentUsername === currentStudentKey);
+        if (mine) {
+          setMySubmission(mine);
+          setSubmitComment(mine.comment || '');
+        } else {
+          setMySubmission(null);
+        }
+      } else {
+        setAllSubmissions([]);
+        setMySubmission(null);
+      }
+    } catch (e) {}
+  };
+
+  useEffect(() => {
+    loadSubmissions();
+  }, [hwId, currentStudentKey, isExpanded]);
+
+  // 選擇功課附件檔案
+  const handleSelectSubmitFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const newItems: { id: string; name: string; size: number; type: string; fileBlob?: Blob }[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      newItems.push({
+        id: `sub_file_${Date.now()}_${i}`,
+        name: f.name,
+        size: f.size,
+        type: f.type || 'application/octet-stream',
+        fileBlob: f
+      });
+    }
+    setSubmitFiles((prev) => [...prev, ...newItems]);
+  };
+
+  // 確認提交功課
+  const handleSubmitHomework = async () => {
+    if (!currentUser) {
+      alert('請先登入學生或家長帳戶後再交功課！');
+      return;
+    }
+    setIsUploading(true);
+    try {
+      const savedAtts: { id: string; name: string; size: number; type: string }[] = [];
+      for (const itemFile of submitFiles) {
+        if (itemFile.fileBlob) {
+          await storeLocalFile(itemFile.id, itemFile.fileBlob);
+        }
+        savedAtts.push({
+          id: itemFile.id,
+          name: itemFile.name,
+          size: itemFile.size,
+          type: itemFile.type
+        });
+      }
+
+      // 保留原有附件若重新提交
+      const combinedAtts = mySubmission ? [...(mySubmission.attachments || []), ...savedAtts] : savedAtts;
+
+      const record: HomeworkSubmissionRecord = {
+        id: mySubmission ? mySubmission.id : `sub_${Date.now()}`,
+        homeworkId: hwId,
+        studentUsername: currentUser.username,
+        studentName: currentUser.role === 'parent' ? (currentUser.childName || currentUser.name) : currentUser.name,
+        role: currentUser.role,
+        branch: currentUser.branch || '總校',
+        className: currentUser.className || '全體',
+        submittedAt: new Date().toLocaleString('zh-HK'),
+        comment: submitComment.trim(),
+        attachments: combinedAtts,
+        teacherScore: mySubmission?.teacherScore,
+        teacherFeedback: mySubmission?.teacherFeedback,
+        reviewedAt: mySubmission?.reviewedAt
+      };
+
+      const updated = allSubmissions.filter((s) => s.studentUsername !== currentUser.username);
+      updated.unshift(record);
+
+      localStorage.setItem(`oc_submissions_${hwId}`, JSON.stringify(updated));
+      setAllSubmissions(updated);
+      setMySubmission(record);
+      setSubmitFiles([]);
+      setIsSubmittingFormOpen(false);
+
+      alert(`🎉 功課「${item.title}」已成功提交給導師！`);
+    } catch (err: any) {
+      console.error('提交功課出錯:', err);
+      alert('提交功課失敗：' + (err.message || '請稍後重試'));
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // 導師儲存批閱評語
+  const handleSaveTeacherReview = (targetSubId: string) => {
+    const updated = allSubmissions.map((s) => {
+      if (s.id === targetSubId) {
+        return {
+          ...s,
+          teacherScore: reviewScore,
+          teacherFeedback: reviewFeedback.trim(),
+          reviewedAt: new Date().toLocaleString('zh-HK')
+        };
+      }
+      return s;
+    });
+    localStorage.setItem(`oc_submissions_${hwId}`, JSON.stringify(updated));
+    setAllSubmissions(updated);
+    setSelectedSubForReview(null);
+    setReviewFeedback('');
+    alert('✅ 導師批閱與評語已儲存！');
+  };
 
   useEffect(() => {
     let active = true;
@@ -400,28 +570,32 @@ export const HomeworkCard: React.FC<HomeworkCardProps> = ({
           )}
         </div>
 
-        {/* 編輯 / 刪除與收合箭頭 */}
+        {/* 編輯 / 刪除與收合箭頭 (唯讀模式下隱藏編輯與刪除) */}
         <div className="flex items-center gap-1 text-gray-400 shrink-0">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit(item);
-            }}
-            className="p-1 hover:text-indigo-600 transition-colors"
-            title="修改家課"
-          >
-            <Edit2 size={15} />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              item.$id && onDelete(item.$id);
-            }}
-            className="p-1 hover:text-red-600 transition-colors"
-            title="刪除家課"
-          >
-            <Trash2 size={15} />
-          </button>
+          {!isReadOnly && (
+            <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(item);
+                }}
+                className="p-1 hover:text-indigo-600 transition-colors"
+                title="修改家課"
+              >
+                <Edit2 size={15} />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  item.$id && onDelete(item.$id);
+                }}
+                className="p-1 hover:text-red-600 transition-colors"
+                title="刪除家課"
+              >
+                <Trash2 size={15} />
+              </button>
+            </>
+          )}
           <button
             type="button"
             onClick={() => setIsExpanded(!isExpanded)}
@@ -656,6 +830,296 @@ export const HomeworkCard: React.FC<HomeworkCardProps> = ({
               </div>
             </div>
           )}
+
+          {/* ⭐ 核心需求：增加交功課功能 (學生/家長可提交功課；導師/管理員可查閱名單與批閱) */}
+          <div className="pt-2 border-t border-gray-150">
+            {isStudentOrParent ? (
+              /* --- 學生 / 家長交功課介面 --- */
+              <div className="bg-amber-50/50 border border-amber-200 rounded-2xl p-3 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-6 h-6 rounded-full bg-amber-500 text-white flex items-center justify-center text-xs">
+                      ✍️
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-gray-900">我的作業繳交狀態</span>
+                      <span className="text-[10px] text-gray-500 ml-1">
+                        ({currentUser?.role === 'parent' ? `${currentUser?.childName || currentUser?.name} (家長代交)` : currentUser?.name})
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    {mySubmission ? (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                        <CheckCircle2 size={11} />
+                        <span>已繳交</span>
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
+                        <Clock size={11} />
+                        <span>尚未繳交</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* 已繳交資訊卡 */}
+                {mySubmission && !isSubmittingFormOpen && (
+                  <div className="bg-white p-2.5 rounded-xl border border-emerald-200 text-xs space-y-1.5 shadow-2xs">
+                    <div className="flex justify-between items-center text-[10px] text-gray-400">
+                      <span>繳交時間：{mySubmission.submittedAt}</span>
+                      <button
+                        type="button"
+                        onClick={() => setIsSubmittingFormOpen(true)}
+                        className="text-[#FF6B57] font-bold hover:underline"
+                      >
+                        重新提交 / 補充附件
+                      </button>
+                    </div>
+
+                    {mySubmission.comment && (
+                      <div className="text-[11px] text-gray-800 bg-gray-50 p-2 rounded-lg">
+                        <span className="font-bold text-gray-500">留言備註：</span>
+                        {mySubmission.comment}
+                      </div>
+                    )}
+
+                    {/* 已提交檔案 */}
+                    {mySubmission.attachments && mySubmission.attachments.length > 0 && (
+                      <div className="space-y-1 pt-1">
+                        <div className="text-[10px] font-bold text-gray-500">已提交作業附件 ({mySubmission.attachments.length})：</div>
+                        <div className="flex flex-wrap gap-1">
+                          {mySubmission.attachments.map((att) => (
+                            <button
+                              key={att.id}
+                              type="button"
+                              onClick={() => handleDownload(att as any)}
+                              className="px-2 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-[10px] font-semibold flex items-center gap-1 hover:bg-emerald-100"
+                              title="下載查看已交檔案"
+                            >
+                              <Download size={10} />
+                              <span className="max-w-[120px] truncate">{att.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 導師批閱與評分 */}
+                    {mySubmission.teacherFeedback && (
+                      <div className="mt-2 p-2 bg-purple-50 rounded-lg border border-purple-200 text-xs">
+                        <div className="flex items-center justify-between text-purple-900 font-bold text-[11px]">
+                          <span>👨‍🏫 導師評語：</span>
+                          <span className="bg-purple-200 px-2 py-0.5 rounded-full text-[10px] font-extrabold text-purple-800">
+                            評分：{mySubmission.teacherScore || '已批閱'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-purple-950 mt-0.5">{mySubmission.teacherFeedback}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 未繳交或展開重新提交表單 */}
+                {(!mySubmission || isSubmittingFormOpen) && (
+                  <div className="bg-white p-2.5 rounded-xl border border-amber-200 space-y-2">
+                    <div className="text-[11px] font-bold text-gray-800 flex items-center justify-between">
+                      <span>上傳並提交功課：</span>
+                      {isSubmittingFormOpen && mySubmission && (
+                        <button
+                          type="button"
+                          onClick={() => setIsSubmittingFormOpen(false)}
+                          className="text-gray-400 hover:text-gray-600 text-[10px]"
+                        >
+                          取消修改
+                        </button>
+                      )}
+                    </div>
+
+                    <div>
+                      <textarea
+                        rows={2}
+                        value={submitComment}
+                        onChange={(e) => setSubmitComment(e.target.value)}
+                        placeholder="輸入備註或留言說明 (例：已完成作業第1至第5題)..."
+                        className="w-full p-2 border border-gray-200 rounded-lg text-xs outline-none focus:border-[#FF6B57]"
+                      />
+                    </div>
+
+                    {/* 上傳附件按鈕 */}
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <label className="px-2.5 py-1.5 bg-orange-50 hover:bg-orange-100 text-[#FF6B57] border border-orange-200 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1 transition-colors">
+                          <UploadCloud size={14} />
+                          <span>選擇檔案 / 拍照上傳</span>
+                          <input
+                            type="file"
+                            multiple
+                            onChange={handleSelectSubmitFile}
+                            className="hidden"
+                          />
+                        </label>
+                        <span className="text-[10px] text-gray-400">支援相片、文件、錄音或影音檔</span>
+                      </div>
+
+                      {submitFiles.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {submitFiles.map((sf, idx) => (
+                            <span
+                              key={idx}
+                              className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded-md text-[10px] flex items-center gap-1 border border-gray-200"
+                            >
+                              <span className="max-w-[110px] truncate">{sf.name}</span>
+                              <button
+                                type="button"
+                                onClick={() => setSubmitFiles((prev) => prev.filter((_, i) => i !== idx))}
+                                className="text-gray-400 hover:text-red-500 font-bold ml-0.5"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={isUploading}
+                      onClick={handleSubmitHomework}
+                      className="w-full py-2 bg-gradient-to-r from-[#FF6B57] to-[#FF8573] hover:opacity-95 text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all"
+                    >
+                      <Sparkles size={14} />
+                      <span>{isUploading ? '正在上傳提交中...' : mySubmission ? '確認更新並重新提交' : '確認提交功課'}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* --- 導師 / 助教 / 管理員查看學生繳交名單 --- */
+              <div className="bg-purple-50/50 border border-purple-200 rounded-2xl p-3 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-1.5 font-extrabold text-purple-900">
+                    <Users size={14} className="text-purple-600" />
+                    <span>學生繳交記錄 (已繳交 {allSubmissions.length} 份)</span>
+                  </div>
+                  <span className="text-[10px] text-purple-700 font-bold bg-purple-100 px-2 py-0.5 rounded-full">
+                    導師端批閱
+                  </span>
+                </div>
+
+                {allSubmissions.length === 0 ? (
+                  <p className="text-[11px] text-gray-400 py-2 text-center">暫無學生繳交記錄</p>
+                ) : (
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                    {allSubmissions.map((sub) => {
+                      const isReviewingThis = selectedSubForReview === sub.id;
+                      return (
+                        <div
+                          key={sub.id}
+                          className="p-2 bg-white rounded-xl border border-purple-100 text-xs space-y-1"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="font-bold text-gray-800 flex items-center gap-1">
+                              <span>🎒 {sub.studentName}</span>
+                              <span className="text-[10px] text-gray-400">({sub.className || '全體'})</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className="text-[10px] text-gray-400">{sub.submittedAt}</span>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedSubForReview(isReviewingThis ? null : sub.id)}
+                                className="px-2 py-0.5 bg-purple-100 hover:bg-purple-200 text-purple-800 rounded font-bold text-[10px]"
+                              >
+                                {sub.teacherFeedback ? '查看/修改批閱' : '批閱評語'}
+                              </button>
+                            </div>
+                          </div>
+
+                          {sub.comment && (
+                            <div className="text-[11px] text-gray-600 bg-gray-50 p-1.5 rounded">
+                              {sub.comment}
+                            </div>
+                          )}
+
+                          {sub.attachments && sub.attachments.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {sub.attachments.map((att) => (
+                                <button
+                                  key={att.id}
+                                  type="button"
+                                  onClick={() => handleDownload(att as any)}
+                                  className="px-2 py-0.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-[10px] flex items-center gap-1"
+                                >
+                                  <Download size={10} />
+                                  <span className="max-w-[100px] truncate">{att.name}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* 導師評語反饋 */}
+                          {sub.teacherFeedback && !isReviewingThis && (
+                            <div className="text-[10px] text-purple-700 bg-purple-50 p-1.5 rounded">
+                              <span className="font-bold">評分: {sub.teacherScore} · 評語: </span>
+                              {sub.teacherFeedback}
+                            </div>
+                          )}
+
+                          {/* 展開批閱表單 */}
+                          {isReviewingThis && (
+                            <div className="p-2 bg-purple-50/80 rounded-lg space-y-1.5 mt-1 border border-purple-200">
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] font-bold text-gray-600">評分：</span>
+                                {['🌟 優秀', '👍 良好', '✓ 已查閱'].map((s) => (
+                                  <button
+                                    key={s}
+                                    type="button"
+                                    onClick={() => setReviewScore(s)}
+                                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                      reviewScore === s
+                                        ? 'bg-purple-600 text-white'
+                                        : 'bg-white text-gray-700 border border-gray-200'
+                                    }`}
+                                  >
+                                    {s}
+                                  </button>
+                                ))}
+                              </div>
+                              <input
+                                type="text"
+                                value={reviewFeedback}
+                                onChange={(e) => setReviewFeedback(e.target.value)}
+                                placeholder="輸入導師評語與指導..."
+                                className="w-full p-1.5 border border-purple-200 rounded text-xs outline-none bg-white"
+                              />
+                              <div className="flex justify-end gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedSubForReview(null)}
+                                  className="px-2 py-1 bg-gray-200 text-gray-600 rounded text-[10px]"
+                                >
+                                  取消
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveTeacherReview(sub.id)}
+                                  className="px-2.5 py-1 bg-purple-600 text-white rounded text-[10px] font-bold hover:bg-purple-700"
+                                >
+                                  儲存批閱
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
