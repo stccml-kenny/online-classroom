@@ -306,7 +306,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
 
     effectiveUsers.forEach((u) => {
       if (u.role === 'student') {
-        const sName = (u.studentName || u.name || u.username || '').trim();
+        const sName = (u.name || (u as any).studentName || u.username || '').trim();
         const sBranch = (u.branch || '').trim();
         const sClass = (u.className || '').trim();
         if (!sName) return;
