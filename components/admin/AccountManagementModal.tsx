@@ -4,7 +4,7 @@ import {
   Users, Eye, EyeOff, CheckCircle2, AlertCircle,
   UserPlus, Sparkles, LogOut, Check, Search, Filter, Trash2,
   RotateCcw, Copy, Edit2, KeyRound, Download, UploadCloud,
-  FileSpreadsheet, CheckCircle, Plus
+  FileSpreadsheet, CheckCircle, Plus, CheckSquare, Sliders, Square
 } from 'lucide-react';
 import { UserProfile, UserRole, ROLE_CONFIGS, is8DigitNumeric, DEFAULT_DEMO_USERS } from '@/components/auth/AuthModal';
 import { parseBranchInfo, CourseItem, getCourseDisplayName } from '@/components/homework/HomeworkSetupModal';
