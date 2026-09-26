@@ -3,7 +3,7 @@ import { UserProfile } from '@/components/auth/AuthModal';
 import {
   X, Plus, Trash2, Settings, MapPin, GraduationCap, Layers, Edit2, Check, RotateCcw, BookmarkCheck,
   Clock, Calendar, CheckSquare, Square, ChevronDown, ChevronUp, AlertCircle, Sparkles, Filter,
-  BookOpen, ChevronRight, GripVertical
+  BookOpen, ChevronRight, GripVertical, Users
 } from 'lucide-react';
 
 export type CourseStatus = 'active' | 'planning' | 'ended' | 'paused';
@@ -168,6 +168,7 @@ interface HomeworkSetupModalProps {
   onRenameBranch?: (oldName: string, newName: string) => void;
   isReadOnly?: boolean;
   currentUser?: UserProfile | null;
+  usersList?: UserProfile[]; // ⭐ 需求 7：用以計算各課程已參加學生人數
 }
 
 export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
@@ -187,7 +188,46 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
   onRenameBranch,
   isReadOnly = false,
   currentUser = null,
+  usersList = [],
 }) => {
+  // ⭐ 需求 7：課程設定與排程管理中於課程中顯示已參加學生人數
+  const getEnrolledStudentCount = (c: CourseItem): number => {
+    const cName = (c.name || '').trim().toLowerCase();
+    const cDisplayName = getCourseDisplayName(c).trim().toLowerCase();
+    const counted = new Set<string>();
+
+    if (usersList && usersList.length > 0) {
+      usersList.forEach((u) => {
+        if (u.role === 'student' && u.enrolledCourses && u.enrolledCourses.length > 0) {
+          const match = u.enrolledCourses.some((ec) => {
+            const lower = ec.trim().toLowerCase();
+            return lower === cName || lower === cDisplayName || lower.includes(cName) || cName.includes(lower);
+          });
+          if (match) {
+            counted.add(u.username.toLowerCase());
+          }
+        }
+      });
+    }
+
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('oc_local_students');
+        if (raw) {
+          const list: any[] = JSON.parse(raw);
+          list.forEach((s) => {
+            const sCourse = (s.course_name || '').trim().toLowerCase();
+            if (sCourse && (sCourse === cName || sCourse === cDisplayName || sCourse.includes(cName) || cName.includes(sCourse))) {
+              if (s.student_name) counted.add(s.student_name.toLowerCase());
+            }
+          });
+        }
+      } catch (e) {}
+    }
+
+    return counted.size;
+  };
+
   // 順序：課程、學校/分校、班別。根據 mode 決定初始分頁
   const initialTab = mode === 'settings_only' ? 'branches' : 'courses';
   const [activeTab, setActiveTab] = useState<'courses' | 'branches' | 'classes'>(initialTab);
@@ -1199,7 +1239,8 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
               {!isCourseFormOpen && (
                 <>
                   {/* ⭐ 需求 5：設定課程版面 Filter 工具列 */}
-              {!isCourseFormOpen && normalizedCourses.length > 0 && (
+              {/* ⭐ 需求 4：學生帳戶中課程設定與排程管理移除學校或課程選項 */}
+              {!isReadOnly && !isCourseFormOpen && normalizedCourses.length > 0 && (
                 <div className="bg-gray-50 p-2.5 rounded-xl border border-gray-200 space-y-2">
                   <div className="grid grid-cols-2 gap-1.5">
                     {/* 學校/分校篩選 */}
@@ -1311,6 +1352,11 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                             )}
                             <span className="text-[10px] font-semibold text-purple-700 bg-purple-50 border border-purple-100 px-1.5 py-0.5 rounded">
                               共 {sessionsCount} 節
+                            </span>
+                            {/* ⭐ 需求 7：於課程中顯示已參加學生人數 */}
+                            <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                              <Users size={10} className="text-blue-600" />
+                              <span>已參加: {getEnrolledStudentCount(c)} 人</span>
                             </span>
                           </div>
                           {/* ⭐ 課程名稱 + (課程時間)，懸浮呈現品牌亮色 */}

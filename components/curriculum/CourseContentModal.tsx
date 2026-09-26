@@ -22,6 +22,7 @@ interface CourseContentModalProps {
   courseItems?: (string | CourseItem)[];
   initialCourse?: string; // ⭐ 預選課程
   initialBranch?: string; // ⭐ 預選分校
+  initialTab?: 'units' | 'homework'; // ⭐ 預設分頁 (例如直接顯示所有已參加課程家課)
   isLocked?: boolean;     // ⭐ 於課程目錄點擊打開時，鎖上學校及課程選項
   isReadOnly?: boolean;   // ⭐ 學生與家長帳戶唯讀模式
   currentUser?: UserProfile | null;
@@ -133,6 +134,7 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
   courseItems = [],
   initialCourse = '',
   initialBranch = '',
+  initialTab = 'units',
   isLocked = false,
   isReadOnly = false,
   currentUser = null,
@@ -286,9 +288,12 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
       // 打開時若有傳入指定課程或分校則預設套用，否則為全部分校及全部課程
       setSelectedBranch(initialBranch || '全部分校');
       setSelectedCourse(initialCourse || '全部課程');
+      if (initialTab) {
+        setActiveTab(initialTab);
+      }
       Promise.all([fetchUnits(), fetchHomework()]).finally(() => setLoading(false));
     }
-  }, [isOpen, initialCourse, initialBranch]);
+  }, [isOpen, initialCourse, initialBranch, initialTab]);
 
   // 解析單元附件中的本機 Blob 網址
   useEffect(() => {

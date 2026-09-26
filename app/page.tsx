@@ -34,13 +34,24 @@ export default function OnlineClassroomApp() {
   const [showCourseContentModal, setShowCourseContentModal] = useState(false);
   const [courseModalInitialCourse, setCourseModalInitialCourse] = useState<string>('');
   const [courseModalInitialBranch, setCourseModalInitialBranch] = useState<string>('');
+  const [courseModalInitialTab, setCourseModalInitialTab] = useState<'units' | 'homework'>('units');
   const [courseModalIsLocked, setCourseModalIsLocked] = useState<boolean>(false);
 
   // ⭐ 需求：點擊課程打開課程單元及單元家課，鎖上該頁的學校及課程選項
   const handleOpenCourseContent = (courseName?: string, branch?: string, isLocked: boolean = false) => {
     setCourseModalInitialCourse(courseName || '');
     setCourseModalInitialBranch(branch || '全部分校');
+    setCourseModalInitialTab('units');
     setCourseModalIsLocked(isLocked);
+    setShowCourseContentModal(true);
+  };
+
+  // ⭐ 需求 3：學生帳戶中首頁在線交功課按後直接顯示所有已參加之課程的家課
+  const handleOpenStudentHomework = () => {
+    setCourseModalInitialCourse('全部課程');
+    setCourseModalInitialBranch(currentUser?.branch || '全部分校');
+    setCourseModalInitialTab('homework');
+    setCourseModalIsLocked(false);
     setShowCourseContentModal(true);
   };
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
@@ -380,11 +391,13 @@ export default function OnlineClassroomApp() {
     saveSettingToCloud('user_accounts', updated);
   };
 
+  // ⭐ 需求 6：帳戶登出後跳回首頁
   const handleLogout = () => {
     setCurrentUser(null);
     try {
       localStorage.removeItem('oc_current_user');
     } catch (e) {}
+    setActiveTab('home');
   };
 
   const loadNotices = async () => {
@@ -431,6 +444,7 @@ export default function OnlineClassroomApp() {
             onOpenNotices={() => setShowNoticeModal(true)}
             onOpenSetup={() => setShowSetupModal(true)}
             onOpenAccountMgmt={() => setShowAccountMgmtModal(true)}
+            onOpenStudentHomework={handleOpenStudentHomework}
             noticeCount={notices.length}
             courseCount={visibleCourses.length}
             memberCount={0}
@@ -449,7 +463,7 @@ export default function OnlineClassroomApp() {
           />
         )}
 
-        {/* ⭐ 課程目錄：滿板顯示 (學生/家長唯讀且只顯示自己的課程) */}
+        {/* ⭐ 課程目錄：滿板顯示 (學生/家長唯讀且只顯示自己的課程，顯示已參加學生人數) */}
         {activeTab === 'courses' && (
           <div className="flex-1 w-full bg-[#F8F9FA] flex flex-col overflow-hidden pb-16">
             <HomeworkSetupModal
@@ -459,6 +473,7 @@ export default function OnlineClassroomApp() {
               branches={branches}
               classes={classes}
               courses={visibleCourses}
+              usersList={usersList}
               onUpdateBranches={handleUpdateBranches}
               onUpdateClasses={handleUpdateClasses}
               onUpdateCourses={handleUpdateCourses}
@@ -469,7 +484,7 @@ export default function OnlineClassroomApp() {
           </div>
         )}
 
-        {/* ⭐ 需求：將會員目錄功能移到底部會員目錄 (滿板顯示) */}
+        {/* ⭐ 會員目錄：只保留現有會員 (滿板顯示，支援與帳戶中心即時雙向同步) */}
         {activeTab === 'members' && (
           <div className="flex-1 w-full bg-[#F8F9FA] flex flex-col overflow-hidden pb-16">
             <ClassManagementModal
@@ -479,6 +494,12 @@ export default function OnlineClassroomApp() {
               classes={classes}
               courses={courseNames}
               courseItems={courses}
+              usersList={usersList}
+              onUpdateUsersList={(newUsers) => {
+                setUsersList(newUsers);
+                try { localStorage.setItem('oc_users_list', JSON.stringify(newUsers)); } catch (e) {}
+                saveSettingToCloud('user_accounts', newUsers);
+              }}
               onOpenCourseContent={handleOpenCourseContent}
             />
           </div>
@@ -511,13 +532,14 @@ export default function OnlineClassroomApp() {
           loading={loading}
         />
 
-        {/* 2. 第一層目錄：課程內容彈窗 (學生/家長唯讀並提供交功課功能) */}
+        {/* 2. 第一層目錄：課程內容彈窗 (學生/家長唯讀並提供交功課功能，支援直接顯示單元家課) */}
         <CourseContentModal
           isOpen={showCourseContentModal}
           onClose={() => {
             setShowCourseContentModal(false);
             setCourseModalInitialCourse('');
             setCourseModalInitialBranch('');
+            setCourseModalInitialTab('units');
             setCourseModalIsLocked(false);
           }}
           branches={branches}
@@ -526,6 +548,7 @@ export default function OnlineClassroomApp() {
           courseItems={visibleCourses}
           initialCourse={courseModalInitialCourse}
           initialBranch={courseModalInitialBranch}
+          initialTab={courseModalInitialTab}
           isLocked={courseModalIsLocked}
           isReadOnly={isStudentOrParent}
           currentUser={currentUser}

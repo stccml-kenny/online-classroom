@@ -15,6 +15,7 @@ interface HomeViewProps {
   onOpenNotices: () => void;
   onOpenSetup?: () => void;
   onOpenAccountMgmt?: () => void; // 👑 管理員派發帳戶入口
+  onOpenStudentHomework?: () => void; // ⭐ 學生直接開啟所有已參加課程家課
   noticeCount?: number;
   courseCount?: number;
   memberCount?: number;
@@ -28,6 +29,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onOpenNotices,
   onOpenSetup,
   onOpenAccountMgmt,
+  onOpenStudentHomework,
   noticeCount = 0,
   courseCount = 0,
   memberCount = 0
@@ -87,7 +89,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <p className="text-xs text-white/90">
                   {isStudentOrParent
                     ? `您目前的專屬課程：${currentUser.branch || '總校'} · ${currentUser.className || '班別'}`
-                    : `身分：${ROLE_CONFIGS[currentUser.role]?.label} · ${currentUser.branch || '總校'}`}\n                </p>
+                    : `身分：${ROLE_CONFIGS[currentUser.role]?.label} · ${currentUser.branch || '總校'}`}
+                </p>
               </>
             ) : (
               <>
@@ -268,7 +271,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <>
                 <button
                   type="button"
-                  onClick={() => onNavigateTab('courses')}
+                  onClick={onOpenStudentHomework || (() => onNavigateTab('courses'))}
                   className="p-3.5 bg-white border border-gray-150 rounded-2xl text-left shadow-xs hover:border-[#FF6B57] hover:shadow-sm transition-all group flex flex-col justify-between h-24"
                 >
                   <div className="flex justify-between items-start">
@@ -281,7 +284,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   </div>
                   <div>
                     <div className="text-xs font-bold text-gray-800 group-hover:text-amber-700">在線交功課</div>
-                    <div className="text-[10px] text-gray-400">拍照上傳作業與筆記</div>
+                    <div className="text-[10px] text-gray-400">直接顯示所有已參加課程之家課</div>
                   </div>
                 </button>
 
