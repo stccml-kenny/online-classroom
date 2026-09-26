@@ -152,6 +152,12 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
     return getCoursesForBranch(branch);
   }, [branch, courses, courseNames]);
 
+  // ⭐ 需求：帳戶名冊依學校/分校過濾 (必須置於 early return 之前以嚴格遵守 Rules of Hooks)
+  const allKnownBranches = React.useMemo(() => {
+    const list = allAccounts.map((u) => u.branch).filter(Boolean) as string[];
+    return Array.from(new Set([...branches, ...list]));
+  }, [branches, allAccounts]);
+
   if (!isOpen) return null;
 
   // 產生 8 位隨機純數字密碼
@@ -871,12 +877,6 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
     setParsedRows([]);
     setActiveTab('list');
   };
-
-  // ⭐ 需求：帳戶名冊依學校/分校過濾
-  const allKnownBranches = React.useMemo(() => {
-    const list = allAccounts.map((u) => u.branch).filter(Boolean) as string[];
-    return Array.from(new Set([...branches, ...list]));
-  }, [branches, allAccounts]);
 
   // 篩選帳號清單
   const filteredAccounts = allAccounts.filter((u) => {

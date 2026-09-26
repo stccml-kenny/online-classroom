@@ -792,33 +792,72 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
       onUpdateUsersList(updatedUsers);
     }
 
-    // 3. 會員目錄 (oc_local_students) 剔除該課程並同步
+    // 3. 會員目錄 (oc_local_students) 剔除該課程 (⭐ 嚴格保證不刪除會員與帳戶，僅剔除課程)
     if (typeof window !== 'undefined') {
       try {
         const raw = localStorage.getItem('oc_local_students');
         if (raw) {
           const list: any[] = JSON.parse(raw);
-          const updatedLocalStudents = list.filter((s) => {
-            return !isCourseMatch(s.course_name, targetCourseName, targetTimeSlot, targetBranch, s.branch);
+          // 統計每位學生的總記錄數
+          const studentDocCounts = new Map<string, number>();
+          list.forEach((s) => {
+            const key = `${(s.branch || '').toLowerCase()}___${(s.student_name || '').toLowerCase()}`;
+            studentDocCounts.set(key, (studentDocCounts.get(key) || 0) + 1);
+          });
+
+          const updatedLocalStudents: any[] = [];
+          list.forEach((s) => {
+            const isMatch = isCourseMatch(s.course_name, targetCourseName, targetTimeSlot, targetBranch, s.branch);
+            if (isMatch) {
+              const key = `${(s.branch || '').toLowerCase()}___${(s.student_name || '').toLowerCase()}`;
+              const count = studentDocCounts.get(key) || 1;
+              if (count <= 1) {
+                // 若僅有此一條記錄，保留會員基本資料（姓名、分校、班別），僅清空課程名稱
+                updatedLocalStudents.push({ ...s, course_name: '' });
+              } else {
+                // 若有多條其他課程記錄，僅剔除此條記錄
+                studentDocCounts.set(key, count - 1);
+              }
+            } else {
+              updatedLocalStudents.push(s);
+            }
           });
           localStorage.setItem('oc_local_students', JSON.stringify(updatedLocalStudents));
         }
       } catch (e) {}
     }
 
-    // 4. Appwrite 雲端資料庫 students 表同步刪除
+    // 4. Appwrite 雲端資料庫 students 表同步更新 (⭐ 不刪除會員，僅剔除該課程)
     try {
       const res = await databases.listDocuments(DATABASE_ID, 'students', [Query.limit(500)]);
-      const docsToDelete = (res.documents || []).filter((doc: any) =>
-        isCourseMatch(doc.course_name, targetCourseName, targetTimeSlot, targetBranch, doc.branch)
-      );
-      for (const d of docsToDelete) {
-        try {
-          await databases.deleteDocument(DATABASE_ID, 'students', d.$id);
-        } catch (de) {}
+      const docs = (res.documents || []) as any[];
+
+      const studentDocCounts = new Map<string, number>();
+      docs.forEach((d) => {
+        const key = `${(d.branch || '').toLowerCase()}___${(d.student_name || '').toLowerCase()}`;
+        studentDocCounts.set(key, (studentDocCounts.get(key) || 0) + 1);
+      });
+
+      for (const d of docs) {
+        if (isCourseMatch(d.course_name, targetCourseName, targetTimeSlot, targetBranch, d.branch)) {
+          const key = `${(d.branch || '').toLowerCase()}___${(d.student_name || '').toLowerCase()}`;
+          const count = studentDocCounts.get(key) || 1;
+          if (count <= 1) {
+            // 學生僅有此一條記錄：更新 course_name 為空字串，完整保留會員基本資料
+            try {
+              await databases.updateDocument(DATABASE_ID, 'students', d.$id, { course_name: '' });
+            } catch (ue) {}
+          } else {
+            // 學生尚有其他課程：安全移除此一堂課之記錄
+            try {
+              await databases.deleteDocument(DATABASE_ID, 'students', d.$id);
+              studentDocCounts.set(key, count - 1);
+            } catch (de) {}
+          }
+        }
       }
     } catch (err: any) {
-      console.warn('雲端刪除修讀記錄略過或無權限:', err.message);
+      console.warn('雲端更新修讀記錄略過或無權限:', err.message);
     }
   };
 

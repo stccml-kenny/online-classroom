@@ -693,21 +693,23 @@ export default function OnlineClassroomApp() {
         />
 
         {/* 8. 👑 系統管理員專屬：帳戶管理與派發中心 (統一派發5大身分帳號) */}
-        <AccountManagementModal
-          isOpen={showAccountMgmtModal}
-          onClose={() => setShowAccountMgmtModal(false)}
-          branches={branches}
-          classes={classes}
-          courses={courses}
-          courseNames={courseNames}
-          currentUser={currentUser}
-          usersList={usersList}
-          onUpdateUsersList={(newUsers) => {
-            setUsersList(newUsers);
-            try { localStorage.setItem('oc_users_list', JSON.stringify(newUsers)); } catch (e) {}
-            saveSettingToCloud('user_accounts', newUsers);
-          }}
-        />
+        {showAccountMgmtModal && (
+          <AccountManagementModal
+            isOpen={true}
+            onClose={() => setShowAccountMgmtModal(false)}
+            branches={branches}
+            classes={classes}
+            courses={courses}
+            courseNames={courseNames}
+            currentUser={currentUser}
+            usersList={usersList}
+            onUpdateUsersList={(newUsers) => {
+              setUsersList(newUsers);
+              try { localStorage.setItem('oc_users_list', JSON.stringify(newUsers)); } catch (e) {}
+              saveSettingToCloud('user_accounts', newUsers);
+            }}
+          />
+        )}
       </div>
     </div>
   );
