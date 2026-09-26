@@ -740,6 +740,289 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
+  // 下載 Excel / CSV 批次匯入空白範本
+  const handleDownloadTemplate = () => {
+    // ⭐ 需求 2：範本排位與匯出名冊完全一致
+    const headers = [
+      '身分(學生/家長/導師/助教/管理員)',
+      '用戶姓名',
+      '登入帳號',
+      '8位純數字密碼(選填)',
+      '學校/分校(學生專用)',
+      '班別(學生專用)',
+      '參加課程(多個以分號隔開)',
+      '聯絡電話(選填)',
+      '關聯子女帳號(家長專用，多個分號隔開)'
+    ];
+    const sampleRows = [
+      '學生,陳小明,101,12345678,沙田分校 (ST),1A,常規中文班; 奧數思維班,91234567,',
+      '家長,陳家長,parent_101,12345678,,,,ST_101',
+      '導師,張導師,teacher_zhang,12345678,,,,92345678,',
+      '助教,李助教,ta_lee,12345678,,,,93456789,'
+    ];
+    const csvContent = String.fromCharCode(0xFEFF) + [headers.join(','), ...sampleRows].join(String.fromCharCode(10));
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', '帳戶名冊批次匯入範本.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const parseRole = (raw: string): UserRole => {
+    const s = (raw || '').toLowerCase().trim();
+    if (s.includes('家長') || s.includes('parent')) return 'parent';
+    if (s.includes('導師') || s.includes('老師') || s.includes('teacher')) return 'teacher';
+    if (s.includes('助教') || s.includes('assistant') || s.includes('ta')) return 'assistant';
+    if (s.includes('管理') || s.includes('admin')) return 'admin';
+    return 'student';
+  };
+
+  // 處理 Excel/CSV 檔案選取與解析 (支援智慧欄位識別與標準欄位順序解析)
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const text = (evt.target?.result as string) || '';
+        const lines = text
+          .split(String.fromCharCode(10))
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0);
+
+        if (lines.length === 0) {
+          alert('上傳的檔案為空！');
+          return;
+        }
+
+        const parseCSVLine = (line: string): string[] => {
+          const result: string[] = [];
+          let current = '';
+          let inQuotes = false;
+          for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            if (char === '"') {
+              if (inQuotes && line[i + 1] === '"') {
+                current += '"';
+                i++;
+              } else {
+                inQuotes = !inQuotes;
+              }
+            } else if (char === ',' && !inQuotes) {
+              result.push(current.trim().replace(/^["'\t]|["'\t]$/g, ''));
+              current = '';
+            } else {
+              current += char;
+            }
+          }
+          result.push(current.trim().replace(/^["'\t]|["'\t]$/g, ''));
+          return result;
+        };
+
+        const firstLineCols = parseCSVLine(lines[0]);
+        const hasHeader = firstLineCols.some((c) =>
+          ['姓名', '身分', '身份', '帳號', '账号', 'role', 'username'].some((k) => c.toLowerCase().includes(k))
+        );
+
+        // 智慧欄位索引對應 (若有標題列，依標題精準映射；無標題列則使用標準排位)
+        let colRole = 0;
+        let colName = 1;
+        let colUsername = 2;
+        let colPassword = 3;
+        let colBranch = 4;
+        let colClass = 5;
+        let colCourses = 6;
+        let colPhone = 7;
+        let colChildren = 8;
+
+        if (hasHeader) {
+          firstLineCols.forEach((h, idx) => {
+            const hClean = h.replace(/\s+/g, '').toLowerCase();
+            if (hClean.includes('代碼') || hClean.includes('code')) {
+              // 略過純代碼欄位 (如以前匯出的身分代碼)
+              return;
+            }
+            if ((hClean.includes('身分') || hClean.includes('身份') || hClean === 'role') && colRole === 0) {
+              colRole = idx;
+            } else if ((hClean.includes('姓名') || hClean.includes('name')) && !hClean.includes('子女')) {
+              colName = idx;
+            } else if (hClean.includes('子女') || hClean.includes('孩子') || hClean.includes('child')) {
+              colChildren = idx;
+            } else if (hClean.includes('帳號') || hClean.includes('账号') || hClean.includes('username') || hClean.includes('登入')) {
+              colUsername = idx;
+            } else if (hClean.includes('密碼') || hClean.includes('密码') || hClean.includes('password') || hClean.includes('pwd')) {
+              colPassword = idx;
+            } else if (hClean.includes('學校') || hClean.includes('分校') || hClean.includes('branch') || hClean.includes('校區')) {
+              colBranch = idx;
+            } else if (hClean.includes('班別') || hClean.includes('班級') || hClean.includes('class')) {
+              colClass = idx;
+            } else if (hClean.includes('課程') || hClean.includes('课程') || hClean.includes('course')) {
+              colCourses = idx;
+            } else if (hClean.includes('電話') || hClean.includes('电话') || hClean.includes('phone') || hClean.includes('tel')) {
+              colPhone = idx;
+            }
+          });
+        }
+
+        const rows: UserProfile[] = [];
+        const startIndex = hasHeader ? 1 : 0;
+
+        for (let i = startIndex; i < lines.length; i++) {
+          const parts = parseCSVLine(lines[i]);
+          if (parts.length >= 2) {
+            const rawRole = parts[colRole] || '學生';
+            const parsedR = parseRole(rawRole);
+            const uName = parts[colName] || '';
+            let uUsername = parts[colUsername] || '';
+            let uPassword = (parts[colPassword] || '').replace(/\D/g, '').slice(0, 8);
+            if (uPassword.length !== 8) {
+              uPassword = uPassword.padEnd(8, '0');
+              if (uPassword.length !== 8 || uPassword === '00000000') uPassword = '12345678';
+            }
+
+            const uBranch = parsedR === 'student' ? (parts[colBranch] || branches[0] || '總校') : undefined;
+            const uClass = parsedR === 'student' ? (parts[colClass] || classes[0] || '全校') : undefined;
+            const uCourses = parsedR === 'student' && parts[colCourses]
+              ? parts[colCourses].split(/[;、|]+/).map((x) => x.trim()).filter(Boolean)
+              : undefined;
+            const uPhone = parts[colPhone] || undefined;
+            const uChildren = parsedR === 'parent' && parts[colChildren]
+              ? parts[colChildren].split(/[;、|]+/).map((x) => x.trim()).filter(Boolean)
+              : undefined;
+
+            if (parsedR === 'student' && uBranch) {
+              const code = parseBranchInfo(uBranch).code;
+              if (code && !uUsername.toLowerCase().startsWith(`${code}_`.toLowerCase())) {
+                uUsername = `${code}_${uUsername}`;
+              }
+            }
+
+            if (uName && uUsername) {
+              rows.push({
+                id: `user_imp_${Date.now()}_${i}`,
+                name: uName,
+                username: uUsername,
+                role: parsedR,
+                password: uPassword,
+                branch: uBranch,
+                className: uClass,
+                enrolledCourses: uCourses,
+                phone: uPhone,
+                childrenUsernames: uChildren,
+                createdAt: new Date().toISOString()
+              });
+            }
+          }
+        }
+
+        if (rows.length === 0) {
+          alert('未能識別檔案中的數據，請參考標準範本：身分,姓名,帳號,8位密碼,分校,班別,參加課程,電話,關聯子女帳號');
+          return;
+        }
+
+        setParsedRows(rows);
+      } catch (err: any) {
+        alert('解析檔案失敗：' + err.message);
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+  };
+
+  // 確認批次匯入
+  const handleConfirmBatchImport = () => {
+    if (parsedRows.length === 0) return;
+    setUploading(true);
+
+    const existingUsernames = new Set(allAccounts.map((u) => u.username.toLowerCase()));
+    const validNewAccounts: UserProfile[] = [];
+    let duplicateCount = 0;
+
+    for (const row of parsedRows) {
+      if (existingUsernames.has(row.username.toLowerCase())) {
+        duplicateCount++;
+      } else {
+        existingUsernames.add(row.username.toLowerCase());
+        validNewAccounts.push(row);
+      }
+    }
+
+    if (validNewAccounts.length === 0) {
+      alert(`⚠️ 檔案中全部 ${parsedRows.length} 個帳號名稱皆已存在於系統中，未匯入任何重複帳號。`);
+      setUploading(false);
+      return;
+    }
+
+    const updated = [...validNewAccounts, ...cleanUsersList];
+    onUpdateUsersList(updated);
+    setUploading(false);
+
+    // 批次匯入學生帳戶時同步加入會員目錄 (students 表)
+    const newStudentsToSync = validNewAccounts.filter((a) => a.role === 'student');
+    if (newStudentsToSync.length > 0) {
+      try {
+        const cached = localStorage.getItem('oc_local_students');
+        const list = cached ? JSON.parse(cached) : [];
+        newStudentsToSync.forEach((acc, i) => {
+          const coursesToEnroll = acc.enrolledCourses && acc.enrolledCourses.length > 0 ? acc.enrolledCourses : [''];
+          coursesToEnroll.forEach((cName, cIdx) => {
+            list.unshift({
+              $id: `stu_imp_${Date.now()}_${i}_${cIdx}`,
+              branch: acc.branch || '',
+              class_name: acc.className || '',
+              course_name: cName,
+              student_name: acc.name,
+            });
+          });
+        });
+        localStorage.setItem('oc_local_students', JSON.stringify(list));
+      } catch (e) {}
+
+      newStudentsToSync.forEach((acc) => {
+        const coursesToEnroll = acc.enrolledCourses && acc.enrolledCourses.length > 0 ? acc.enrolledCourses : [''];
+        coursesToEnroll.forEach((cName) => {
+          try {
+            databases.createDocument(DATABASE_ID, 'students', ID.unique(), {
+              branch: acc.branch || '',
+              class_name: acc.className || '',
+              course_name: cName,
+              student_name: acc.name,
+            }).catch(() => {});
+          } catch (e) {}
+        });
+      });
+    }
+
+    alert(`🎉 批次匯入完成！成功建立 ${validNewAccounts.length} 個新帳戶${duplicateCount > 0 ? `（略過 ${duplicateCount} 個重複帳號）` : ''}。`);
+    setParsedRows([]);
+    setActiveTab('list');
+  };
+
+  // 篩選帳號清單
+  const filteredAccounts = allAccounts.filter((u) => {
+    if (filterRole !== 'all' && u.role !== filterRole) return false;
+    if (filterBranch !== 'all') {
+      const uBranch = (u.branch || '').trim();
+      if (!uBranch || (uBranch !== filterBranch && !uBranch.includes(filterBranch) && !filterBranch.includes(uBranch))) {
+        return false;
+      }
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      const matchName = u.name.toLowerCase().includes(q);
+      const matchUsername = u.username.toLowerCase().includes(q);
+      const matchBranch = (u.branch || '').toLowerCase().includes(q);
+      const matchCourse = (u.enrolledCourses || []).some((c) => c.toLowerCase().includes(q));
+      const matchChild = (u.childrenUsernames || []).some((cu) => cu.toLowerCase().includes(q));
+      if (!matchName && !matchUsername && !matchBranch && !matchCourse && !matchChild) return false;
+    }
+    return true;
+  });
+
   // ⭐ 批次選擇邏輯
   const selectableAccounts = filteredAccounts.filter((u) => u.username !== 'admin');
   const isAllSelected =
@@ -1071,289 +1354,6 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
       setBatchProcessing(false);
     }
   };
-
-    // 下載 Excel / CSV 批次匯入空白範本
-  const handleDownloadTemplate = () => {
-    // ⭐ 需求 2：範本排位與匯出名冊完全一致
-    const headers = [
-      '身分(學生/家長/導師/助教/管理員)',
-      '用戶姓名',
-      '登入帳號',
-      '8位純數字密碼(選填)',
-      '學校/分校(學生專用)',
-      '班別(學生專用)',
-      '參加課程(多個以分號隔開)',
-      '聯絡電話(選填)',
-      '關聯子女帳號(家長專用，多個分號隔開)'
-    ];
-    const sampleRows = [
-      '學生,陳小明,101,12345678,沙田分校 (ST),1A,常規中文班; 奧數思維班,91234567,',
-      '家長,陳家長,parent_101,12345678,,,,ST_101',
-      '導師,張導師,teacher_zhang,12345678,,,,92345678,',
-      '助教,李助教,ta_lee,12345678,,,,93456789,'
-    ];
-    const csvContent = String.fromCharCode(0xFEFF) + [headers.join(','), ...sampleRows].join(String.fromCharCode(10));
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', '帳戶名冊批次匯入範本.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
-
-  const parseRole = (raw: string): UserRole => {
-    const s = (raw || '').toLowerCase().trim();
-    if (s.includes('家長') || s.includes('parent')) return 'parent';
-    if (s.includes('導師') || s.includes('老師') || s.includes('teacher')) return 'teacher';
-    if (s.includes('助教') || s.includes('assistant') || s.includes('ta')) return 'assistant';
-    if (s.includes('管理') || s.includes('admin')) return 'admin';
-    return 'student';
-  };
-
-  // 處理 Excel/CSV 檔案選取與解析 (支援智慧欄位識別與標準欄位順序解析)
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      try {
-        const text = (evt.target?.result as string) || '';
-        const lines = text
-          .split(String.fromCharCode(10))
-          .map((line) => line.trim())
-          .filter((line) => line.length > 0);
-
-        if (lines.length === 0) {
-          alert('上傳的檔案為空！');
-          return;
-        }
-
-        const parseCSVLine = (line: string): string[] => {
-          const result: string[] = [];
-          let current = '';
-          let inQuotes = false;
-          for (let i = 0; i < line.length; i++) {
-            const char = line[i];
-            if (char === '"') {
-              if (inQuotes && line[i + 1] === '"') {
-                current += '"';
-                i++;
-              } else {
-                inQuotes = !inQuotes;
-              }
-            } else if (char === ',' && !inQuotes) {
-              result.push(current.trim().replace(/^["'\t]|["'\t]$/g, ''));
-              current = '';
-            } else {
-              current += char;
-            }
-          }
-          result.push(current.trim().replace(/^["'\t]|["'\t]$/g, ''));
-          return result;
-        };
-
-        const firstLineCols = parseCSVLine(lines[0]);
-        const hasHeader = firstLineCols.some((c) =>
-          ['姓名', '身分', '身份', '帳號', '账号', 'role', 'username'].some((k) => c.toLowerCase().includes(k))
-        );
-
-        // 智慧欄位索引對應 (若有標題列，依標題精準映射；無標題列則使用標準排位)
-        let colRole = 0;
-        let colName = 1;
-        let colUsername = 2;
-        let colPassword = 3;
-        let colBranch = 4;
-        let colClass = 5;
-        let colCourses = 6;
-        let colPhone = 7;
-        let colChildren = 8;
-
-        if (hasHeader) {
-          firstLineCols.forEach((h, idx) => {
-            const hClean = h.replace(/\s+/g, '').toLowerCase();
-            if (hClean.includes('代碼') || hClean.includes('code')) {
-              // 略過純代碼欄位 (如以前匯出的身分代碼)
-              return;
-            }
-            if ((hClean.includes('身分') || hClean.includes('身份') || hClean === 'role') && colRole === 0) {
-              colRole = idx;
-            } else if ((hClean.includes('姓名') || hClean.includes('name')) && !hClean.includes('子女')) {
-              colName = idx;
-            } else if (hClean.includes('子女') || hClean.includes('孩子') || hClean.includes('child')) {
-              colChildren = idx;
-            } else if (hClean.includes('帳號') || hClean.includes('账号') || hClean.includes('username') || hClean.includes('登入')) {
-              colUsername = idx;
-            } else if (hClean.includes('密碼') || hClean.includes('密码') || hClean.includes('password') || hClean.includes('pwd')) {
-              colPassword = idx;
-            } else if (hClean.includes('學校') || hClean.includes('分校') || hClean.includes('branch') || hClean.includes('校區')) {
-              colBranch = idx;
-            } else if (hClean.includes('班別') || hClean.includes('班級') || hClean.includes('class')) {
-              colClass = idx;
-            } else if (hClean.includes('課程') || hClean.includes('课程') || hClean.includes('course')) {
-              colCourses = idx;
-            } else if (hClean.includes('電話') || hClean.includes('电话') || hClean.includes('phone') || hClean.includes('tel')) {
-              colPhone = idx;
-            }
-          });
-        }
-
-        const rows: UserProfile[] = [];
-        const startIndex = hasHeader ? 1 : 0;
-
-        for (let i = startIndex; i < lines.length; i++) {
-          const parts = parseCSVLine(lines[i]);
-          if (parts.length >= 2) {
-            const rawRole = parts[colRole] || '學生';
-            const parsedR = parseRole(rawRole);
-            const uName = parts[colName] || '';
-            let uUsername = parts[colUsername] || '';
-            let uPassword = (parts[colPassword] || '').replace(/\D/g, '').slice(0, 8);
-            if (uPassword.length !== 8) {
-              uPassword = uPassword.padEnd(8, '0');
-              if (uPassword.length !== 8 || uPassword === '00000000') uPassword = '12345678';
-            }
-
-            const uBranch = parsedR === 'student' ? (parts[colBranch] || branches[0] || '總校') : undefined;
-            const uClass = parsedR === 'student' ? (parts[colClass] || classes[0] || '全校') : undefined;
-            const uCourses = parsedR === 'student' && parts[colCourses]
-              ? parts[colCourses].split(/[;、|]+/).map((x) => x.trim()).filter(Boolean)
-              : undefined;
-            const uPhone = parts[colPhone] || undefined;
-            const uChildren = parsedR === 'parent' && parts[colChildren]
-              ? parts[colChildren].split(/[;、|]+/).map((x) => x.trim()).filter(Boolean)
-              : undefined;
-
-            if (parsedR === 'student' && uBranch) {
-              const code = parseBranchInfo(uBranch).code;
-              if (code && !uUsername.toLowerCase().startsWith(`${code}_`.toLowerCase())) {
-                uUsername = `${code}_${uUsername}`;
-              }
-            }
-
-            if (uName && uUsername) {
-              rows.push({
-                id: `user_imp_${Date.now()}_${i}`,
-                name: uName,
-                username: uUsername,
-                role: parsedR,
-                password: uPassword,
-                branch: uBranch,
-                className: uClass,
-                enrolledCourses: uCourses,
-                phone: uPhone,
-                childrenUsernames: uChildren,
-                createdAt: new Date().toISOString()
-              });
-            }
-          }
-        }
-
-        if (rows.length === 0) {
-          alert('未能識別檔案中的數據，請參考標準範本：身分,姓名,帳號,8位密碼,分校,班別,參加課程,電話,關聯子女帳號');
-          return;
-        }
-
-        setParsedRows(rows);
-      } catch (err: any) {
-        alert('解析檔案失敗：' + err.message);
-      }
-    };
-    reader.readAsText(file, 'UTF-8');
-  };
-
-  // 確認批次匯入
-  const handleConfirmBatchImport = () => {
-    if (parsedRows.length === 0) return;
-    setUploading(true);
-
-    const existingUsernames = new Set(allAccounts.map((u) => u.username.toLowerCase()));
-    const validNewAccounts: UserProfile[] = [];
-    let duplicateCount = 0;
-
-    for (const row of parsedRows) {
-      if (existingUsernames.has(row.username.toLowerCase())) {
-        duplicateCount++;
-      } else {
-        existingUsernames.add(row.username.toLowerCase());
-        validNewAccounts.push(row);
-      }
-    }
-
-    if (validNewAccounts.length === 0) {
-      alert(`⚠️ 檔案中全部 ${parsedRows.length} 個帳號名稱皆已存在於系統中，未匯入任何重複帳號。`);
-      setUploading(false);
-      return;
-    }
-
-    const updated = [...validNewAccounts, ...cleanUsersList];
-    onUpdateUsersList(updated);
-    setUploading(false);
-
-    // 批次匯入學生帳戶時同步加入會員目錄 (students 表)
-    const newStudentsToSync = validNewAccounts.filter((a) => a.role === 'student');
-    if (newStudentsToSync.length > 0) {
-      try {
-        const cached = localStorage.getItem('oc_local_students');
-        const list = cached ? JSON.parse(cached) : [];
-        newStudentsToSync.forEach((acc, i) => {
-          const coursesToEnroll = acc.enrolledCourses && acc.enrolledCourses.length > 0 ? acc.enrolledCourses : [''];
-          coursesToEnroll.forEach((cName, cIdx) => {
-            list.unshift({
-              $id: `stu_imp_${Date.now()}_${i}_${cIdx}`,
-              branch: acc.branch || '',
-              class_name: acc.className || '',
-              course_name: cName,
-              student_name: acc.name,
-            });
-          });
-        });
-        localStorage.setItem('oc_local_students', JSON.stringify(list));
-      } catch (e) {}
-
-      newStudentsToSync.forEach((acc) => {
-        const coursesToEnroll = acc.enrolledCourses && acc.enrolledCourses.length > 0 ? acc.enrolledCourses : [''];
-        coursesToEnroll.forEach((cName) => {
-          try {
-            databases.createDocument(DATABASE_ID, 'students', ID.unique(), {
-              branch: acc.branch || '',
-              class_name: acc.className || '',
-              course_name: cName,
-              student_name: acc.name,
-            }).catch(() => {});
-          } catch (e) {}
-        });
-      });
-    }
-
-    alert(`🎉 批次匯入完成！成功建立 ${validNewAccounts.length} 個新帳戶${duplicateCount > 0 ? `（略過 ${duplicateCount} 個重複帳號）` : ''}。`);
-    setParsedRows([]);
-    setActiveTab('list');
-  };
-
-  // 篩選帳號清單
-  const filteredAccounts = allAccounts.filter((u) => {
-    if (filterRole !== 'all' && u.role !== filterRole) return false;
-    if (filterBranch !== 'all') {
-      const uBranch = (u.branch || '').trim();
-      if (!uBranch || (uBranch !== filterBranch && !uBranch.includes(filterBranch) && !filterBranch.includes(uBranch))) {
-        return false;
-      }
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      const matchName = u.name.toLowerCase().includes(q);
-      const matchUsername = u.username.toLowerCase().includes(q);
-      const matchBranch = (u.branch || '').toLowerCase().includes(q);
-      const matchCourse = (u.enrolledCourses || []).some((c) => c.toLowerCase().includes(q));
-      const matchChild = (u.childrenUsernames || []).some((cu) => cu.toLowerCase().includes(q));
-      if (!matchName && !matchUsername && !matchBranch && !matchCourse && !matchChild) return false;
-    }
-    return true;
-  });
 
   return (
     <div className="fixed inset-0 z-50 bg-[#F8F9FA] flex flex-col w-full h-full overflow-hidden animate-in fade-in duration-200">
