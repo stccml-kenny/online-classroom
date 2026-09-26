@@ -63,13 +63,14 @@ export default function OnlineClassroomApp() {
     const userClass = (currentUser.className || '').trim().toLowerCase();
 
     return courses.filter((c) => {
-      const cBranch = (typeof c === 'object' ? c.branch || '' : '').trim().toLowerCase();
+      const cItem: CourseItem | null = typeof c === 'object' && c !== null ? (c as CourseItem) : null;
+      const cBranch = (cItem ? cItem.branch || '' : '').trim().toLowerCase();
       const branchMatch = !cBranch || cBranch === '全部分校' || cBranch === userBranch;
       if (!branchMatch) return false;
 
-      if (typeof c === 'object' && c.targetClasses && c.targetClasses.length > 0) {
+      if (cItem && cItem.targetClasses && cItem.targetClasses.length > 0) {
         if (userClass && userClass !== '全體' && userClass !== '全校') {
-          return c.targetClasses.some((tc) => tc.trim().toLowerCase() === userClass);
+          return cItem.targetClasses.some((tc) => tc.trim().toLowerCase() === userClass);
         }
       }
       return true;

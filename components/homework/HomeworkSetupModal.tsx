@@ -19,6 +19,7 @@ export interface CourseItem {
   id: string;
   name: string;             // 課程名稱
   branch?: string;          // ⭐ 為那間學校/分校的課程 (所屬學校)
+  targetClasses?: string[]; // 目標班別
   timeSlot?: string;        // 課程時間 (例如 "14:00 - 15:30")
   totalSessions?: number;   // 課程節數 (例如 8)
   sessionDates: string[];   // 課程每節日期清單 (YYYY-MM-DD[])
