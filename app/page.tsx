@@ -133,8 +133,9 @@ export default function OnlineClassroomApp() {
             } else if (doc.setting_key === 'user_accounts' && doc.setting_value) {
               const parsed = JSON.parse(doc.setting_value);
               if (Array.isArray(parsed)) {
-                setUsersList(parsed);
-                try { localStorage.setItem('oc_users_list', JSON.stringify(parsed)); } catch (e) {}
+                const cleaned = parsed.filter((u: any) => !['teacher_chen', 'ta_wong', 'student_lok', 'parent_lok'].includes((u.username || '').toLowerCase()));
+                setUsersList(cleaned);
+                try { localStorage.setItem('oc_users_list', JSON.stringify(cleaned)); } catch (e) {}
               }
             }
           } catch (pe) {}
@@ -292,10 +293,23 @@ export default function OnlineClassroomApp() {
       if (savedClasses) setClasses(JSON.parse(savedClasses));
 
       const savedUser = localStorage.getItem('oc_current_user');
-      if (savedUser) setCurrentUser(JSON.parse(savedUser));
+      if (savedUser) {
+        const u = JSON.parse(savedUser);
+        if (['teacher_chen', 'ta_wong', 'student_lok', 'parent_lok'].includes((u.username || '').toLowerCase())) {
+          localStorage.removeItem('oc_current_user');
+        } else {
+          setCurrentUser(u);
+        }
+      }
 
       const savedUsersList = localStorage.getItem('oc_users_list');
-      if (savedUsersList) setUsersList(JSON.parse(savedUsersList));
+      if (savedUsersList) {
+        const parsed = JSON.parse(savedUsersList);
+        if (Array.isArray(parsed)) {
+          const cleaned = parsed.filter((u: any) => !['teacher_chen', 'ta_wong', 'student_lok', 'parent_lok'].includes((u.username || '').toLowerCase()));
+          setUsersList(cleaned);
+        }
+      }
 
       localStorage.removeItem('oc_settings_presets');
     } catch (e) {}

@@ -1,9 +1,10 @@
-﻿import React, { useState } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import {
   X, User, Lock, Phone, MapPin, Layers, Shield, GraduationCap,
   Users, Eye, EyeOff, CheckCircle2, AlertCircle,
   UserPlus, Sparkles, LogOut, Check, Search, Filter, Trash2,
-  RotateCcw, Copy, Edit2, KeyRound
+  RotateCcw, Copy, Edit2, KeyRound, Download, UploadCloud,
+  FileSpreadsheet, CheckCircle
 } from 'lucide-react';
 import { UserProfile, UserRole, ROLE_CONFIGS, is8DigitNumeric, DEFAULT_DEMO_USERS } from '@/components/auth/AuthModal';
 
@@ -17,6 +18,8 @@ interface AccountManagementModalProps {
   onUpdateUsersList: (newUsers: UserProfile[]) => void;
 }
 
+const DUMMY_USERNAMES = ['teacher_chen', 'ta_wong', 'student_lok', 'parent_lok'];
+
 export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
   isOpen,
   onClose,
@@ -26,11 +29,11 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
   usersList = [],
   onUpdateUsersList
 }) => {
-  const [activeTab, setActiveTab] = useState<'issue' | 'list'>('issue');
+  const [activeTab, setActiveTab] = useState<'issue' | 'excel' | 'list'>('issue');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterRole, setFilterRole] = useState<string>('all');
 
-  // 派發新帳戶表單
+  // 派發新帳戶單筆表單
   const [role, setRole] = useState<UserRole>('student');
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
@@ -46,16 +49,38 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
   const [resettingUserId, setResettingUserId] = useState<string | null>(null);
   const [newResetPassword, setNewResetPassword] = useState('');
 
-  // 顯示所有帳號（含預設帳號與自訂派發帳號）
+  // Excel / CSV 批次匯入狀態
+  const [parsedRows, setParsedRows] = useState<UserProfile[]>([]);
+  const [uploading, setUploading] = useState(false);
+
+  // ⭐ 需求 1：除了 admin 總管理員之外，移除所有 dummy 示範帳號
+  // 自動過濾 usersList 內可能殘留之舊 dummy 帳號
+  const cleanUsersList = React.useMemo(() => {
+    return usersList.filter(
+      (u) => !DUMMY_USERNAMES.includes(u.username.toLowerCase())
+    );
+  }, [usersList]);
+
+  // 顯示所有帳號（含唯一預設 admin 與已派發帳號）
   const allAccounts = React.useMemo(() => {
-    const list = [...usersList];
+    const list = [...cleanUsersList];
     DEFAULT_DEMO_USERS.forEach((demo) => {
       if (!list.some((u) => u.username.toLowerCase() === demo.username.toLowerCase())) {
         list.push(demo);
       }
     });
     return list;
-  }, [usersList]);
+  }, [cleanUsersList]);
+
+  // 若偵測到傳入的 usersList 中含有舊 dummy 帳號，自動觸發清理
+  useEffect(() => {
+    if (usersList.some((u) => DUMMY_USERNAMES.includes(u.username.toLowerCase()))) {
+      const sanitized = usersList.filter(
+        (u) => !DUMMY_USERNAMES.includes(u.username.toLowerCase())
+      );
+      onUpdateUsersList(sanitized);
+    }
+  }, [usersList, onUpdateUsersList]);
 
   if (!isOpen) return null;
 
@@ -68,7 +93,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
     setPassword(rand);
   };
 
-  // 送出派發新帳戶
+  // 1. 單筆派發新帳戶
   const handleIssueAccount = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedName = name.trim();
@@ -84,7 +109,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
       return;
     }
 
-    // ⭐ 需求：密碼必需為要8位數字
+    // ⭐ 需求：密碼必需為8位數字
     if (!is8DigitNumeric(trimmedPassword)) {
       alert('⚠️ 密碼必需為嚴格 8 位純數字（例如：12345678）！');
       return;
@@ -109,7 +134,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
       createdAt: new Date().toISOString()
     };
 
-    const updated = [newUser, ...usersList];
+    const updated = [newUser, ...cleanUsersList];
     onUpdateUsersList(updated);
     setLastIssuedUser(newUser);
 
@@ -120,11 +145,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
     setChildName('');
     setPassword('12345678');
 
-    alert(`✅ 成功派發新帳戶！
-姓名：${newUser.name}
-身分：${ROLE_CONFIGS[newUser.role].label}
-帳號：${newUser.username}
-密碼：${newUser.password}`);
+    alert(`✅ 成功派發新帳戶！\n姓名：${newUser.name}\n身分：${ROLE_CONFIGS[newUser.role].label}\n帳號：${newUser.username}\n密碼：${newUser.password}`);
   };
 
   // 刪除帳戶
@@ -136,25 +157,24 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
     if (!window.confirm(`確定要刪除帳號「${targetUser.username}」(${targetUser.name}) 嗎？`)) {
       return;
     }
-    const updated = usersList.filter((u) => u.username !== targetUser.username);
+    const updated = cleanUsersList.filter((u) => u.username !== targetUser.username);
     onUpdateUsersList(updated);
   };
 
-  // 重設密碼
+  // 重設 8 位密碼
   const handleConfirmResetPassword = (targetUser: UserProfile) => {
     const pwd = newResetPassword.trim();
     if (!is8DigitNumeric(pwd)) {
       alert('⚠️ 重設密碼必需為 8 位純數字（例如：12345678）！');
       return;
     }
-    const updated = usersList.map((u) => {
+    const updated = cleanUsersList.map((u) => {
       if (u.username === targetUser.username) {
         return { ...u, password: pwd };
       }
       return u;
     });
-    // 若原屬於 demo 帳號則加入到自訂清單覆蓋
-    if (!usersList.some((u) => u.username === targetUser.username)) {
+    if (!cleanUsersList.some((u) => u.username === targetUser.username)) {
       updated.push({ ...targetUser, password: pwd });
     }
     onUpdateUsersList(updated);
@@ -163,21 +183,183 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
     alert(`✅ 帳號「${targetUser.username}」的密碼已成功重設為：${pwd}`);
   };
 
-  // 複製派發資訊
+  // 複製派發憑證
   const handleCopyCredentials = (u: UserProfile) => {
-    const text = `【Online Classroom 帳戶派發通知】
-姓名：${u.name}
-身分：${ROLE_CONFIGS[u.role].label}
-登入帳號：${u.username}
-登入密碼：${u.password}
-所屬分校：${u.branch || '總校'} / 班別：${u.className || '全校'}
-（請妥善保管您的帳戶，登入後即可查閱專屬課程教材與單元家課）`;
+    const text = `【Online Classroom 帳戶派發通知】\n姓名：${u.name}\n身分：${ROLE_CONFIGS[u.role]?.label || u.role}\n登入帳號：${u.username}\n登入密碼：${u.password}\n所屬分校：${u.branch || '總校'} / 班別：${u.className || '全校'}\n（請妥善保管您的帳戶，登入後即可查閱專屬課程教材與單元家課）`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(text);
       alert('📋 帳戶派發資訊已成功複製至剪貼簿！可直接貼上發送給用戶。');
     } else {
       alert(text);
     }
+  };
+
+  // ⭐ 需求 2：匯出帳戶名冊為 Excel / CSV 格式
+  const handleExportAccountsCSV = () => {
+    if (allAccounts.length === 0) {
+      alert('目前尚無帳戶資料可供匯出！');
+      return;
+    }
+    const headers = ['身分', '身分代碼', '用戶姓名', '登入帳號', '8位數字密碼', '學校/分校', '班別', '聯絡電話', '關聯子女', '建立時間'];
+    const rows = allAccounts.map((u) => [
+      `"${(ROLE_CONFIGS[u.role]?.label || u.role).replace(/"/g, '""')}"`,
+      `"${u.role}"`,
+      `"${(u.name || '').replace(/"/g, '""')}"`,
+      `"${(u.username || '').replace(/"/g, '""')}"`,
+      `"\t${u.password}"`, // 加上 \t 防止 Excel 自動吃掉 8 位數字的前置零或轉為科學記號
+      `"${(u.branch || '總校').replace(/"/g, '""')}"`,
+      `"${(u.className || '全校').replace(/"/g, '""')}"`,
+      `"${(u.phone || '').replace(/"/g, '""')}"`,
+      `"${(u.childName || '').replace(/"/g, '""')}"`,
+      `"${(u.createdAt || '').replace(/"/g, '""')}"`
+    ]);
+
+    // 使用 \uFEFF UTF-8 BOM 確保 Microsoft Excel 開啟中文時絕不亂碼
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const today = new Date().toISOString().split('T')[0];
+    link.setAttribute('download', `Online_Classroom_帳戶名冊_${today}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  // 下載 Excel / CSV 批次匯入空白範本
+  const handleDownloadTemplate = () => {
+    const headers = ['身分(學生/家長/導師/助教/管理員)', '用戶姓名', '登入帳號', '8位純數字密碼', '學校/分校', '班別', '聯絡電話(選填)', '關聯子女(家長角色選填)'];
+    const sampleRows = [
+      '學生,陳小明,student_101,12345678,沙田分校,1A,91234567,',
+      '家長,陳家長,parent_101,12345678,沙田分校,1A,91234567,陳小明',
+      '導師,張導師,teacher_zhang,12345678,沙田分校,高班,92345678,',
+      '助教,李助教,ta_lee,12345678,沙田分校,低班,93456789,'
+    ];
+    const csvContent = '\uFEFF' + [headers.join(','), ...sampleRows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', '帳戶名冊批次匯入範本.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  // 角色文字對應至標準 UserRole
+  const parseRole = (raw: string): UserRole => {
+    const s = (raw || '').toLowerCase().trim();
+    if (s.includes('家長') || s.includes('parent')) return 'parent';
+    if (s.includes('導師') || s.includes('老師') || s.includes('teacher')) return 'teacher';
+    if (s.includes('助教') || s.includes('assistant') || s.includes('ta')) return 'assistant';
+    if (s.includes('管理') || s.includes('admin')) return 'admin';
+    return 'student'; // 預設學生
+  };
+
+  // ⭐ 需求 2：處理 Excel/CSV 檔案選取與解析
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const text = (evt.target?.result as string) || '';
+        const lines = text
+          .split('\n')
+          .map((line) => line.replace('\r', '').trim())
+          .filter((line) => line.length > 0);
+
+        if (lines.length === 0) {
+          alert('上傳的檔案為空！');
+          return;
+        }
+
+        const rows: UserProfile[] = [];
+        const startIndex = lines[0].includes('姓名') || lines[0].includes('身分') || lines[0].includes('role') ? 1 : 0;
+
+        for (let i = startIndex; i < lines.length; i++) {
+          const parts = lines[i].split(',').map((p) => p.trim().replace(/^["'\t]|["'\t]$/g, ''));
+          if (parts.length >= 3) {
+            const rawRole = parts[0];
+            const parsedR = parseRole(rawRole);
+            const uName = parts[1];
+            const uUsername = parts[2];
+            let uPassword = parts[3] ? parts[3].replace(/\D/g, '').slice(0, 8) : '';
+            if (uPassword.length !== 8) {
+              // 若未填或長度不足，補全或預設 12345678
+              uPassword = uPassword.padEnd(8, '0');
+              if (uPassword.length !== 8 || uPassword === '00000000') uPassword = '12345678';
+            }
+            const uBranch = parts[4] || branches[0] || '總校';
+            const uClass = parts[5] || classes[0] || '全校';
+            const uPhone = parts[6] || undefined;
+            const uChild = parsedR === 'parent' ? (parts[7] || undefined) : undefined;
+
+            if (uName && uUsername) {
+              rows.push({
+                id: `user_imp_${Date.now()}_${i}`,
+                name: uName,
+                username: uUsername,
+                role: parsedR,
+                password: uPassword,
+                branch: uBranch,
+                className: uClass,
+                phone: uPhone,
+                childName: uChild,
+                createdAt: new Date().toISOString()
+              });
+            }
+          }
+        }
+
+        if (rows.length === 0) {
+          alert('未能識別檔案中的數據，請參考標準範本：身分,姓名,帳號,8位密碼,分校,班別,電話,關聯子女');
+          return;
+        }
+
+        setParsedRows(rows);
+      } catch (err: any) {
+        alert('解析檔案失敗：' + err.message);
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+  };
+
+  // 確認批次匯入至系統
+  const handleConfirmBatchImport = () => {
+    if (parsedRows.length === 0) return;
+    setUploading(true);
+
+    const existingUsernames = new Set(allAccounts.map((u) => u.username.toLowerCase()));
+    const validNewAccounts: UserProfile[] = [];
+    let duplicateCount = 0;
+
+    for (const row of parsedRows) {
+      if (existingUsernames.has(row.username.toLowerCase())) {
+        duplicateCount++;
+      } else {
+        existingUsernames.add(row.username.toLowerCase());
+        validNewAccounts.push(row);
+      }
+    }
+
+    if (validNewAccounts.length === 0) {
+      alert(`⚠️ 檔案中全部 ${parsedRows.length} 個帳號名稱皆已存在於系統中，未匯入任何重複帳號。`);
+      setUploading(false);
+      return;
+    }
+
+    const updated = [...validNewAccounts, ...cleanUsersList];
+    onUpdateUsersList(updated);
+    setUploading(false);
+
+    alert(`🎉 批次匯入完成！成功建立 ${validNewAccounts.length} 個新帳戶${duplicateCount > 0 ? `（略過 ${duplicateCount} 個重複帳號）` : ''}。`);
+    setParsedRows([]);
+    setActiveTab('list');
   };
 
   // 篩選帳號清單
@@ -216,36 +398,47 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
           </button>
         </div>
 
-        {/* 頂部功能切換 (派發新帳戶 vs 已派發帳號列表) */}
+        {/* 頂部功能切換 (1. 派發新帳戶 | 2. Excel 批次匯入 | 3. 已派發帳號名冊) */}
         <div className="flex border-b border-gray-200 bg-gray-50 shrink-0">
           <button
             onClick={() => setActiveTab('issue')}
-            className={`flex-1 py-3 text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+            className={`flex-1 py-3 text-xs font-bold transition-all flex items-center justify-center gap-1 ${
               activeTab === 'issue'
                 ? 'bg-white text-purple-700 border-b-2 border-purple-700'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
-            <UserPlus size={15} />
-            <span>派發新帳戶</span>
+            <UserPlus size={14} />
+            <span>派發帳戶</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('excel')}
+            className={`flex-1 py-3 text-xs font-bold transition-all flex items-center justify-center gap-1 ${
+              activeTab === 'excel'
+                ? 'bg-white text-purple-700 border-b-2 border-purple-700'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <FileSpreadsheet size={14} />
+            <span>Excel 匯入</span>
           </button>
           <button
             onClick={() => setActiveTab('list')}
-            className={`flex-1 py-3 text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+            className={`flex-1 py-3 text-xs font-bold transition-all flex items-center justify-center gap-1 ${
               activeTab === 'list'
                 ? 'bg-white text-purple-700 border-b-2 border-purple-700'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
-            <Users size={15} />
-            <span>已派發帳號名冊 ({allAccounts.length})</span>
+            <Users size={14} />
+            <span>帳號名冊 ({allAccounts.length})</span>
           </button>
         </div>
 
         {/* 內容滑動區 */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           
-          {/* TAB 1: 派發新帳戶表單 */}
+          {/* TAB 1: 單筆派發新帳戶表單 */}
           {activeTab === 'issue' && (
             <div className="space-y-4">
               <div className="bg-purple-50 p-3 rounded-2xl border border-purple-200 text-xs text-purple-900 flex items-start gap-2">
@@ -449,7 +642,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                     </button>
                   </div>
                   <div className="text-[11px] text-emerald-950 font-mono space-y-0.5">
-                    <div>姓名：{lastIssuedUser.name} ({ROLE_CONFIGS[lastIssuedUser.role].label})</div>
+                    <div>姓名：{lastIssuedUser.name} ({ROLE_CONFIGS[lastIssuedUser.role]?.label || lastIssuedUser.role})</div>
                     <div>帳號：<span className="font-bold text-black">{lastIssuedUser.username}</span></div>
                     <div>密碼：<span className="font-bold text-purple-700">{lastIssuedUser.password}</span> (8位數字)</div>
                   </div>
@@ -458,20 +651,118 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
             </div>
           )}
 
-          {/* TAB 2: 已派發帳號名冊列表 */}
+          {/* TAB 2: ⭐ Excel / CSV 批次匯入帳戶 */}
+          {activeTab === 'excel' && (
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-bold text-gray-800">批次建立學生、家長、導師與助教帳號</span>
+                <button
+                  onClick={handleDownloadTemplate}
+                  className="text-xs text-purple-700 hover:text-purple-900 flex items-center gap-1 font-bold bg-purple-50 px-2 py-1 rounded-lg border border-purple-200"
+                >
+                  <Download size={13} /> 下載 Excel/CSV 空白範本
+                </button>
+              </div>
+
+              <label className="border-2 border-dashed border-purple-200 rounded-2xl p-6 flex flex-col items-center justify-center gap-2 hover:border-purple-500 bg-purple-50/40 cursor-pointer transition-colors">
+                <div className="p-3 bg-purple-100 text-purple-700 rounded-full">
+                  <UploadCloud size={26} />
+                </div>
+                <div className="text-xs font-bold text-gray-800 text-center">
+                  點擊選擇或拖曳 Excel (.xlsx) / CSV 檔案至此
+                </div>
+                <div className="text-[11px] text-gray-500 text-center leading-relaxed">
+                  格式：身分, 姓名, 帳號, 8位密碼, 分校, 班別, 電話, 關聯子女<br />
+                  （密碼需為 8 位純數字，系統會自動核對）
+                </div>
+                <input
+                  type="file"
+                  accept=".csv,.xlsx,.xls,text/csv"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+              </label>
+
+              {parsedRows.length > 0 && (
+                <div className="space-y-3 pt-2">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-bold text-emerald-700 flex items-center gap-1">
+                      <CheckCircle size={14} /> 待匯入名單（共 {parsedRows.length} 個帳號）：
+                    </span>
+                    <button
+                      onClick={() => setParsedRows([])}
+                      className="text-gray-400 hover:text-gray-600 text-xs"
+                    >
+                      清空
+                    </button>
+                  </div>
+
+                  <div className="max-h-52 overflow-y-auto border border-gray-200 rounded-xl bg-gray-50 divide-y divide-gray-200 text-xs">
+                    {parsedRows.map((r, idx) => {
+                      const cfg = ROLE_CONFIGS[r.role] || ROLE_CONFIGS.student;
+                      return (
+                        <div key={idx} className="p-2.5 flex justify-between items-center">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-base">{cfg.emoji}</span>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1 font-bold text-gray-900 truncate">
+                                <span>{r.name}</span>
+                                <span className={`text-[10px] px-1.5 py-0.2 rounded font-bold ${cfg.bgLight}`}>
+                                  {cfg.label}
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-gray-500 font-mono">
+                                帳號: {r.username} · 分校: {r.branch}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-right font-mono text-[11px] text-purple-700 font-bold shrink-0">
+                            密碼: {r.password}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    onClick={handleConfirmBatchImport}
+                    disabled={uploading}
+                    className="w-full py-2.5 bg-gradient-to-r from-purple-700 to-indigo-700 text-white font-extrabold rounded-xl text-xs hover:opacity-95 shadow-md flex items-center justify-center gap-1.5"
+                  >
+                    <Check size={16} />
+                    <span>{uploading ? '正在建立帳號...' : `確認匯入 ${parsedRows.length} 個帳號`}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 3: 已派發帳號名冊列表 (支援 Excel 匯出) */}
           {activeTab === 'list' && (
             <div className="space-y-3">
-              {/* 搜尋與角色篩選 */}
+              {/* 頂部操作：搜尋與匯出按鈕 */}
               <div className="space-y-2">
-                <div className="relative">
-                  <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="搜尋帳號、姓名、分校..."
-                    className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-xl text-xs outline-none focus:border-purple-600 placeholder:text-gray-400"
-                  />
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="搜尋帳號、姓名、分校..."
+                      className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-xl text-xs outline-none focus:border-purple-600 placeholder:text-gray-400"
+                    />
+                  </div>
+                  {/* ⭐ 需求 2：Excel 匯出按鈕 */}
+                  <button
+                    type="button"
+                    onClick={handleExportAccountsCSV}
+                    className="flex items-center gap-1 text-xs text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-3 py-2 rounded-xl font-bold transition-colors shadow-2xs shrink-0"
+                    title="匯出為 Excel/CSV 檔案"
+                  >
+                    <Download size={13} />
+                    <span>匯出名冊</span>
+                  </button>
                 </div>
 
                 <div className="flex items-center gap-1 overflow-x-auto pb-1 no-scrollbar text-[11px]">
@@ -543,7 +834,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                               type="button"
                               onClick={() => handleCopyCredentials(u)}
                               className="p-1.5 text-gray-400 hover:text-purple-700 hover:bg-purple-50 rounded-lg transition-colors"
-                              title="複製帳號與密碼"
+                              title="複製帳號與密碼通知"
                             >
                               <Copy size={14} />
                             </button>

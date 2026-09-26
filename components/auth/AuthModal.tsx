@@ -69,7 +69,7 @@ export const ROLE_CONFIGS: Record<UserRole, {
   }
 };
 
-// 預設 5 大角色系統底層帳號（密碼均為嚴格 8 位數字，供登入驗證，UI上不作展示）
+// 系統唯一預設管理員帳號（依需求已移除其餘所有示範 dummy 帳號）
 export const DEFAULT_DEMO_USERS: UserProfile[] = [
   {
     id: 'demo_admin',
@@ -80,51 +80,6 @@ export const DEFAULT_DEMO_USERS: UserProfile[] = [
     phone: '91234567',
     branch: '總校',
     className: '全校',
-    createdAt: '2026-09-01T00:00:00.000Z'
-  },
-  {
-    id: 'demo_teacher',
-    username: 'teacher_chen',
-    name: '陳導師',
-    role: 'teacher',
-    password: '12345678',
-    phone: '92345678',
-    branch: '沙田分校',
-    className: '高班',
-    createdAt: '2026-09-01T00:00:00.000Z'
-  },
-  {
-    id: 'demo_assistant',
-    username: 'ta_wong',
-    name: '王助教',
-    role: 'assistant',
-    password: '12345678',
-    phone: '93456789',
-    branch: '沙田分校',
-    className: '低班',
-    createdAt: '2026-09-01T00:00:00.000Z'
-  },
-  {
-    id: 'demo_student',
-    username: 'student_lok',
-    name: '林同學',
-    role: 'student',
-    password: '12345678',
-    phone: '94567890',
-    branch: '沙田分校',
-    className: '1A',
-    createdAt: '2026-09-01T00:00:00.000Z'
-  },
-  {
-    id: 'demo_parent',
-    username: 'parent_lok',
-    name: '林家長',
-    role: 'parent',
-    password: '12345678',
-    phone: '95678901',
-    branch: '沙田分校',
-    className: '1A',
-    childName: '林同學',
     createdAt: '2026-09-01T00:00:00.000Z'
   }
 ];
