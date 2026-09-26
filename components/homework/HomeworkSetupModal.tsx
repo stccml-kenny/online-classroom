@@ -86,6 +86,84 @@ export const getCourseDisplayName = (c: string | CourseItem): string => {
   return c.name;
 };
 
+// ⭐ 輔助函式：清理時段字串 (去除所有空白以便嚴格比對)
+export const cleanCourseTimeSlot = (s?: string): string => {
+  return (s || '').replace(/\s+/g, '').toLowerCase();
+};
+
+// ⭐ 輔助函式：自課程字串中萃取「基礎名稱」與「時段」
+export const extractCourseBaseAndSlot = (courseStr: string): { base: string; slot: string } => {
+  const s = (courseStr || '').trim();
+  const m = s.match(/\(([^)]+)\)$/);
+  if (m) {
+    return {
+      base: s.slice(0, m.index).trim(),
+      slot: cleanCourseTimeSlot(m[1]),
+    };
+  }
+  return { base: s, slot: '' };
+};
+
+// ⭐ 輔助函式：標準化課程名稱 (去除方括號代碼與分校前綴，避免誤比對)
+export const normalizeCourseBaseName = (name: string): string => {
+  let s = (name || '').trim();
+  s = s.replace(/^\[[^\]]+\]\s*/, '');
+  s = s.replace(/^[^\-：:]{2,10}[\-：:]\s*/, '');
+  return s.trim().toLowerCase();
+};
+
+// ⭐ 輔助函式：精準比對修讀課程與目標課程 (避免子字串模糊匹配、支援分校與時段驗證)
+export const isCourseMatch = (
+  enrolledCourse: string,
+  cName: string,
+  cTimeSlot?: string,
+  cBranch?: string,
+  studentBranch?: string
+): boolean => {
+  if (!enrolledCourse || !cName) return false;
+
+  // 1. 分校比對：若兩者皆具體指定分校，分校不符則不計算
+  const cb = (cBranch || '').trim().toLowerCase();
+  const sb = (studentBranch || '').trim().toLowerCase();
+  if (
+    cb &&
+    cb !== '全部分校' &&
+    cb !== '全部' &&
+    cb !== 'all' &&
+    sb &&
+    sb !== '全部分校' &&
+    sb !== '全部' &&
+    sb !== 'all'
+  ) {
+    const cbClean = cb.replace(/\([^)]*\)/g, '').trim();
+    const sbClean = sb.replace(/\([^)]*\)/g, '').trim();
+    if (cbClean && sbClean && cbClean !== sbClean && !cbClean.includes(sbClean) && !sbClean.includes(cbClean)) {
+      return false;
+    }
+  }
+
+  // 2. 課程基礎名稱與時段萃取
+  const ec = extractCourseBaseAndSlot(enrolledCourse);
+  const target = extractCourseBaseAndSlot(cName);
+  const targetSlot = cTimeSlot ? cleanCourseTimeSlot(cTimeSlot) : target.slot;
+
+  const ecBaseNorm = normalizeCourseBaseName(ec.base);
+  const targetBaseNorm = normalizeCourseBaseName(target.base);
+
+  // 基礎名稱必須嚴格一致（避免「中文」誤匹配「小一中文」或「奧數」）
+  if (ecBaseNorm !== targetBaseNorm) {
+    return false;
+  }
+
+  // 3. 若兩者皆有具體時段，時段若衝突則不匹配
+  if (ec.slot && targetSlot && ec.slot !== targetSlot) {
+    return false;
+  }
+
+  return true;
+};
+
+
 // 輔助函式：狀態標籤資訊
 export const getCourseStatusMeta = (status: CourseStatus = 'active') => {
   switch (status) {
@@ -190,42 +268,124 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
   currentUser = null,
   usersList = [],
 }) => {
-  // ⭐ 需求 7：課程設定與排程管理中於課程中顯示已參加學生人數
-  const getEnrolledStudentCount = (c: CourseItem): number => {
-    const cName = (c.name || '').trim().toLowerCase();
-    const cDisplayName = getCourseDisplayName(c).trim().toLowerCase();
-    const counted = new Set<string>();
+  // ⭐ 標準化課程項目清單 (置於 Hook 前以供計算各項指標)
+  const normalizedCourses = React.useMemo(() => courses.map(normalizeCourse), [courses]);
 
-    if (usersList && usersList.length > 0) {
-      usersList.forEach((u) => {
-        if (u.role === 'student' && u.enrolledCourses && u.enrolledCourses.length > 0) {
-          const match = u.enrolledCourses.some((ec) => {
-            const lower = ec.trim().toLowerCase();
-            return lower === cName || lower === cDisplayName || lower.includes(cName) || cName.includes(lower);
-          });
-          if (match) {
-            counted.add(u.username.toLowerCase());
-          }
+  // 監聽本機儲存與視窗焦點變動以即時重算人數
+  const [refreshCountsSeed, setRefreshCountsSeed] = useState(0);
+  React.useEffect(() => {
+    const handleStorageChange = () => setRefreshCountsSeed((prev) => prev + 1);
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('focus', handleStorageChange);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('focus', handleStorageChange);
+    };
+  }, []);
+
+  // ⭐ 需求 1：精準計算各課程已參加之學生人數 (單一學生分校+姓名唯一去重、時段與分校精準匹配、排除模糊包含錯誤)
+  const courseStudentCounts = React.useMemo(() => {
+    const studentMap = new Map<string, {
+      name: string;
+      branch: string;
+      className: string;
+      enrolledCourses: Set<string>;
+    }>();
+
+    // 1. 整理 usersList 中學生帳號
+    let effectiveUsers: UserProfile[] = usersList || [];
+    if (typeof window !== 'undefined' && effectiveUsers.length === 0) {
+      try {
+        const raw = localStorage.getItem('oc_users_list');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) effectiveUsers = parsed;
         }
-      });
+      } catch (e) {}
     }
 
+    effectiveUsers.forEach((u) => {
+      if (u.role === 'student') {
+        const sName = (u.studentName || u.name || u.username || '').trim();
+        const sBranch = (u.branch || '').trim();
+        const sClass = (u.className || '').trim();
+        if (!sName) return;
+
+        // 使用「分校 + 姓名」作為學生唯一識別標識
+        const studentKey = `${sBranch.toLowerCase()}___${sName.toLowerCase()}`;
+        if (!studentMap.has(studentKey)) {
+          studentMap.set(studentKey, {
+            name: sName,
+            branch: sBranch,
+            className: sClass,
+            enrolledCourses: new Set<string>()
+          });
+        }
+
+        const record = studentMap.get(studentKey)!;
+        if (Array.isArray(u.enrolledCourses)) {
+          u.enrolledCourses.forEach((cr) => {
+            if (cr && typeof cr === 'string' && cr.trim()) {
+              record.enrolledCourses.add(cr.trim());
+            }
+          });
+        }
+      }
+    });
+
+    // 2. 整合 oc_local_students (會員名冊快取)，同一學生自動合併，不重複計數
     if (typeof window !== 'undefined') {
       try {
         const raw = localStorage.getItem('oc_local_students');
         if (raw) {
           const list: any[] = JSON.parse(raw);
           list.forEach((s) => {
-            const sCourse = (s.course_name || '').trim().toLowerCase();
-            if (sCourse && (sCourse === cName || sCourse === cDisplayName || sCourse.includes(cName) || cName.includes(sCourse))) {
-              if (s.student_name) counted.add(s.student_name.toLowerCase());
+            const sName = (s.student_name || '').trim();
+            const sBranch = (s.branch || '').trim();
+            const sClass = (s.class_name || '').trim();
+            if (!sName) return;
+
+            const studentKey = `${sBranch.toLowerCase()}___${sName.toLowerCase()}`;
+            if (!studentMap.has(studentKey)) {
+              studentMap.set(studentKey, {
+                name: sName,
+                branch: sBranch,
+                className: sClass,
+                enrolledCourses: new Set<string>()
+              });
+            }
+
+            const record = studentMap.get(studentKey)!;
+            const sCourse = (s.course_name || '').trim();
+            if (sCourse) {
+              record.enrolledCourses.add(sCourse);
             }
           });
         }
       } catch (e) {}
     }
 
-    return counted.size;
+    const students = Array.from(studentMap.values());
+    const counts = new Map<string, number>();
+
+    normalizedCourses.forEach((c) => {
+      let count = 0;
+      students.forEach((st) => {
+        for (const enrolled of st.enrolledCourses) {
+          if (isCourseMatch(enrolled, c.name, c.timeSlot, c.branch, st.branch)) {
+            count++;
+            break;
+          }
+        }
+      });
+      counts.set(c.id, count);
+    });
+
+    return counts;
+  }, [usersList, normalizedCourses, refreshCountsSeed]);
+
+  const getEnrolledStudentCount = (c: CourseItem): number => {
+    return courseStudentCounts.get(c.id) || 0;
   };
 
   // 順序：課程、學校/分校、班別。根據 mode 決定初始分頁
@@ -457,7 +617,6 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
 
   if (!isOpen && !isInline) return null;
 
-  const normalizedCourses = courses.map(normalizeCourse);
   // ⭐ 需求 5：課程篩選邏輯
   const filteredNormalizedCourses = normalizedCourses.filter((c) => {
     // 1. 學校篩選

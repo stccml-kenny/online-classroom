@@ -570,13 +570,24 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
       alert('目前尚無帳戶資料可供匯出！');
       return;
     }
-    const headers = ['身分', '身分代碼', '用戶姓名', '登入帳號', '8位數字密碼', '學校/分校', '班別', '參加課程', '聯絡電話', '關聯子女帳號', '建立時間'];
+    // ⭐ 需求 2：匯出名冊與批次匯入欄位排位嚴格一致 (身分, 用戶姓名, 登入帳號, 8位數字密碼, 學校/分校, 班別, 參加課程, 聯絡電話, 關聯子女帳號, 建立時間)
+    const headers = [
+      '身分',
+      '用戶姓名',
+      '登入帳號',
+      '8位數字密碼',
+      '學校/分校',
+      '班別',
+      '參加課程',
+      '聯絡電話',
+      '關聯子女帳號',
+      '建立時間'
+    ];
     const rows = allAccounts.map((u) => [
       `"${(ROLE_CONFIGS[u.role]?.label || u.role).replace(/"/g, '""')}"`,
-      `"${u.role}"`,
       `"${(u.name || '').replace(/"/g, '""')}"`,
       `"${(u.username || '').replace(/"/g, '""')}"`,
-      `"    ${u.password}"`,
+      `"\t${u.password}"`,
       `"${(u.branch || '').replace(/"/g, '""')}"`,
       `"${(u.className || '').replace(/"/g, '""')}"`,
       `"${(u.enrolledCourses ? u.enrolledCourses.join(';') : '').replace(/"/g, '""')}"`,
@@ -600,7 +611,18 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
 
   // 下載 Excel / CSV 批次匯入空白範本
   const handleDownloadTemplate = () => {
-    const headers = ['身分(學生/家長/導師/助教/管理員)', '用戶姓名', '登入帳號', '8位純數字密碼(選填)', '學校/分校(學生專用)', '班別(學生專用)', '參加課程(多個以分號隔開)', '聯絡電話(選填)', '關聯子女帳號(家長專用，多個分號隔開)'];
+    // ⭐ 需求 2：範本排位與匯出名冊完全一致
+    const headers = [
+      '身分(學生/家長/導師/助教/管理員)',
+      '用戶姓名',
+      '登入帳號',
+      '8位純數字密碼(選填)',
+      '學校/分校(學生專用)',
+      '班別(學生專用)',
+      '參加課程(多個以分號隔開)',
+      '聯絡電話(選填)',
+      '關聯子女帳號(家長專用，多個分號隔開)'
+    ];
     const sampleRows = [
       '學生,陳小明,101,12345678,沙田分校 (ST),1A,常規中文班; 奧數思維班,91234567,',
       '家長,陳家長,parent_101,12345678,,,,ST_101',
@@ -628,7 +650,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
     return 'student';
   };
 
-  // 處理 Excel/CSV 檔案選取與解析
+  // 處理 Excel/CSV 檔案選取與解析 (支援智慧欄位識別與標準欄位順序解析)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -647,27 +669,100 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
           return;
         }
 
+        const parseCSVLine = (line: string): string[] => {
+          const result: string[] = [];
+          let current = '';
+          let inQuotes = false;
+          for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            if (char === '"') {
+              if (inQuotes && line[i + 1] === '"') {
+                current += '"';
+                i++;
+              } else {
+                inQuotes = !inQuotes;
+              }
+            } else if (char === ',' && !inQuotes) {
+              result.push(current.trim().replace(/^["'\t]|["'\t]$/g, ''));
+              current = '';
+            } else {
+              current += char;
+            }
+          }
+          result.push(current.trim().replace(/^["'\t]|["'\t]$/g, ''));
+          return result;
+        };
+
+        const firstLineCols = parseCSVLine(lines[0]);
+        const hasHeader = firstLineCols.some((c) =>
+          ['姓名', '身分', '身份', '帳號', '账号', 'role', 'username'].some((k) => c.toLowerCase().includes(k))
+        );
+
+        // 智慧欄位索引對應 (若有標題列，依標題精準映射；無標題列則使用標準排位)
+        let colRole = 0;
+        let colName = 1;
+        let colUsername = 2;
+        let colPassword = 3;
+        let colBranch = 4;
+        let colClass = 5;
+        let colCourses = 6;
+        let colPhone = 7;
+        let colChildren = 8;
+
+        if (hasHeader) {
+          firstLineCols.forEach((h, idx) => {
+            const hClean = h.replace(/\s+/g, '').toLowerCase();
+            if (hClean.includes('代碼') || hClean.includes('code')) {
+              // 略過純代碼欄位 (如以前匯出的身分代碼)
+              return;
+            }
+            if ((hClean.includes('身分') || hClean.includes('身份') || hClean === 'role') && colRole === 0) {
+              colRole = idx;
+            } else if ((hClean.includes('姓名') || hClean.includes('name')) && !hClean.includes('子女')) {
+              colName = idx;
+            } else if (hClean.includes('子女') || hClean.includes('孩子') || hClean.includes('child')) {
+              colChildren = idx;
+            } else if (hClean.includes('帳號') || hClean.includes('账号') || hClean.includes('username') || hClean.includes('登入')) {
+              colUsername = idx;
+            } else if (hClean.includes('密碼') || hClean.includes('密码') || hClean.includes('password') || hClean.includes('pwd')) {
+              colPassword = idx;
+            } else if (hClean.includes('學校') || hClean.includes('分校') || hClean.includes('branch') || hClean.includes('校區')) {
+              colBranch = idx;
+            } else if (hClean.includes('班別') || hClean.includes('班級') || hClean.includes('class')) {
+              colClass = idx;
+            } else if (hClean.includes('課程') || hClean.includes('课程') || hClean.includes('course')) {
+              colCourses = idx;
+            } else if (hClean.includes('電話') || hClean.includes('电话') || hClean.includes('phone') || hClean.includes('tel')) {
+              colPhone = idx;
+            }
+          });
+        }
+
         const rows: UserProfile[] = [];
-        const startIndex = lines[0].includes('姓名') || lines[0].includes('身分') || lines[0].includes('role') ? 1 : 0;
+        const startIndex = hasHeader ? 1 : 0;
 
         for (let i = startIndex; i < lines.length; i++) {
-          const parts = lines[i].split(',').map((p) => p.trim().replace(/^["'    ]|["'    ]$/g, ''));
-          if (parts.length >= 3) {
-            const rawRole = parts[0];
+          const parts = parseCSVLine(lines[i]);
+          if (parts.length >= 2) {
+            const rawRole = parts[colRole] || '學生';
             const parsedR = parseRole(rawRole);
-            const uName = parts[1];
-            let uUsername = parts[2];
-            let uPassword = parts[3] ? parts[3].replace(/\D/g, '').slice(0, 8) : '';
+            const uName = parts[colName] || '';
+            let uUsername = parts[colUsername] || '';
+            let uPassword = (parts[colPassword] || '').replace(/\D/g, '').slice(0, 8);
             if (uPassword.length !== 8) {
               uPassword = uPassword.padEnd(8, '0');
               if (uPassword.length !== 8 || uPassword === '00000000') uPassword = '12345678';
             }
 
-            const uBranch = parsedR === 'student' ? (parts[4] || branches[0] || '總校') : undefined;
-            const uClass = parsedR === 'student' ? (parts[5] || classes[0] || '全校') : undefined;
-            const uCourses = parsedR === 'student' && parts[6] ? parts[6].split(/[;、|]+/).map((x) => x.trim()).filter(Boolean) : undefined;
-            const uPhone = parts[7] || undefined;
-            const uChildren = parsedR === 'parent' && parts[8] ? parts[8].split(/[;、|]+/).map((x) => x.trim()).filter(Boolean) : undefined;
+            const uBranch = parsedR === 'student' ? (parts[colBranch] || branches[0] || '總校') : undefined;
+            const uClass = parsedR === 'student' ? (parts[colClass] || classes[0] || '全校') : undefined;
+            const uCourses = parsedR === 'student' && parts[colCourses]
+              ? parts[colCourses].split(/[;、|]+/).map((x) => x.trim()).filter(Boolean)
+              : undefined;
+            const uPhone = parts[colPhone] || undefined;
+            const uChildren = parsedR === 'parent' && parts[colChildren]
+              ? parts[colChildren].split(/[;、|]+/).map((x) => x.trim()).filter(Boolean)
+              : undefined;
 
             if (parsedR === 'student' && uBranch) {
               const code = parseBranchInfo(uBranch).code;
