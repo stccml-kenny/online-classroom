@@ -370,75 +370,84 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
   return (
     <div className={isInline ? "flex-1 w-full flex flex-col bg-[#F8F9FA] overflow-hidden" : "fixed inset-0 z-50 flex flex-col bg-[#F8F9FA] w-screen h-screen overflow-hidden animate-in fade-in duration-200"}>
       
-      {/* 1. 頂部滿板功能導航列 */}
-      <div className="bg-gradient-to-r from-[#FF6B57] via-[#FF7A66] to-[#FF8E7D] text-white px-4 sm:px-6 py-3 flex items-center justify-between shrink-0 shadow-md">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center shadow-inner">
-            <CalendarIcon size={22} className="text-white" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-base sm:text-lg font-black tracking-wide">
-                課程行事曆
-              </h1>
-              {isStudentOrParent && studentSchool && (
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-white/25 text-white flex items-center gap-1">
-                  <School size={12} />
-                  <span>{studentSchool}</span>
-                </span>
-              )}
+      {/* 1. 頂部滿板功能導航列 (兩行式設計：第一行放標題與關閉，第二行整行放課程與功課清單切換) */}
+      <div className="bg-gradient-to-r from-[#FF6B57] via-[#FF7A66] to-[#FF8E7D] text-white px-4 sm:px-6 pt-3.5 pb-2.5 shrink-0 shadow-md flex flex-col gap-2.5">
+        
+        {/* 第一行：圖示、標題、學校標籤與關閉按鈕 */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            <div className="w-9 h-9 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center shadow-inner shrink-0">
+              <CalendarIcon size={20} className="text-white" />
             </div>
-            <p className="text-xs text-white/90">
-              {isStudentOrParent
-                ? `專屬 ${studentSchool || '本校'} 課程上課節次與功課截止清單`
-                : '檢視各分校課程上課節次與功課排程清單'}
-            </p>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-base sm:text-lg font-black tracking-wide whitespace-nowrap">
+                  課程行事曆
+                </h1>
+                {isStudentOrParent && studentSchool && (
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-white/25 text-white flex items-center gap-1 shrink-0 truncate max-w-[180px]">
+                    <School size={12} className="shrink-0" />
+                    <span className="truncate">{studentSchool}</span>
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-white/85 truncate">
+                {isStudentOrParent
+                  ? `專屬 ${studentSchool || '本校'} 課程上課節次與功課截止清單`
+                  : '檢視各分校課程上課節次與功課排程清單'}
+              </p>
+            </div>
           </div>
+
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-full hover:bg-white/20 transition-colors text-white shrink-0"
+            title="關閉行事曆"
+          >
+            <X size={20} />
+          </button>
         </div>
 
-        <div className="flex items-center gap-2.5">
-          {/* ⭐ 增加【課程清單】與【功課清單】雙標籤切換 */}
-          <div className="bg-black/15 p-1 rounded-xl flex items-center">
+        {/* ⭐ 第二行：課程清單及功課清單獨立整行切換，空間寬敞絕不折字 */}
+        <div className="flex items-center justify-center w-full">
+          <div className="bg-black/20 p-1 rounded-2xl flex items-center w-full max-w-md shadow-inner">
             <button
               type="button"
               onClick={() => setActiveSubTab('courses')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 ${
                 activeSubTab === 'courses'
                   ? 'bg-white text-[#FF6B57] shadow-sm'
                   : 'text-white/80 hover:text-white'
               }`}
             >
-              <BookOpen size={14} />
-              <span>課程清單</span>
-              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-orange-100 text-[#FF6B57] font-black">
+              <BookOpen size={14} className="shrink-0" />
+              <span className="whitespace-nowrap">課程清單</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+                activeSubTab === 'courses' ? 'bg-orange-100 text-[#FF6B57]' : 'bg-white/20 text-white'
+              }`}>
                 {displayedCourseEvents.length}
               </span>
             </button>
             <button
               type="button"
               onClick={() => setActiveSubTab('homework')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 ${
                 activeSubTab === 'homework'
                   ? 'bg-white text-[#FF6B57] shadow-sm'
                   : 'text-white/80 hover:text-white'
               }`}
             >
-              <ListOrdered size={14} />
-              <span>功課清單</span>
-              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-800 font-black">
+              <ListOrdered size={14} className="shrink-0" />
+              <span className="whitespace-nowrap">功課清單</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+                activeSubTab === 'homework' ? 'bg-amber-100 text-amber-800' : 'bg-white/20 text-white'
+              }`}>
                 {displayedHomeworkEvents.length}
               </span>
             </button>
           </div>
-
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-full hover:bg-white/20 transition-colors text-white"
-            title="關閉行事曆"
-          >
-            <X size={22} />
-          </button>
         </div>
+
       </div>
 
       {/* Toast 提示 */}
