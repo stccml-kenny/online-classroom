@@ -31,6 +31,9 @@ import {
   loadCalendarEventsFromCloud,
   saveCalendarEventToCloud,
   deleteCalendarEventFromCloud,
+  loadNewsFromCloud,
+  saveNewsToCloud,
+  deleteNewsFromCloud,
 } from '@/lib/appwrite';
 import { ID, Query } from 'appwrite';
 
@@ -474,13 +477,31 @@ export default function OnlineClassroomApp() {
   const loadNotices = async () => {
     setLoading(true);
     try {
-      const res = await databases.listDocuments(DATABASE_ID, 'notices');
-      setNotices(res.documents);
+      const data = await loadNewsFromCloud();
+      setNotices(data);
     } catch (err) {
-      console.log('載入通告中:', err);
+      console.log('載入最新消息中:', err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSaveNews = async (newsData: any, existingId?: string) => {
+    const saved = await saveNewsToCloud(newsData, existingId);
+    setNotices((prev) => {
+      const idx = prev.findIndex((n) => (n.$id && n.$id === (existingId || saved.$id)) || (n.id && n.id === (existingId || saved.id)));
+      if (idx !== -1) {
+        const updated = [...prev];
+        updated[idx] = { ...updated[idx], ...saved };
+        return updated;
+      }
+      return [saved, ...prev];
+    });
+  };
+
+  const handleDeleteNews = async (newsId: string) => {
+    await deleteNewsFromCloud(newsId);
+    setNotices((prev) => prev.filter((n) => (n.$id || n.id) !== newsId));
   };
 
   const getHeaderTitle = () => {
@@ -644,11 +665,15 @@ export default function OnlineClassroomApp() {
 
         {currentUser && <BottomNav activeTab={activeTab} onTabChange={setActiveTab} userRole={currentUser?.role} unreadChatCount={unreadChatCount} isChatEnabled={isCurrentUserChatEnabled} />}
 
-        {/* 1. 電子通告彈窗 */}
+        {/* 1. 最新消息彈窗 */}
         <NoticeModal
           isOpen={showNoticeModal}
           onClose={() => setShowNoticeModal(false)}
           notices={notices}
+          currentUser={currentUser}
+          branches={branches}
+          onSaveNews={handleSaveNews}
+          onDeleteNews={handleDeleteNews}
           loading={loading}
         />
 

@@ -801,3 +801,171 @@ export async function deleteCalendarEventFromCloud(eventId: string): Promise<boo
     return false;
   }
 }
+
+// ==============================================================================
+// 7. 最新消息 (notices) 雙軌持久化服務 (支援 Appwrite DateTime 標準與本機備援)
+// ==============================================================================
+export async function loadNewsFromCloud(): Promise<any[]> {
+  const tryCollections = ['notices', 'news'];
+  for (const coll of tryCollections) {
+    try {
+      const res = await databases.listDocuments(DATABASE_ID, coll, [
+        Query.limit(100),
+      ]);
+      if (res.documents && res.documents.length > 0) {
+        // 在記憶體中確保置頂優先，其次按發布日期排序
+        const sorted = [...res.documents].sort((a: any, b: any) => {
+          if (a.is_pinned && !b.is_pinned) return -1;
+          if (!a.is_pinned && b.is_pinned) return 1;
+          const dateA = a.publish_date || a.date || a.$createdAt || '';
+          const dateB = b.publish_date || b.date || b.$createdAt || '';
+          return dateB.localeCompare(dateA);
+        });
+
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('oc_local_news', JSON.stringify(sorted));
+          } catch (e) {}
+        }
+        return sorted;
+      }
+    } catch (err: any) {
+      // 嘗試下一個 collection
+    }
+  }
+
+  // 雲端讀取失敗或無資料時，讀取本機暫存
+  if (typeof window !== 'undefined') {
+    try {
+      const local = localStorage.getItem('oc_local_news');
+      if (local) return JSON.parse(local);
+    } catch (e) {}
+  }
+  return [];
+}
+
+export async function saveNewsToCloud(
+  newsData: any,
+  existingId?: string
+): Promise<any> {
+  // 標準化日期為 Appwrite DateTime 所需之 ISO 8601 格式
+  let isoPublishDate = new Date().toISOString();
+  if (newsData.publish_date) {
+    try {
+      const d = new Date(newsData.publish_date);
+      if (!isNaN(d.getTime())) isoPublishDate = d.toISOString();
+    } catch (e) {}
+  }
+
+  let isoExpiryDate: string | null = null;
+  if (newsData.expiry_date && newsData.expiry_date.trim()) {
+    try {
+      const d = new Date(newsData.expiry_date);
+      if (!isNaN(d.getTime())) isoExpiryDate = d.toISOString();
+    } catch (e) {}
+  }
+
+  const payload: any = {
+    title: newsData.title || '無標題消息',
+    content: newsData.content || '',
+    category: newsData.category || '校務通知',
+    is_pinned: !!newsData.is_pinned,
+    is_important: !!newsData.is_important,
+    branch: newsData.branch || '全部分校',
+    target_roles: typeof newsData.target_roles === 'string'
+      ? newsData.target_roles
+      : JSON.stringify(newsData.target_roles || ['all']),
+    publish_date: isoPublishDate,
+    author_name: newsData.author_name || '管理員',
+    author_id: newsData.author_id || '',
+  };
+
+  if (isoExpiryDate) {
+    payload.expiry_date = isoExpiryDate;
+  }
+
+  const tryCollections = ['notices', 'news'];
+  for (const coll of tryCollections) {
+    try {
+      if (existingId && !existingId.startsWith('news_') && !existingId.startsWith('notice_')) {
+        const doc = await databases.updateDocument(DATABASE_ID, coll, existingId, payload);
+        return doc;
+      } else {
+        const doc = await databases.createDocument(DATABASE_ID, coll, ID.unique(), payload);
+        return doc;
+      }
+    } catch (err: any) {
+      // 若因特定選填欄位未建立而報錯，移除選填欄位後降級重試
+      try {
+        delete payload.is_pinned;
+        delete payload.is_important;
+        delete payload.target_roles;
+        delete payload.expiry_date;
+        if (existingId && !existingId.startsWith('news_') && !existingId.startsWith('notice_')) {
+          const doc = await databases.updateDocument(DATABASE_ID, coll, existingId, payload);
+          return doc;
+        } else {
+          const doc = await databases.createDocument(DATABASE_ID, coll, ID.unique(), payload);
+          return doc;
+        }
+      } catch (err2: any) {
+        // 繼續嘗試下一個 collection
+      }
+    }
+  }
+
+  // 雲端寫入失敗時，保存至本機
+  const fallbackItem = {
+    ...newsData,
+    ...payload,
+    $id: existingId || `news_${Date.now()}`,
+    createdAt: new Date().toISOString(),
+  };
+
+  if (typeof window !== 'undefined') {
+    try {
+      const local = localStorage.getItem('oc_local_news');
+      let list = local ? JSON.parse(local) : [];
+      if (!Array.isArray(list)) list = [];
+      const idx = list.findIndex((item: any) => (item.$id || item.id) === fallbackItem.$id);
+      if (idx !== -1) {
+        list[idx] = { ...list[idx], ...fallbackItem };
+      } else {
+        list.unshift(fallbackItem);
+      }
+      localStorage.setItem('oc_local_news', JSON.stringify(list));
+    } catch (e) {}
+  }
+
+  return fallbackItem;
+}
+
+export async function deleteNewsFromCloud(newsId: string): Promise<boolean> {
+  const tryCollections = ['notices', 'news'];
+  let deletedFromCloud = false;
+
+  for (const coll of tryCollections) {
+    try {
+      if (newsId && !newsId.startsWith('news_') && !newsId.startsWith('notice_')) {
+        await databases.deleteDocument(DATABASE_ID, coll, newsId);
+        deletedFromCloud = true;
+        break;
+      }
+    } catch (err: any) {}
+  }
+
+  if (typeof window !== 'undefined') {
+    try {
+      const local = localStorage.getItem('oc_local_news');
+      if (local) {
+        let list = JSON.parse(local);
+        if (Array.isArray(list)) {
+          list = list.filter((item: any) => (item.$id || item.id) !== newsId);
+          localStorage.setItem('oc_local_news', JSON.stringify(list));
+        }
+      }
+    } catch (e) {}
+  }
+
+  return true;
+}
