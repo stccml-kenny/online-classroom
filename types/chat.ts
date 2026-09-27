@@ -42,3 +42,11 @@ export interface ChatContact {
   childrenNames?: string[];
   enrolledCourses?: string[];
 }
+
+export interface CustomChatGroup {
+  id: string;
+  name: string;
+  memberUsernames: string[];
+  color?: string;
+  createdAt: string;
+}

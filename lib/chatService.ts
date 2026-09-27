@@ -1,6 +1,6 @@
 ﻿import { client, databases, DATABASE_ID } from '@/lib/appwrite';
 import { ID, Query } from 'appwrite';
-import type { ChatMessage, ChatConversation, MessageType } from '@/types/chat';
+import type { ChatMessage, ChatConversation, MessageType, CustomChatGroup } from '@/types/chat';
 import type { UserProfile } from '@/components/auth/AuthModal';
 
 const CONVERSATIONS_COLLECTION = 'chat_conversations';
@@ -410,5 +410,131 @@ export const chatService = {
       console.warn('Realtime 訂閱失敗:', e);
       return () => {};
     }
+  },
+  /**
+   * 取得使用者的自訂對話分組清單
+   */
+  async getCustomGroups(username: string): Promise<CustomChatGroup[]> {
+    const uLower = (username || '').toLowerCase().trim();
+    if (!uLower) return [];
+
+    const localGroups = getLocalCache<CustomChatGroup[]>(`custom_groups_${uLower}`, []);
+
+    try {
+      const res = await databases.listDocuments(DATABASE_ID, 'homework_settings', [
+        Query.equal('setting_key', `chat_grp_${uLower}`),
+        Query.limit(1),
+      ]);
+
+      if (res && res.documents && res.documents.length > 0) {
+        const val = res.documents[0].setting_value;
+        const parsed = JSON.parse(val || '[]');
+        if (Array.isArray(parsed)) {
+          setLocalCache(`custom_groups_${uLower}`, parsed);
+          return parsed;
+        }
+      }
+    } catch (e) {
+      // 雲端讀取失敗則使用本地快取
+    }
+
+    return localGroups;
+  },
+
+  /**
+   * 儲存自訂對話分組至本地與雲端
+   */
+  async saveCustomGroups(username: string, groups: CustomChatGroup[]): Promise<void> {
+    const uLower = (username || '').toLowerCase().trim();
+    if (!uLower) return;
+
+    setLocalCache(`custom_groups_${uLower}`, groups);
+
+    try {
+      const settingKey = `chat_grp_${uLower}`;
+      const jsonStr = JSON.stringify(groups);
+
+      const res = await databases.listDocuments(DATABASE_ID, 'homework_settings', [
+        Query.equal('setting_key', settingKey),
+        Query.limit(1),
+      ]);
+
+      if (res && res.documents && res.documents.length > 0) {
+        await databases.updateDocument(DATABASE_ID, 'homework_settings', res.documents[0].$id, {
+          setting_value: jsonStr,
+        });
+      } else {
+        await databases.createDocument(DATABASE_ID, 'homework_settings', ID.unique(), {
+          setting_key: settingKey,
+          setting_value: jsonStr,
+        });
+      }
+    } catch (e) {
+      console.warn('雲端儲存自訂分組失敗 (已保留於本機):', e);
+    }
+  },
+
+  /**
+   * 新增自訂分組
+   */
+  async createCustomGroup(username: string, groupName: string): Promise<CustomChatGroup[]> {
+    const existing = await this.getCustomGroups(username);
+    const newGroup: CustomChatGroup = {
+      id: `grp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      name: groupName.trim(),
+      memberUsernames: [],
+      createdAt: new Date().toISOString(),
+    };
+    const updated = [...existing, newGroup];
+    await this.saveCustomGroups(username, updated);
+    return updated;
+  },
+
+  /**
+   * 刪除自訂分組
+   */
+  async deleteCustomGroup(username: string, groupId: string): Promise<CustomChatGroup[]> {
+    const existing = await this.getCustomGroups(username);
+    const updated = existing.filter((g) => g.id !== groupId);
+    await this.saveCustomGroups(username, updated);
+    return updated;
+  },
+
+  /**
+   * 添加成員至自訂分組
+   */
+  async addMemberToGroup(username: string, groupId: string, targetUsername: string): Promise<CustomChatGroup[]> {
+    const existing = await this.getCustomGroups(username);
+    const tLower = targetUsername.toLowerCase().trim();
+    const updated = existing.map((g) => {
+      if (g.id === groupId) {
+        const memSet = new Set(g.memberUsernames.map((u) => u.toLowerCase().trim()));
+        if (!memSet.has(tLower)) {
+          return { ...g, memberUsernames: [...g.memberUsernames, targetUsername] };
+        }
+      }
+      return g;
+    });
+    await this.saveCustomGroups(username, updated);
+    return updated;
+  },
+
+  /**
+   * 從自訂分組中移除成員
+   */
+  async removeMemberFromGroup(username: string, groupId: string, targetUsername: string): Promise<CustomChatGroup[]> {
+    const existing = await this.getCustomGroups(username);
+    const tLower = targetUsername.toLowerCase().trim();
+    const updated = existing.map((g) => {
+      if (g.id === groupId) {
+        return {
+          ...g,
+          memberUsernames: g.memberUsernames.filter((u) => u.toLowerCase().trim() !== tLower),
+        };
+      }
+      return g;
+    });
+    await this.saveCustomGroups(username, updated);
+    return updated;
   },
 };

@@ -16,13 +16,17 @@ import {
   Sparkles,
   ChevronDown,
   ChevronRight,
-  Filter,
   ListFilter,
   Layers,
-  CalendarDays,
+  Plus,
+  Trash2,
+  FolderPlus,
+  Tag,
+  X,
+  GripVertical,
 } from 'lucide-react';
 import type { UserProfile, UserRole } from '@/components/auth/AuthModal';
-import type { ChatMessage, ChatConversation, ChatContact, MessageType } from '@/types/chat';
+import type { ChatMessage, ChatConversation, ChatContact, MessageType, CustomChatGroup } from '@/types/chat';
 import { chatService, makeConversationId } from '@/lib/chatService';
 
 interface ChatViewProps {
@@ -52,12 +56,10 @@ function dedupeMessages(msgs: ChatMessage[]): ChatMessage[] {
     );
 
     if (duplicateIdx !== -1) {
-      // 若原先是暫存 tempId，而當前是伺服器正式 ID，則用正式 ID 覆蓋
       if (result[duplicateIdx].$id?.startsWith('temp_') && !m.$id?.startsWith('temp_')) {
         result[duplicateIdx] = m;
         if (m.$id) seenIds.add(m.$id);
       }
-      // 否則視為重複略過
       continue;
     }
 
@@ -88,16 +90,38 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
 
-  // ⭐ 對話分組過濾狀態
-  const [activeConvFilter, setActiveConvFilter] = useState<'all' | 'leave' | 'parent' | 'student' | 'teacher' | 'admin'>('all');
+  // ⭐ 權限檢查：除學生與家長外，其他身分 (導師、助教、管理員) 可自訂對話分組
+  const canManageCustomGroups = useMemo(() => {
+    if (!currentUser) return false;
+    return currentUser.role === 'admin' || currentUser.role === 'teacher' || currentUser.role === 'assistant';
+  }, [currentUser]);
+
+  // ⭐ 自訂分組狀態
+  const [customGroups, setCustomGroups] = useState<CustomChatGroup[]>([]);
+  const [activeFilterId, setActiveFilterId] = useState<string>('all'); // 'all', 'leave', 'parent', 'student', 'teacher', or custom group id
   const [groupViewMode, setGroupViewMode] = useState<'grouped' | 'flat'>('grouped');
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+
+  // 彈窗與互動狀態
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+  const [newGroupNameInput, setNewGroupNameInput] = useState('');
+  const [contactToGroupModal, setContactToGroupModal] = useState<ChatContact | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // 拖曳狀態 (Drag & Drop)
+  const [draggingUsername, setDraggingUsername] = useState<string | null>(null);
+  const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // 滾動至最新訊息
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
     messagesEndRef.current?.scrollIntoView({ behavior });
+  };
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
   };
 
   // 1. 嚴格身分過濾：計算當前使用者可發起私訊的聯絡人名單
@@ -117,22 +141,22 @@ export const ChatView: React.FC<ChatViewProps> = ({
         const uUsername = u.username.toLowerCase();
         if (uUsername === myUsername) return false; // 排除自己
 
-        // ⭐ 規則 1：學生 只能找 導師、助教、管理員 (嚴格禁止學生找學生、學生找家長)
+        // 規則 1：學生 只能找 導師、助教、管理員 (嚴格禁止學生找學生、學生找家長)
         if (myRole === 'student') {
           return u.role === 'teacher' || u.role === 'assistant' || u.role === 'admin';
         }
 
-        // ⭐ 規則 2：家長 只能找 導師、助教、管理員 (嚴格禁止家長找家長、家長找其他學生)
+        // 規則 2：家長 只能找 導師、助教、管理員 (嚴格禁止家長找家長、家長找其他學生)
         if (myRole === 'parent') {
           return u.role === 'teacher' || u.role === 'assistant' || u.role === 'admin';
         }
 
-        // ⭐ 規則 3：導師 與 助教 可找 學生、家長、同事(導師/助教)、管理員
+        // 規則 3：導師 與 助教 可找 學生、家長、同事(導師/助教)、管理員
         if (myRole === 'teacher' || myRole === 'assistant') {
-          return true; // 導師可直接聯繫所有學生與家長
+          return true;
         }
 
-        // ⭐ 規則 4：管理員 可找 全員
+        // 規則 4：管理員 可找 全員
         if (myRole === 'admin') {
           return true;
         }
@@ -140,7 +164,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
         return false;
       })
       .map((u) => {
-        // 若為家長，帶上子女名稱方便辨識
         let childrenNames: string[] = [];
         if (u.role === 'parent' && u.childrenUsernames) {
           const cSet = new Set(u.childrenUsernames.map((c) => c.toLowerCase()));
@@ -161,7 +184,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
       });
   }, [currentUser, usersList]);
 
-  // 2. 載入對話清單
+  // 2. 載入對話清單與自訂分組
   const fetchConversations = async () => {
     if (!currentUser) return;
     try {
@@ -172,22 +195,30 @@ export const ChatView: React.FC<ChatViewProps> = ({
     }
   };
 
+  const fetchCustomGroups = async () => {
+    if (!currentUser || !canManageCustomGroups) return;
+    try {
+      const groups = await chatService.getCustomGroups(currentUser.username);
+      setCustomGroups(groups);
+    } catch (e) {
+      console.warn('載入自訂分組失敗:', e);
+    }
+  };
+
   useEffect(() => {
     fetchConversations();
-  }, [currentUser]);
+    fetchCustomGroups();
+  }, [currentUser, canManageCustomGroups]);
 
-  // 3. Appwrite Realtime 監聽新訊息 (嚴格去重，防止發出與推播雙重顯示)
+  // 3. Appwrite Realtime 監聽新訊息 (防重覆機制)
   useEffect(() => {
     if (!currentUser) return;
 
     const unsubscribe = chatService.subscribeToNewMessages(currentUser.username, (newMsg) => {
-      // 若當前正開啟此對話室，安全替換暫存訊息並標記已讀
       if (activeConversationId && newMsg.conversationId === activeConversationId) {
         setMessages((prev) => {
-          // 檢查是否已有該真正 ID
           if (prev.some((m) => m.$id === newMsg.$id)) return prev;
 
-          // 檢查是否能覆蓋自己的 tempId 樂觀訊息
           const tempIdx = prev.findIndex(
             (m) =>
               m.$id?.startsWith('temp_') &&
@@ -202,7 +233,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
             return dedupeMessages(next);
           }
 
-          // 避免短時間內重複內容
           const isDup = prev.some(
             (m) =>
               m.senderId.toLowerCase() === newMsg.senderId.toLowerCase() &&
@@ -218,7 +248,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
         setTimeout(() => scrollToBottom('smooth'), 100);
       }
 
-      // 更新對話列表摘要
       fetchConversations();
     });
 
@@ -272,7 +301,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
     );
     if (!partnerUsername) return;
 
-    // 從 usersList 或 eligibleContacts 找出對方完整資料
     const found = eligibleContacts.find(
       (c) => c.username.toLowerCase() === partnerUsername.toLowerCase()
     ) || {
@@ -289,7 +317,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
     startChatWithPartner(found);
   };
 
-  // 7. 發送訊息 (防重覆機制：先發送暫存，再嚴格替換或忽略，杜絕雙重氣泡)
+  // 7. 發送訊息 (防重覆機制：先發送暫存，再嚴格替換或忽略)
   const handleSendMessage = async (customContent?: string, type: MessageType = 'text') => {
     const textToSend = (customContent !== undefined ? customContent : inputText).trim();
     if (!textToSend || !currentUser || !activePartner || !activeConversationId || sending) {
@@ -317,7 +345,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
       timestamp: new Date().toISOString(),
     };
 
-    // 立即顯示樂觀訊息
     setMessages((prev) => dedupeMessages([...prev, optimisticMsg]));
     scrollToBottom('smooth');
 
@@ -332,7 +359,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
         className: activePartner.className || currentUser.className,
       });
 
-      // 嚴格替換暫存訊息，若 Realtime 早已插入該 savedMsg.$id 則過濾掉 tempId
       setMessages((prev) => {
         const hasRealDoc = prev.some((m) => m.$id === savedMsg.$id);
         if (hasRealDoc) {
@@ -354,6 +380,120 @@ export const ChatView: React.FC<ChatViewProps> = ({
     setInputText(templateText);
   };
 
+  // 取得對話未讀數
+  const getUnreadCount = (conv: ChatConversation): number => {
+    if (!currentUser) return 0;
+    try {
+      const map = JSON.parse(conv.unreadCountMap || '{}');
+      return map[currentUser.username.toLowerCase()] || 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  // ⭐ 計算每個對話的詳細資訊與所屬自訂分組
+  const annotatedConversations = useMemo(() => {
+    if (!currentUser) return [];
+    const myLower = currentUser.username.toLowerCase();
+
+    return conversations.map((conv) => {
+      const partnerIdx = conv.participants.findIndex((p) => p.toLowerCase() !== myLower);
+      const partnerUsername = conv.participants[partnerIdx] || '';
+      const partnerName = conv.participantNames?.[partnerIdx] || partnerUsername;
+
+      const foundUser = usersList.find((u) => u.username.toLowerCase() === partnerUsername.toLowerCase());
+      const partnerRole: UserRole = foundUser?.role || conv.participantRoles?.[partnerIdx] || 'teacher';
+
+      let childrenNames: string[] = [];
+      if (partnerRole === 'parent' && foundUser?.childrenUsernames) {
+        const cSet = new Set(foundUser.childrenUsernames.map((c) => c.toLowerCase()));
+        childrenNames = usersList
+          .filter((st) => cSet.has(st.username.toLowerCase()))
+          .map((st) => st.name || st.username);
+      }
+
+      const isLeave = (conv.lastMessage || '').includes('【請假申請】') || (conv.lastMessage || '').includes('請假');
+      const isHomework = (conv.lastMessage || '').includes('【作業') || (conv.lastMessage || '').includes('功課');
+      const unread = getUnreadCount(conv);
+
+      // 所屬自訂分組清單
+      const assignedGroupIds = customGroups
+        .filter((g) => g.memberUsernames.some((u) => u.toLowerCase() === partnerUsername.toLowerCase()))
+        .map((g) => g.id);
+
+      return {
+        ...conv,
+        partnerUsername,
+        partnerName,
+        partnerRole,
+        childrenNames,
+        isLeave,
+        isHomework,
+        unread,
+        assignedGroupIds,
+      };
+    });
+  }, [conversations, currentUser, usersList, customGroups]);
+
+  // ⭐ 自訂分組操作函式
+  const handleCreateGroup = async () => {
+    if (!currentUser || !newGroupNameInput.trim()) return;
+    try {
+      const updated = await chatService.createCustomGroup(currentUser.username, newGroupNameInput.trim());
+      setCustomGroups(updated);
+      setNewGroupNameInput('');
+      setShowCreateGroupModal(false);
+      showToast(`✅ 已成功建立分組「${newGroupNameInput.trim()}」`);
+    } catch (e) {
+      alert('建立分組失敗，請稍後再試');
+    }
+  };
+
+  const handleDeleteGroup = async (groupId: string, groupName: string) => {
+    if (!currentUser) return;
+    if (!confirm(`確定要刪除分組「${groupName}」嗎？不會刪除內部成員或對話記錄。`)) return;
+    try {
+      const updated = await chatService.deleteCustomGroup(currentUser.username, groupId);
+      setCustomGroups(updated);
+      if (activeFilterId === groupId) {
+        setActiveFilterId('all');
+      }
+      showToast(`🗑️ 已刪除分組「${groupName}」`);
+    } catch (e) {
+      alert('刪除分組失敗');
+    }
+  };
+
+  const handleAddMemberToGroup = async (groupId: string, targetUsername: string) => {
+    if (!currentUser) return;
+    try {
+      const targetContact = usersList.find((u) => u.username.toLowerCase() === targetUsername.toLowerCase());
+      const targetName = targetContact?.name || targetUsername;
+      const targetGroup = customGroups.find((g) => g.id === groupId);
+
+      const updated = await chatService.addMemberToGroup(currentUser.username, groupId, targetUsername);
+      setCustomGroups(updated);
+      showToast(`✅ 已將 ${targetName} 加入「${targetGroup?.name || '分組'}」`);
+    } catch (e) {
+      console.warn('加入分組失敗:', e);
+    }
+  };
+
+  const handleRemoveMemberFromGroup = async (groupId: string, targetUsername: string) => {
+    if (!currentUser) return;
+    try {
+      const targetContact = usersList.find((u) => u.username.toLowerCase() === targetUsername.toLowerCase());
+      const targetName = targetContact?.name || targetUsername;
+      const targetGroup = customGroups.find((g) => g.id === groupId);
+
+      const updated = await chatService.removeMemberFromGroup(currentUser.username, groupId, targetUsername);
+      setCustomGroups(updated);
+      showToast(`ℹ️ 已將 ${targetName} 從「${targetGroup?.name || '分組'}」移出`);
+    } catch (e) {
+      console.warn('移出分組失敗:', e);
+    }
+  };
+
   // 依身分與姓名過濾聯絡人
   const filteredContacts = useMemo(() => {
     return eligibleContacts.filter((c) => {
@@ -367,82 +507,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
       );
     });
   }, [eligibleContacts, searchQuery]);
-
-  // 取得對話未讀數
-  const getUnreadCount = (conv: ChatConversation): number => {
-    if (!currentUser) return 0;
-    try {
-      const map = JSON.parse(conv.unreadCountMap || '{}');
-      return map[currentUser.username.toLowerCase()] || 0;
-    } catch {
-      return 0;
-    }
-  };
-
-  // ⭐ 計算每個對話的詳細資訊與分組歸屬
-  const annotatedConversations = useMemo(() => {
-    if (!currentUser) return [];
-    const myLower = currentUser.username.toLowerCase();
-
-    return conversations.map((conv) => {
-      const partnerIdx = conv.participants.findIndex((p) => p.toLowerCase() !== myLower);
-      const partnerUsername = conv.participants[partnerIdx] || '';
-      const partnerName = conv.participantNames?.[partnerIdx] || partnerUsername;
-      
-      // 從 usersList 查找最新角色與子女名稱
-      const foundUser = usersList.find((u) => u.username.toLowerCase() === partnerUsername.toLowerCase());
-      const partnerRole: UserRole = foundUser?.role || conv.participantRoles?.[partnerIdx] || 'teacher';
-      
-      let childrenNames: string[] = [];
-      if (partnerRole === 'parent' && foundUser?.childrenUsernames) {
-        const cSet = new Set(foundUser.childrenUsernames.map((c) => c.toLowerCase()));
-        childrenNames = usersList
-          .filter((st) => cSet.has(st.username.toLowerCase()))
-          .map((st) => st.name || st.username);
-      }
-
-      const isLeave = (conv.lastMessage || '').includes('【請假申請】') || (conv.lastMessage || '').includes('請假');
-      const isHomework = (conv.lastMessage || '').includes('【作業') || (conv.lastMessage || '').includes('功課');
-      const unread = getUnreadCount(conv);
-
-      return {
-        ...conv,
-        partnerUsername,
-        partnerName,
-        partnerRole,
-        childrenNames,
-        isLeave,
-        isHomework,
-        unread,
-      };
-    });
-  }, [conversations, currentUser, usersList]);
-
-  // ⭐ 各分組統計數量
-  const groupCounts = useMemo(() => {
-    let leave = 0;
-    let parent = 0;
-    let student = 0;
-    let teacher = 0;
-    let admin = 0;
-
-    annotatedConversations.forEach((c) => {
-      if (c.isLeave) leave++;
-      if (c.partnerRole === 'parent') parent++;
-      else if (c.partnerRole === 'student') student++;
-      else if (c.partnerRole === 'teacher' || c.partnerRole === 'assistant') teacher++;
-      else if (c.partnerRole === 'admin') admin++;
-    });
-
-    return {
-      all: annotatedConversations.length,
-      leave,
-      parent,
-      student,
-      teacher,
-      admin,
-    };
-  }, [annotatedConversations]);
 
   // 搜尋過濾後的對話列表
   const searchedConversations = useMemo(() => {
@@ -459,48 +523,98 @@ export const ChatView: React.FC<ChatViewProps> = ({
     );
   }, [annotatedConversations, searchQuery]);
 
-  // 依選取的 filter pill 過濾
+  // 各分組數量統計
+  const groupCounts = useMemo(() => {
+    let leave = 0;
+    let parent = 0;
+    let student = 0;
+    let teacher = 0;
+
+    annotatedConversations.forEach((c) => {
+      if (c.isLeave) leave++;
+      if (c.partnerRole === 'parent') parent++;
+      else if (c.partnerRole === 'student') student++;
+      else if (c.partnerRole === 'teacher' || c.partnerRole === 'assistant') teacher++;
+    });
+
+    // 自訂分組計數
+    const customCounts: Record<string, number> = {};
+    customGroups.forEach((g) => {
+      const mSet = new Set(g.memberUsernames.map((u) => u.toLowerCase()));
+      customCounts[g.id] = annotatedConversations.filter((c) => mSet.has(c.partnerUsername.toLowerCase())).length;
+    });
+
+    return {
+      all: annotatedConversations.length,
+      leave,
+      parent,
+      student,
+      teacher,
+      customCounts,
+    };
+  }, [annotatedConversations, customGroups]);
+
+  // 依選取的 filter pill 過濾對話
   const displayedConversations = useMemo(() => {
-    if (activeConvFilter === 'leave') {
+    if (activeFilterId === 'leave') {
       return searchedConversations.filter((c) => c.isLeave);
     }
-    if (activeConvFilter === 'parent') {
+    if (activeFilterId === 'parent') {
       return searchedConversations.filter((c) => c.partnerRole === 'parent');
     }
-    if (activeConvFilter === 'student') {
+    if (activeFilterId === 'student') {
       return searchedConversations.filter((c) => c.partnerRole === 'student');
     }
-    if (activeConvFilter === 'teacher') {
+    if (activeFilterId === 'teacher') {
       return searchedConversations.filter((c) => c.partnerRole === 'teacher' || c.partnerRole === 'assistant');
     }
-    if (activeConvFilter === 'admin') {
-      return searchedConversations.filter((c) => c.partnerRole === 'admin');
+    // 自訂分組過濾
+    if (activeFilterId.startsWith('grp_')) {
+      const grp = customGroups.find((g) => g.id === activeFilterId);
+      if (!grp) return searchedConversations;
+      const memSet = new Set(grp.memberUsernames.map((u) => u.toLowerCase()));
+      return searchedConversations.filter((c) => memSet.has(c.partnerUsername.toLowerCase()));
     }
     return searchedConversations;
-  }, [searchedConversations, activeConvFilter]);
+  }, [searchedConversations, activeFilterId, customGroups]);
 
-  // ⭐ 樹狀分組對話列表 (依類別折疊分區)
+  // ⭐ 樹狀分組對話列表 (包含自訂分組)
   const groupedSections = useMemo(() => {
     const sections: {
       id: string;
       title: string;
       icon: string;
-      color: string;
+      isCustom?: boolean;
       items: typeof annotatedConversations;
     }[] = [];
 
+    // 1. 自訂分組區塊 (若有)
+    if (canManageCustomGroups && customGroups.length > 0) {
+      customGroups.forEach((g) => {
+        const mSet = new Set(g.memberUsernames.map((u) => u.toLowerCase()));
+        const items = searchedConversations.filter((c) => mSet.has(c.partnerUsername.toLowerCase()));
+        sections.push({
+          id: g.id,
+          title: g.name,
+          icon: '🏷️',
+          isCustom: true,
+          items,
+        });
+      });
+    }
+
+    // 2. 請假申請專區
     const leaves = searchedConversations.filter((c) => c.isLeave);
     if (leaves.length > 0) {
       sections.push({
         id: 'leave',
         title: '請假申請專區',
         icon: '📝',
-        color: 'text-red-600 bg-red-50 border-red-200',
         items: leaves,
       });
     }
 
-    // 依使用者角色排序其餘分組
+    // 3. 系統角色分組
     if (currentUser?.role === 'teacher' || currentUser?.role === 'assistant' || currentUser?.role === 'admin') {
       const parents = searchedConversations.filter((c) => !c.isLeave && c.partnerRole === 'parent');
       if (parents.length > 0) {
@@ -508,7 +622,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
           id: 'parent',
           title: '家長諮詢對話',
           icon: '👨‍👩‍👧',
-          color: 'text-amber-600 bg-amber-50 border-amber-200',
           items: parents,
         });
       }
@@ -519,7 +632,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
           id: 'student',
           title: '學生作業與輔導',
           icon: '🎓',
-          color: 'text-emerald-600 bg-emerald-50 border-emerald-200',
           items: students,
         });
       }
@@ -532,12 +644,10 @@ export const ChatView: React.FC<ChatViewProps> = ({
           id: 'colleague',
           title: '導師與行政團隊',
           icon: '👨‍🏫',
-          color: 'text-blue-600 bg-blue-50 border-blue-200',
           items: colleagues,
         });
       }
     } else {
-      // 家長或學生登入時
       const teachers = searchedConversations.filter(
         (c) => !c.isLeave && (c.partnerRole === 'teacher' || c.partnerRole === 'assistant' || c.partnerRole === 'admin')
       );
@@ -546,16 +656,14 @@ export const ChatView: React.FC<ChatViewProps> = ({
           id: 'teacher',
           title: '導師與助教',
           icon: '👨‍🏫',
-          color: 'text-blue-600 bg-blue-50 border-blue-200',
           items: teachers,
         });
       }
     }
 
     return sections;
-  }, [searchedConversations, currentUser]);
+  }, [searchedConversations, currentUser, customGroups, canManageCustomGroups]);
 
-  // 切換折疊區塊
   const toggleSection = (sectionId: string) => {
     setCollapsedSections((prev) => ({
       ...prev,
@@ -599,13 +707,35 @@ export const ChatView: React.FC<ChatViewProps> = ({
     }
   };
 
-  // 渲染單張對話卡片
-  const renderConversationCard = (conv: typeof annotatedConversations[0]) => (
+  // 渲染單張對話卡片 (支援拖曳 Drag & Drop)
+  const renderConversationCard = (conv: typeof annotatedConversations[0], currentGroupId?: string) => (
     <div
       key={conv.conversationId}
+      draggable={canManageCustomGroups}
+      onDragStart={(e) => {
+        if (!canManageCustomGroups) return;
+        e.dataTransfer.setData('text/plain', conv.partnerUsername);
+        setDraggingUsername(conv.partnerUsername);
+      }}
+      onDragEnd={() => {
+        setDraggingUsername(null);
+        setDragOverGroupId(null);
+      }}
       onClick={() => openConversation(conv)}
-      className="p-3 hover:bg-gray-50 cursor-pointer flex items-center gap-3 transition-colors border-b border-gray-50 last:border-b-0"
+      className={`p-3 hover:bg-gray-50 cursor-pointer flex items-center gap-2.5 transition-all border-b border-gray-50 last:border-b-0 ${
+        draggingUsername === conv.partnerUsername ? 'opacity-40 scale-98 bg-amber-50/50' : ''
+      }`}
     >
+      {/* 拖曳握把 (僅支援自訂分組的角色可見) */}
+      {canManageCustomGroups && (
+        <div
+          className="text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing p-0.5 shrink-0"
+          title="按住可拖曳此聯絡人至自訂分組"
+        >
+          <GripVertical size={14} />
+        </div>
+      )}
+
       <div className="relative shrink-0">
         <div className={`w-10 h-10 rounded-full font-bold flex items-center justify-center text-sm shadow-xs text-white ${
           conv.isLeave
@@ -651,7 +781,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
           )}
         </div>
 
-        {/* 補充標籤 (例如子女名稱或班級) */}
         {conv.childrenNames && conv.childrenNames.length > 0 && (
           <div className="text-[10px] text-amber-700/80 mb-0.5 truncate">
             子女: {conv.childrenNames.join(', ')}
@@ -667,6 +796,21 @@ export const ChatView: React.FC<ChatViewProps> = ({
           {conv.lastMessage || '點擊開啟對話...'}
         </p>
       </div>
+
+      {/* 若在自訂分組內，顯示移出按鈕 */}
+      {currentGroupId && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleRemoveMemberFromGroup(currentGroupId, conv.partnerUsername);
+          }}
+          className="text-[10px] text-gray-400 hover:text-red-500 p-1.5 rounded-md hover:bg-red-50 transition-colors shrink-0"
+          title="從本分組中移出"
+        >
+          移出
+        </button>
+      )}
     </div>
   );
 
@@ -697,7 +841,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
   // 子視圖 1：開啟特定聯絡人的聊天室 (Chat Room)
   // ============================================================================
   if (activePartner && activeConversationId) {
-    // 嚴格保證渲染時無重複訊息
     const uniqueMessages = dedupeMessages(messages);
 
     return (
@@ -744,7 +887,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
             <Sparkles size={12} className="text-amber-500" /> 快捷發送:
           </span>
 
-          {/* 家長快捷鍵 */}
           {currentUser.role === 'parent' && (
             <>
               <button
@@ -761,9 +903,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
               <button
                 type="button"
                 onClick={() =>
-                  handleQuickTopic(
-                    `【學習進度諮詢】\n老師好，我想了解孩子最近在課堂上的學習狀況與理解程度，謝謝！`
-                  )
+                  handleQuickTopic(`【學習進度諮詢】\n老師好，我想了解孩子最近在課堂上的學習狀況與理解程度，謝謝！`)
                 }
                 className="text-[11px] px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors whitespace-nowrap font-medium"
               >
@@ -771,11 +911,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() =>
-                  handleQuickTopic(
-                    `【日常表現反饋】\n老師好，想向您反饋學生在家的溫習情況：`
-                  )
-                }
+                onClick={() => handleQuickTopic(`【日常表現反饋】\n老師好，想向您反饋學生在家的溫習情況：`)}
                 className="text-[11px] px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors whitespace-nowrap font-medium"
               >
                 💬 日常表現
@@ -783,7 +919,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
             </>
           )}
 
-          {/* 學生快捷鍵 */}
           {currentUser.role === 'student' && (
             <>
               <button
@@ -799,11 +934,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() =>
-                  handleQuickTopic(
-                    `【課堂概念提問】\n老師好，我想請教課堂上講解的內容：`
-                  )
-                }
+                onClick={() => handleQuickTopic(`【課堂概念提問】\n老師好，我想請教課堂上講解的內容：`)}
                 className="text-[11px] px-2.5 py-1 rounded-full bg-cyan-50 text-cyan-700 border border-cyan-200 hover:bg-cyan-100 transition-colors whitespace-nowrap font-medium"
               >
                 📖 課堂提問
@@ -811,15 +942,12 @@ export const ChatView: React.FC<ChatViewProps> = ({
             </>
           )}
 
-          {/* 導師/助教快捷鍵 */}
           {(currentUser.role === 'teacher' || currentUser.role === 'assistant') && (
             <>
               <button
                 type="button"
                 onClick={() =>
-                  handleQuickTopic(
-                    `【課堂學習進度通知】\n家長/同學您好，這是今日課堂學習進度與表現反饋：`
-                  )
+                  handleQuickTopic(`【課堂學習進度通知】\n家長/同學您好，這是今日課堂學習進度與表現反饋：`)
                 }
                 className="text-[11px] px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors whitespace-nowrap font-medium"
               >
@@ -827,20 +955,14 @@ export const ChatView: React.FC<ChatViewProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() =>
-                  handleQuickTopic(
-                    `【作業指導與反饋】\n同學好，已查閱你的作業，以下是個別建議：`
-                  )
-                }
+                onClick={() => handleQuickTopic(`【作業指導與反饋】\n同學好，已查閱你的作業，以下是個別建議：`)}
                 className="text-[11px] px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 transition-colors whitespace-nowrap font-medium"
               >
                 💡 作業輔導
               </button>
               <button
                 type="button"
-                onClick={() =>
-                  handleQuickTopic(`【請假審批確認】\n已收到並批准學生的請假申請，祝早日康復！`)
-                }
+                onClick={() => handleQuickTopic(`【請假審批確認】\n已收到並批准學生的請假申請，祝早日康復！`)}
                 className="text-[11px] px-2.5 py-1 rounded-full bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-colors whitespace-nowrap font-medium"
               >
                 ✅ 准假回覆
@@ -849,7 +971,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
           )}
         </div>
 
-        {/* 聊天訊息流 (100% 保證無重複氣泡) */}
+        {/* 聊天訊息流 */}
         <div className="flex-1 p-4 overflow-y-auto space-y-3">
           {loading ? (
             <div className="flex items-center justify-center h-32 text-gray-400 text-xs">
@@ -969,10 +1091,25 @@ export const ChatView: React.FC<ChatViewProps> = ({
   }
 
   // ============================================================================
-  // 子視圖 2：對話清單 (支援多重分組) & 聯絡人首頁
+  // 子視圖 2：對話清單 (支援自訂分組 & 拖曳歸類) & 聯絡人首頁
   // ============================================================================
   return (
-    <div className="flex-1 flex flex-col bg-white h-full overflow-hidden">
+    <div className="flex-1 flex flex-col bg-white h-full overflow-hidden relative">
+      {/* 頂部操作反饋 Toast */}
+      {toastMessage && (
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-50 bg-slate-900/90 text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-lg animate-in fade-in slide-in-from-top-2 duration-150">
+          {toastMessage}
+        </div>
+      )}
+
+      {/* 拖曳中的視覺引導提示條 */}
+      {draggingUsername && (
+        <div className="bg-amber-500 text-white px-3 py-1.5 text-xs font-bold flex items-center justify-between shadow-xs z-30 animate-pulse">
+          <span>👆 請拖放至上方的「分組標籤」或下方「分組區塊」放開即可歸類</span>
+          <span className="text-[10px] bg-black/20 px-2 py-0.5 rounded">正在拖曳: {draggingUsername}</span>
+        </div>
+      )}
+
       {/* 頂部搜尋與分頁 */}
       <div className="p-3 border-b border-gray-100 bg-white shrink-0">
         <div className="relative mb-2.5">
@@ -1018,15 +1155,15 @@ export const ChatView: React.FC<ChatViewProps> = ({
           </button>
         </div>
 
-        {/* ⭐ 對話分組過濾標籤列 (僅在「進行中對話」時顯示) */}
+        {/* ⭐ 對話分組過濾標籤列 (含拖曳目標支援) */}
         {activeSubTab === 'conversations' && (
           <div className="flex items-center justify-between pt-1 border-t border-gray-100">
-            {/* 分組過濾 Pills */}
             <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 flex-1 mr-2">
+              {/* 全部 */}
               <button
-                onClick={() => setActiveConvFilter('all')}
+                onClick={() => setActiveFilterId('all')}
                 className={`text-[11px] px-2 py-0.8 rounded-full font-bold whitespace-nowrap transition-colors flex items-center gap-1 ${
-                  activeConvFilter === 'all'
+                  activeFilterId === 'all'
                     ? 'bg-slate-800 text-white'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
@@ -1034,11 +1171,12 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 全部 ({groupCounts.all})
               </button>
 
+              {/* 請假專區 */}
               {groupCounts.leave > 0 && (
                 <button
-                  onClick={() => setActiveConvFilter('leave')}
+                  onClick={() => setActiveFilterId('leave')}
                   className={`text-[11px] px-2 py-0.8 rounded-full font-bold whitespace-nowrap transition-colors flex items-center gap-1 ${
-                    activeConvFilter === 'leave'
+                    activeFilterId === 'leave'
                       ? 'bg-red-600 text-white shadow-xs'
                       : 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'
                   }`}
@@ -1047,13 +1185,59 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 </button>
               )}
 
+              {/* ⭐ 導師、助教、管理員的自訂分組標籤 (可作為拖曳放置目標) */}
+              {canManageCustomGroups &&
+                customGroups.map((grp) => {
+                  const cnt = groupCounts.customCounts[grp.id] || 0;
+                  const isDragTarget = dragOverGroupId === grp.id;
+
+                  return (
+                    <div
+                      key={grp.id}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'copy';
+                        setDragOverGroupId(grp.id);
+                      }}
+                      onDragLeave={() => setDragOverGroupId(null)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const tUser = e.dataTransfer.getData('text/plain') || draggingUsername;
+                        if (tUser) {
+                          handleAddMemberToGroup(grp.id, tUser);
+                        }
+                        setDragOverGroupId(null);
+                        setDraggingUsername(null);
+                      }}
+                      className={`relative shrink-0 rounded-full transition-all ${
+                        isDragTarget ? 'ring-2 ring-amber-500 scale-105' : ''
+                      }`}
+                    >
+                      <button
+                        onClick={() => setActiveFilterId(grp.id)}
+                        className={`text-[11px] px-2.5 py-0.8 rounded-full font-bold whitespace-nowrap transition-colors flex items-center gap-1 ${
+                          activeFilterId === grp.id
+                            ? 'bg-amber-600 text-white shadow-xs'
+                            : isDragTarget
+                            ? 'bg-amber-100 text-amber-900 border border-amber-400 font-extrabold'
+                            : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
+                        }`}
+                      >
+                        <Tag size={10} />
+                        {grp.name} ({cnt})
+                      </button>
+                    </div>
+                  );
+                })}
+
+              {/* 系統角色分組 */}
               {(currentUser?.role === 'teacher' || currentUser?.role === 'assistant' || currentUser?.role === 'admin') && (
                 <>
                   {groupCounts.parent > 0 && (
                     <button
-                      onClick={() => setActiveConvFilter('parent')}
+                      onClick={() => setActiveFilterId('parent')}
                       className={`text-[11px] px-2 py-0.8 rounded-full font-bold whitespace-nowrap transition-colors flex items-center gap-1 ${
-                        activeConvFilter === 'parent'
+                        activeFilterId === 'parent'
                           ? 'bg-amber-600 text-white shadow-xs'
                           : 'bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200'
                       }`}
@@ -1064,9 +1248,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
                   {groupCounts.student > 0 && (
                     <button
-                      onClick={() => setActiveConvFilter('student')}
+                      onClick={() => setActiveFilterId('student')}
                       className={`text-[11px] px-2 py-0.8 rounded-full font-bold whitespace-nowrap transition-colors flex items-center gap-1 ${
-                        activeConvFilter === 'student'
+                        activeFilterId === 'student'
                           ? 'bg-emerald-600 text-white shadow-xs'
                           : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
                       }`}
@@ -1077,9 +1261,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
                   {groupCounts.teacher > 0 && (
                     <button
-                      onClick={() => setActiveConvFilter('teacher')}
+                      onClick={() => setActiveFilterId('teacher')}
                       className={`text-[11px] px-2 py-0.8 rounded-full font-bold whitespace-nowrap transition-colors flex items-center gap-1 ${
-                        activeConvFilter === 'teacher'
+                        activeFilterId === 'teacher'
                           ? 'bg-blue-600 text-white shadow-xs'
                           : 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200'
                       }`}
@@ -1092,9 +1276,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
               {(currentUser?.role === 'parent' || currentUser?.role === 'student') && groupCounts.teacher > 0 && (
                 <button
-                  onClick={() => setActiveConvFilter('teacher')}
+                  onClick={() => setActiveFilterId('teacher')}
                   className={`text-[11px] px-2 py-0.8 rounded-full font-bold whitespace-nowrap transition-colors flex items-center gap-1 ${
-                    activeConvFilter === 'teacher'
+                    activeFilterId === 'teacher'
                       ? 'bg-blue-600 text-white shadow-xs'
                       : 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200'
                   }`}
@@ -1102,14 +1286,25 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   👨‍🏫 導師與助教 ({groupCounts.teacher})
                 </button>
               )}
+
+              {/* ⭐ 新增自訂分組按鈕 (僅非學生/家長可見) */}
+              {canManageCustomGroups && (
+                <button
+                  onClick={() => setShowCreateGroupModal(true)}
+                  className="text-[11px] px-2 py-0.8 rounded-full font-bold whitespace-nowrap bg-gray-50 text-gray-600 hover:bg-gray-100 border border-dashed border-gray-300 flex items-center gap-0.5 shrink-0"
+                  title="建立新的對話分組"
+                >
+                  <Plus size={11} /> 新增分組
+                </button>
+              )}
             </div>
 
             {/* 分組模式切換 (折疊區塊 vs 時間排序) */}
-            {activeConvFilter === 'all' && (
+            {activeFilterId === 'all' && (
               <button
                 onClick={() => setGroupViewMode(groupViewMode === 'grouped' ? 'flat' : 'grouped')}
                 className="text-[10px] text-gray-500 hover:text-gray-800 p-1 rounded-md hover:bg-gray-100 transition-colors flex items-center gap-0.5 shrink-0"
-                title={groupViewMode === 'grouped' ? '切換為時間排序清單' : '切換為依類別分組'}
+                title={groupViewMode === 'grouped' ? '切換為平鋪排序' : '切換為依類別分組'}
               >
                 {groupViewMode === 'grouped' ? <Layers size={13} className="text-[#FF6B57]" /> : <ListFilter size={13} />}
                 <span className="hidden sm:inline">{groupViewMode === 'grouped' ? '分組中' : '平鋪'}</span>
@@ -1127,7 +1322,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
             <div className="flex flex-col items-center justify-center p-8 text-center text-gray-400">
               <MessageCircle size={32} className="text-gray-300 mb-2" />
               <p className="text-xs font-bold text-gray-600 mb-1">
-                {activeConvFilter !== 'all' ? '該分類下暫無對話' : '暫無進行中的對話'}
+                {activeFilterId !== 'all' ? '該分類下暫無對話' : '暫無進行中的對話'}
               </p>
               <p className="text-[11px] text-gray-400 mb-4 max-w-xs">
                 切換到「可聯絡人」分頁，即可直接向老師提問或提交請假諮詢。
@@ -1139,15 +1334,42 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 尋找聯絡人
               </button>
             </div>
-          ) : activeConvFilter === 'all' && groupViewMode === 'grouped' ? (
-            /* ⭐ 類別折疊分組視圖 */
+          ) : activeFilterId === 'all' && groupViewMode === 'grouped' ? (
+            /* ⭐ 類別折疊分組視圖 (支援拖曳至自訂分組標題) */
             <div className="divide-y divide-gray-100">
               {groupedSections.map((sec) => {
                 const isCollapsed = !!collapsedSections[sec.id];
                 const secUnread = sec.items.reduce((acc, cur) => acc + cur.unread, 0);
+                const isDropTarget = dragOverGroupId === sec.id;
 
                 return (
-                  <div key={sec.id} className="bg-white">
+                  <div
+                    key={sec.id}
+                    onDragOver={(e) => {
+                      if (sec.isCustom) {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'copy';
+                        setDragOverGroupId(sec.id);
+                      }
+                    }}
+                    onDragLeave={() => {
+                      if (sec.isCustom) setDragOverGroupId(null);
+                    }}
+                    onDrop={(e) => {
+                      if (sec.isCustom) {
+                        e.preventDefault();
+                        const tUser = e.dataTransfer.getData('text/plain') || draggingUsername;
+                        if (tUser) {
+                          handleAddMemberToGroup(sec.id, tUser);
+                        }
+                        setDragOverGroupId(null);
+                        setDraggingUsername(null);
+                      }
+                    }}
+                    className={`bg-white transition-colors ${
+                      isDropTarget ? 'bg-amber-50 ring-2 ring-amber-400' : ''
+                    }`}
+                  >
                     {/* 分組區塊標題欄 */}
                     <div
                       onClick={() => toggleSection(sec.id)}
@@ -1164,16 +1386,43 @@ export const ChatView: React.FC<ChatViewProps> = ({
                             {secUnread} 則未讀
                           </span>
                         )}
+                        {sec.isCustom && (
+                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 font-medium">
+                            自訂分組
+                          </span>
+                        )}
                       </div>
-                      <div className="text-gray-400">
-                        {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+
+                      <div className="flex items-center gap-2">
+                        {sec.isCustom && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteGroup(sec.id, sec.title);
+                            }}
+                            className="text-gray-400 hover:text-red-500 p-1 rounded hover:bg-gray-200"
+                            title="刪除此分組"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        )}
+                        <div className="text-gray-400">
+                          {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                        </div>
                       </div>
                     </div>
 
-                    {/* 分組內容 */}
+                    {/* 分組對話卡片清單 */}
                     {!isCollapsed && (
                       <div className="divide-y divide-gray-50">
-                        {sec.items.map((conv) => renderConversationCard(conv))}
+                        {sec.items.length === 0 ? (
+                          <div className="p-3 text-center text-gray-400 text-[11px]">
+                            {sec.isCustom ? '尚未加入聯絡人，可直接從下方聯絡人或對話拖曳至此' : '暫無對話'}
+                          </div>
+                        ) : (
+                          sec.items.map((conv) => renderConversationCard(conv, sec.isCustom ? sec.id : undefined))
+                        )}
                       </div>
                     )}
                   </div>
@@ -1181,32 +1430,84 @@ export const ChatView: React.FC<ChatViewProps> = ({
               })}
             </div>
           ) : (
-            /* ⭐ 平鋪時間排序視圖 (或特定 Filter 視圖) */
-            <div className="divide-y divide-gray-50">
-              {displayedConversations.map((conv) => renderConversationCard(conv))}
+            /* ⭐ 平鋪時間排序視圖 (或特定自訂分組單獨檢視) */
+            <div>
+              {/* 若目前正在檢視特定的自訂分組，顯示管理控制列 */}
+              {activeFilterId.startsWith('grp_') && (
+                <div className="bg-amber-50/70 border-b border-amber-200/60 p-2.5 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs text-amber-900 font-bold">
+                    <Tag size={14} className="text-amber-600" />
+                    <span>分組：{customGroups.find((g) => g.id === activeFilterId)?.name}</span>
+                    <span className="text-[10px] text-amber-700 font-normal">
+                      ({displayedConversations.length} 位成員)
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const g = customGroups.find((item) => item.id === activeFilterId);
+                      if (g) handleDeleteGroup(g.id, g.name);
+                    }}
+                    className="text-[10px] text-red-600 hover:text-red-800 font-bold px-2 py-0.5 rounded hover:bg-red-50"
+                  >
+                    刪除此分組
+                  </button>
+                </div>
+              )}
+
+              <div className="divide-y divide-gray-50">
+                {displayedConversations.map((conv) =>
+                  renderConversationCard(conv, activeFilterId.startsWith('grp_') ? activeFilterId : undefined)
+                )}
+              </div>
             </div>
           )
         ) : (
-          /* 聯絡人清單 (嚴格依身分過濾) */
+          /* ============================================================ */
+          /* 聯絡人清單 (支援直接添加至分組 + 拖曳) */
+          /* ============================================================ */
           filteredContacts.length === 0 ? (
             <div className="p-8 text-center text-gray-400 text-xs">沒有找到相符的聯絡人</div>
           ) : (
             filteredContacts.map((contact) => (
               <div
                 key={contact.username}
-                onClick={() => startChatWithPartner(contact)}
-                className="p-3 hover:bg-gray-50 cursor-pointer flex items-center justify-between transition-colors"
+                draggable={canManageCustomGroups}
+                onDragStart={(e) => {
+                  if (!canManageCustomGroups) return;
+                  e.dataTransfer.setData('text/plain', contact.username);
+                  setDraggingUsername(contact.username);
+                }}
+                onDragEnd={() => {
+                  setDraggingUsername(null);
+                  setDragOverGroupId(null);
+                }}
+                className={`p-3 hover:bg-gray-50 flex items-center justify-between transition-colors border-b border-gray-50 last:border-b-0 ${
+                  draggingUsername === contact.username ? 'opacity-40 bg-amber-50/50' : ''
+                }`}
               >
-                <div className="flex items-center gap-3">
+                <div
+                  onClick={() => startChatWithPartner(contact)}
+                  className="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0"
+                >
+                  {/* 拖曳手柄 */}
+                  {canManageCustomGroups && (
+                    <div
+                      className="text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing p-0.5 shrink-0"
+                      title="按住可拖曳此聯絡人至自訂分組"
+                    >
+                      <GripVertical size={14} />
+                    </div>
+                  )}
+
                   <div className="w-10 h-10 rounded-full bg-linear-to-tr from-[#FF6B57] to-[#FFA07A] text-white font-bold flex items-center justify-center text-sm shadow-xs shrink-0">
                     {contact.name.substring(0, 1)}
                   </div>
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-bold text-gray-800">{contact.name}</span>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-xs font-bold text-gray-800 truncate">{contact.name}</span>
                       {renderRoleBadge(contact.role)}
                     </div>
-                    <div className="text-[11px] text-gray-400 flex items-center gap-1">
+                    <div className="text-[11px] text-gray-400 flex items-center gap-1 truncate">
                       {contact.branch && <span>{contact.branch}</span>}
                       {contact.className && <span>· {contact.className}</span>}
                       {contact.childrenNames && contact.childrenNames.length > 0 && (
@@ -1215,17 +1516,169 @@ export const ChatView: React.FC<ChatViewProps> = ({
                     </div>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  className="px-2.5 py-1 text-[11px] bg-red-50 text-[#FF6B57] rounded-lg font-bold hover:bg-red-100 transition-colors"
-                >
-                  發起訊息
-                </button>
+
+                {/* 右側操作按鈕區 */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {/* ⭐ 導師/助教/管理員專屬：直接加入分組按鈕 */}
+                  {canManageCustomGroups && (
+                    <button
+                      type="button"
+                      onClick={() => setContactToGroupModal(contact)}
+                      className="px-2 py-1 text-[11px] bg-amber-50 text-amber-800 rounded-lg font-bold hover:bg-amber-100 transition-colors flex items-center gap-0.5 border border-amber-200/80"
+                      title="將此聯絡人加入自訂分組"
+                    >
+                      <FolderPlus size={12} /> 加入分組
+                    </button>
+                  )}
+
+                  {/* 發起訊息 */}
+                  <button
+                    type="button"
+                    onClick={() => startChatWithPartner(contact)}
+                    className="px-2.5 py-1 text-[11px] bg-red-50 text-[#FF6B57] rounded-lg font-bold hover:bg-red-100 transition-colors"
+                  >
+                    發起訊息
+                  </button>
+                </div>
               </div>
             ))
           )
         )}
       </div>
+
+      {/* ============================================================ */}
+      {/* 彈窗 1：新增自訂分組 Modal */}
+      {/* ============================================================ */}
+      {showCreateGroupModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-2xs p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-xs p-4 border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-1.5 font-bold text-gray-800 text-sm">
+                <Tag size={16} className="text-[#FF6B57]" /> 新增對話自訂分組
+              </div>
+              <button
+                onClick={() => setShowCreateGroupModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <p className="text-[11px] text-gray-500 mb-3">
+              建立自訂分組後，可直接拖曳對話或聯絡人進群組集中管理。
+            </p>
+            <input
+              type="text"
+              value={newGroupNameInput}
+              onChange={(e) => setNewGroupNameInput(e.target.value)}
+              placeholder="例：3A班重點跟進、升學輔導..."
+              className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg mb-3 focus:outline-hidden focus:ring-1 focus:ring-[#FF6B57]"
+              autoFocus
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowCreateGroupModal(false)}
+                className="px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-lg"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateGroup}
+                disabled={!newGroupNameInput.trim()}
+                className="px-4 py-1.5 text-xs bg-[#FF6B57] text-white font-bold rounded-lg hover:bg-[#ff5540] disabled:bg-gray-300 transition-colors"
+              >
+                確認建立
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* 彈窗 2：將聯絡人加入分組 Modal */}
+      {/* ============================================================ */}
+      {contactToGroupModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-2xs p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-xs p-4 border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-1.5 font-bold text-gray-800 text-sm">
+                <FolderPlus size={16} className="text-amber-600" /> 加入對話分組
+              </div>
+              <button
+                onClick={() => setContactToGroupModal(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <p className="text-[11px] text-gray-600 mb-3">
+              選擇要將 <strong className="text-gray-900">{contactToGroupModal.name}</strong> 歸入的分組：
+            </p>
+
+            <div className="space-y-1.5 max-h-48 overflow-y-auto mb-3">
+              {customGroups.length === 0 ? (
+                <div className="text-center py-4 text-xs text-gray-400">
+                  尚無自訂分組，請先建立新分組
+                </div>
+              ) : (
+                customGroups.map((grp) => {
+                  const isMember = grp.memberUsernames.some(
+                    (u) => u.toLowerCase() === contactToGroupModal.username.toLowerCase()
+                  );
+
+                  return (
+                    <div
+                      key={grp.id}
+                      onClick={() => {
+                        if (isMember) {
+                          handleRemoveMemberFromGroup(grp.id, contactToGroupModal.username);
+                        } else {
+                          handleAddMemberToGroup(grp.id, contactToGroupModal.username);
+                        }
+                      }}
+                      className={`p-2 rounded-lg border text-xs flex items-center justify-between cursor-pointer transition-colors ${
+                        isMember
+                          ? 'bg-amber-50 border-amber-300 text-amber-900 font-bold'
+                          : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <Tag size={12} className={isMember ? 'text-amber-600' : 'text-gray-400'} />
+                        <span>{grp.name}</span>
+                      </div>
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded font-bold ${
+                        isMember ? 'bg-amber-200 text-amber-800' : 'bg-gray-100 text-gray-500'
+                      }`}>
+                        {isMember ? '✓ 已在分組 (點擊移除)' : '＋ 加入'}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCreateGroupModal(true);
+                }}
+                className="text-[11px] text-[#FF6B57] font-bold hover:underline flex items-center gap-0.5"
+              >
+                <Plus size={12} /> 建立新分組
+              </button>
+              <button
+                type="button"
+                onClick={() => setContactToGroupModal(null)}
+                className="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg"
+              >
+                完成
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
