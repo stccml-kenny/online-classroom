@@ -1,5 +1,6 @@
 ﻿'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { MessageCircle } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { BottomNav, TabType } from '@/components/layout/BottomNav';
 import { MoreView } from '@/components/more/MoreView';
@@ -9,11 +10,12 @@ import { CourseContentModal } from '@/components/curriculum/CourseContentModal';
 import { AttendanceModal } from '@/components/attendance/AttendanceModal';
 import { ClassManagementModal } from '@/components/classes/ClassManagementModal';
 import { HomeworkSetupModal, CourseItem, isCourseMatch } from '@/components/homework/HomeworkSetupModal';
-import { AuthModal, UserProfile } from '@/components/auth/AuthModal';
+import { AuthModal, UserProfile, ROLE_CONFIGS } from '@/components/auth/AuthModal';
 import { HomeView } from '@/components/home/HomeView';
 import { ChatView } from '@/components/chat/ChatView';
 import { DirectMessageModal } from '@/components/chat/DirectMessageModal';
 import { chatService } from '@/lib/chatService';
+import { RoleChatPermissions, DEFAULT_ROLE_CHAT_PERMISSIONS } from '@/types/chat';
 
 import { AccountManagementModal } from '@/components/admin/AccountManagementModal';
 import {
@@ -43,6 +45,24 @@ export default function OnlineClassroomApp() {
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [authDefaultTab, setAuthDefaultTab] = useState<'login' | 'register'>('login');
   const [showAccountMgmtModal, setShowAccountMgmtModal] = useState<boolean>(false);
+  const [accountMgmtInitialTab, setAccountMgmtInitialTab] = useState<'issue' | 'excel' | 'list' | 'chat_settings'>('issue');
+  const [roleChatPermissions, setRoleChatPermissions] = useState<RoleChatPermissions>(DEFAULT_ROLE_CHAT_PERMISSIONS);
+
+  const handleOpenAccountMgmt = (tab: 'issue' | 'excel' | 'list' | 'chat_settings' = 'issue') => {
+    setAccountMgmtInitialTab(tab);
+    setShowAccountMgmtModal(true);
+  };
+
+  const handleUpdateRoleChatPermissions = (newPermissions: RoleChatPermissions) => {
+    setRoleChatPermissions(newPermissions);
+    saveSettingToCloud('role_chat_permissions', newPermissions);
+  };
+
+  const isCurrentUserChatEnabled = useMemo(() => {
+    if (!currentUser) return false;
+    if (currentUser.role === 'admin') return true; // 管理員始終開啟
+    return !!roleChatPermissions[currentUser.role as keyof RoleChatPermissions];
+  }, [currentUser, roleChatPermissions]);
 
   const [showNoticeModal, setShowNoticeModal] = useState(false);
   const [showHomeworkModal, setShowHomeworkModal] = useState(false);
@@ -206,6 +226,11 @@ export default function OnlineClassroomApp() {
               const parsed = JSON.parse(doc.setting_value);
               if (Array.isArray(parsed) && parsed.length > 0) loadedBranches = parsed;
             } catch (e) {}
+          } else if (doc.setting_key === 'role_chat_permissions' && doc.setting_value) {
+            try {
+              const parsed = JSON.parse(doc.setting_value);
+              if (parsed && typeof parsed === 'object') setRoleChatPermissions(parsed);
+            } catch (e) {}
           }
         });
       } catch (e) {}
@@ -259,6 +284,13 @@ export default function OnlineClassroomApp() {
       const savedClasses = localStorage.getItem('oc_settings_classes');
       if (savedClasses) setClasses(JSON.parse(savedClasses));
 
+      const savedRoleChat = localStorage.getItem('oc_settings_role_chat_permissions');
+      if (savedRoleChat) {
+        try {
+          setRoleChatPermissions(JSON.parse(savedRoleChat));
+        } catch (e) {}
+      }
+
       const savedUser = localStorage.getItem('oc_current_user');
       if (savedUser) {
         const u = JSON.parse(savedUser);
@@ -277,9 +309,9 @@ export default function OnlineClassroomApp() {
     loadNotices();
   }, []);
 
-  // ⭐ 即時訊息未讀計數與即時同步
+  // ⭐ 即時訊息未讀計數與即時同步 (依角色權限動態開關)
   useEffect(() => {
-    if (!currentUser) {
+    if (!currentUser || !isCurrentUserChatEnabled) {
       setUnreadChatCount(0);
       return;
     }
@@ -306,7 +338,14 @@ export default function OnlineClassroomApp() {
       clearInterval(timer);
       unsub();
     };
-  }, [currentUser, activeTab]);
+  }, [currentUser, activeTab, isCurrentUserChatEnabled]);
+
+  // ⭐ 若身分被暫停且處於即時訊息標籤，自動重導至首頁
+  useEffect(() => {
+    if (currentUser && !isCurrentUserChatEnabled && activeTab === 'msg') {
+      setActiveTab('home');
+    }
+  }, [currentUser, isCurrentUserChatEnabled, activeTab]);
 
 
   const handleUpdateBranches = (newBranches: string[]) => {
@@ -413,8 +452,8 @@ export default function OnlineClassroomApp() {
           currentUser={currentUser}
           onOpenAuth={() => handleOpenAuth('login')}
           onLogout={handleLogout}
-          onOpenChat={() => setActiveTab('msg')}
-          unreadChatCount={unreadChatCount}
+          onOpenChat={isCurrentUserChatEnabled ? () => setActiveTab('msg') : undefined}
+          unreadChatCount={isCurrentUserChatEnabled ? unreadChatCount : 0}
         />
 
         {/* ⭐ 首頁視窗：登入介紹、開始使用入口、5大身分說明與快捷工作區 */}
@@ -426,7 +465,7 @@ export default function OnlineClassroomApp() {
             onNavigateTab={setActiveTab}
             onOpenNotices={() => setShowNoticeModal(true)}
             onOpenSetup={() => setShowSetupModal(true)}
-            onOpenAccountMgmt={() => setShowAccountMgmtModal(true)}
+            onOpenAccountMgmt={() => handleOpenAccountMgmt('issue')}
             onOpenStudentHomework={handleOpenStudentHomework}
             noticeCount={notices.length}
             courseCount={visibleCourses.length}
@@ -439,7 +478,7 @@ export default function OnlineClassroomApp() {
             noticeCount={notices.length}
             onOpenNotices={() => setShowNoticeModal(true)}
             onOpenSetup={() => setShowSetupModal(true)}
-            onOpenAccountMgmt={() => setShowAccountMgmtModal(true)}
+            onOpenAccountMgmt={handleOpenAccountMgmt}
             currentUser={currentUser}
             onOpenAuth={handleOpenAuth}
             onLogout={handleLogout}
@@ -501,17 +540,37 @@ export default function OnlineClassroomApp() {
 
         {activeTab === 'msg' && (
           <div className="flex-1 w-full bg-[#F8F9FA] flex flex-col overflow-hidden pb-16">
-            <ChatView
-              currentUser={currentUser}
-              usersList={usersList}
-              courses={courses}
-              initialTargetUser={chatTargetUser}
-              onOpenAuth={() => handleOpenAuth('login')}
-            />
+            {!isCurrentUserChatEnabled ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-white min-h-[60vh]">
+                <div className="w-16 h-16 bg-amber-50 text-amber-500 rounded-3xl flex items-center justify-center mb-4 border border-amber-200 shadow-xs">
+                  <MessageCircle size={32} />
+                </div>
+                <h3 className="text-base font-extrabold text-gray-800 mb-2">即時訊息功能暫停開放</h3>
+                <p className="text-xs text-gray-500 max-w-xs leading-relaxed mb-6">
+                  目前【{ROLE_CONFIGS[currentUser?.role || 'student']?.label || currentUser?.role}】帳戶之即時訊息功能已由系統管理員暫停開放。如有課程、請假或行政查詢，請透過校方電話或官方途徑聯繫，敬請理解。
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('home')}
+                  className="px-5 py-2.5 bg-[#FF6B57] text-white text-xs font-bold rounded-xl shadow-xs hover:opacity-95 transition-all"
+                >
+                  返回首頁
+                </button>
+              </div>
+            ) : (
+              <ChatView
+                currentUser={currentUser}
+                usersList={usersList}
+                courses={courses}
+                initialTargetUser={chatTargetUser}
+                onOpenAuth={() => handleOpenAuth('login')}
+                roleChatPermissions={roleChatPermissions}
+              />
+            )}
           </div>
         )}
 
-        {currentUser && <BottomNav activeTab={activeTab} onTabChange={setActiveTab} userRole={currentUser?.role} unreadChatCount={unreadChatCount} />}
+        {currentUser && <BottomNav activeTab={activeTab} onTabChange={setActiveTab} userRole={currentUser?.role} unreadChatCount={unreadChatCount} isChatEnabled={isCurrentUserChatEnabled} />}
 
         {/* 1. 電子通告彈窗 */}
         <NoticeModal
@@ -621,6 +680,9 @@ export default function OnlineClassroomApp() {
             currentUser={currentUser}
             usersList={usersList}
             onUpdateUsersList={handleUpdateUsersList}
+            initialTab={accountMgmtInitialTab}
+            roleChatPermissions={roleChatPermissions}
+            onUpdateRoleChatPermissions={handleUpdateRoleChatPermissions}
           />
         )}
       </div>

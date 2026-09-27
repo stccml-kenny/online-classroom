@@ -1,7 +1,7 @@
 ﻿import React from 'react';
 import {
   Radio, Calendar, FileText,
-  Lock, Shield,
+  Lock, Shield, MessageCircle,
   FileCheck, LogOut, Settings, User, Users, UserPlus
 } from 'lucide-react';
 import { MenuItem } from './MenuItem';
@@ -15,7 +15,7 @@ interface MoreViewProps {
   onOpenClasses?: () => void;
   onOpenCourseContent?: () => void;
   onOpenSetup?: () => void;
-  onOpenAccountMgmt?: () => void; // 👑 管理員派發帳戶入口
+  onOpenAccountMgmt?: (tab?: 'issue' | 'excel' | 'list' | 'chat_settings') => void; // 👑 管理員派發帳戶入口
   currentUser?: UserProfile | null;
   onOpenAuth?: (tab?: 'login') => void;
   onLogout?: () => void;
@@ -79,14 +79,22 @@ export const MoreView: React.FC<MoreViewProps> = ({
 
       {/* 第一組模組功能 */}
       <div className="bg-white">
-        {/* 👑 系統管理人員專屬：帳戶管理 (統一派發帳戶) */}
+        {/* 👑 系統管理人員專屬：帳戶管理 (統一派發5大身分帳號) 與即時訊息控制 */}
         {isAdmin && (
-          <MenuItem
-            icon={<Shield className="text-purple-600" size={20} />}
-            title="帳戶管理 (統一派發5大身分帳號)"
-            badge="👑 管理員"
-            onClick={onOpenAccountMgmt}
-          />
+          <>
+            <MenuItem
+              icon={<Shield className="text-purple-600" size={20} />}
+              title="帳戶管理 (統一派發5大身分帳號)"
+              badge="👑 管理員"
+              onClick={() => onOpenAccountMgmt?.('issue')}
+            />
+            <MenuItem
+              icon={<MessageCircle className="text-purple-600" size={20} />}
+              title="即時訊息角色權限管理 (啟動/暫停)"
+              badge="👑 訊息控制"
+              onClick={() => onOpenAccountMgmt?.('chat_settings')}
+            />
+          </>
         )}
 
         <MenuItem icon={<Radio className="text-[#FF6B57]" size={20} />} title="最新消息" />

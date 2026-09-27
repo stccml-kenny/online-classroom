@@ -50,3 +50,18 @@ export interface CustomChatGroup {
   color?: string;
   createdAt: string;
 }
+
+// ⭐ 系統管理員角色即時訊息權限設定 (啟動 / 暫停)
+export interface RoleChatPermissions {
+  teacher: boolean;
+  assistant: boolean;
+  student: boolean;
+  parent: boolean;
+}
+
+export const DEFAULT_ROLE_CHAT_PERMISSIONS: RoleChatPermissions = {
+  teacher: true,
+  assistant: true,
+  student: false, // 預設暫停家長與學生
+  parent: false,  // 預設暫停家長與學生
+};

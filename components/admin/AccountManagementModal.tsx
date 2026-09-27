@@ -4,10 +4,11 @@ import {
   Users, Eye, EyeOff, CheckCircle2, AlertCircle,
   UserPlus, Sparkles, LogOut, Check, Search, Filter, Trash2,
   RotateCcw, Copy, Edit2, KeyRound, Download, UploadCloud,
-  FileSpreadsheet, CheckCircle, Plus, CheckSquare, Sliders, Square
+  FileSpreadsheet, CheckCircle, Plus, CheckSquare, Sliders, Square, MessageCircle
 } from 'lucide-react';
 import { UserProfile, UserRole, ROLE_CONFIGS, is8DigitNumeric, DEFAULT_DEMO_USERS } from '@/components/auth/AuthModal';
 import { parseBranchInfo, CourseItem, getCourseDisplayName } from '@/components/homework/HomeworkSetupModal';
+import { RoleChatPermissions, DEFAULT_ROLE_CHAT_PERMISSIONS } from '@/types/chat';
 import { databases, DATABASE_ID } from '@/lib/appwrite';
 import { ID, Query } from 'appwrite';
 
@@ -21,6 +22,9 @@ interface AccountManagementModalProps {
   currentUser: UserProfile | null;
   usersList: UserProfile[];
   onUpdateUsersList: (newUsers: UserProfile[]) => void;
+  initialTab?: 'issue' | 'excel' | 'list' | 'chat_settings';
+  roleChatPermissions?: RoleChatPermissions;
+  onUpdateRoleChatPermissions?: (newPermissions: RoleChatPermissions) => void;
 }
 
 const DUMMY_USERNAMES: string[] = [];
@@ -34,9 +38,57 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
   courseNames = [],
   currentUser,
   usersList = [],
-  onUpdateUsersList
+  onUpdateUsersList,
+  initialTab = 'issue',
+  roleChatPermissions,
+  onUpdateRoleChatPermissions
 }) => {
-  const [activeTab, setActiveTab] = useState<'issue' | 'excel' | 'list'>('issue');
+  const [activeTab, setActiveTab] = useState<'issue' | 'excel' | 'list' | 'chat_settings'>(initialTab);
+
+  useEffect(() => {
+    if (initialTab && isOpen) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab, isOpen]);
+
+  const [localRoleChat, setLocalRoleChat] = useState<RoleChatPermissions>(
+    roleChatPermissions || DEFAULT_ROLE_CHAT_PERMISSIONS
+  );
+
+  useEffect(() => {
+    if (roleChatPermissions) {
+      setLocalRoleChat(roleChatPermissions);
+    }
+  }, [roleChatPermissions]);
+
+  const handleToggleRoleChat = (role: keyof RoleChatPermissions, enabled: boolean) => {
+    const updated = {
+      ...localRoleChat,
+      [role]: enabled,
+    };
+    setLocalRoleChat(updated);
+    if (onUpdateRoleChatPermissions) {
+      onUpdateRoleChatPermissions(updated);
+    }
+    const roleName = ROLE_CONFIGS[role]?.label || role;
+    showToast(enabled ? `✅ 已成功啟動【${roleName}】即時訊息功能！` : `⏸️ 已暫停【${roleName}】即時訊息功能！`);
+  };
+
+  const handlePresetRoleChat = (preset: 'all' | 'default' | 'none') => {
+    let updated: RoleChatPermissions;
+    if (preset === 'all') {
+      updated = { teacher: true, assistant: true, student: true, parent: true };
+    } else if (preset === 'default') {
+      updated = { teacher: true, assistant: true, student: false, parent: false };
+    } else {
+      updated = { teacher: false, assistant: false, student: false, parent: false };
+    }
+    setLocalRoleChat(updated);
+    if (onUpdateRoleChatPermissions) {
+      onUpdateRoleChatPermissions(updated);
+    }
+    showToast('✅ 已套用即時訊息權限設定範本！');
+  };
   const [searchQuery, setSearchQuery] = useState('');
   const [filterRole, setFilterRole] = useState<string>('all');
   const [filterBranch, setFilterBranch] = useState<string>('all');
@@ -1416,6 +1468,17 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
             <Users size={16} />
             <span>帳號名冊 ({allAccounts.length})</span>
           </button>
+          <button
+            onClick={() => setActiveTab('chat_settings')}
+            className={`flex-1 py-3 text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-1.5 ${
+              activeTab === 'chat_settings'
+                ? 'bg-white text-purple-700 border-b-2 border-purple-700'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <MessageCircle size={16} />
+            <span>訊息權限</span>
+          </button>
         </div>
 
         {/* 滿板內容滑動區 */}
@@ -2514,6 +2577,130 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                     );
                   })
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: 👑 系統管理員：即時訊息角色功能控制台 (啟動 / 暫停) */}
+          {activeTab === 'chat_settings' && (
+            <div className="space-y-4">
+              <div className="bg-purple-50 p-4 rounded-2xl border border-purple-200 text-xs text-purple-900 flex items-start gap-3">
+                <div className="p-2 bg-purple-100 text-purple-700 rounded-xl shrink-0 mt-0.5 shadow-2xs">
+                  <MessageCircle size={20} />
+                </div>
+                <div className="space-y-1">
+                  <div className="font-extrabold text-sm text-purple-950">👑 系統管理員：即時訊息角色權限管理</div>
+                  <p className="text-gray-600 leading-relaxed text-[11px]">
+                    此處可即時控制各個帳戶身分（導師、助教、學生、家長）之即時訊息功能。當某一角色設定為「暫停」時，該身分用戶將無法查閱或傳送即時訊息，其底部導航與頂部圖示將自動隱藏；管理員始終具備完整權限。設定即時儲存並同步至雲端。
+                  </p>
+                </div>
+              </div>
+
+              {/* 快捷範本切換按鈕 */}
+              <div className="bg-white p-3.5 rounded-2xl border border-gray-200 shadow-2xs">
+                <div className="text-[11px] font-bold text-gray-500 mb-2">⚡ 快速套用範本：</div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handlePresetRoleChat('all')}
+                    className="p-2 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold text-center transition-colors shadow-2xs"
+                  >
+                    🟢 全部角色啟動
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePresetRoleChat('default')}
+                    className="p-2 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-800 text-xs font-bold text-center transition-colors shadow-2xs"
+                  >
+                    ⭐ 僅導師/助教啟動
+                    <div className="text-[10px] text-purple-600 font-normal">(家長與學生暫停)</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePresetRoleChat('none')}
+                    className="p-2 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-700 text-xs font-bold text-center transition-colors shadow-2xs"
+                  >
+                    ⏸️ 全部角色暫停
+                  </button>
+                </div>
+              </div>
+
+              {/* 4 個角色的詳細控制卡片 */}
+              <div className="space-y-3">
+                {(['teacher', 'assistant', 'student', 'parent'] as const).map((role) => {
+                  const isEnabled = !!localRoleChat[role];
+                  const cfg = ROLE_CONFIGS[role];
+                  const descMap: Record<string, string> = {
+                    teacher: '導師帳戶：可與學生、家長、同事 (導師/助教) 及系統管理員進行即時諮詢與訊息溝通。',
+                    assistant: '助教帳戶：可協助導師跟進學生課業、與家長溝通請假及日常作業指導。',
+                    student: '學生帳戶：可向任教導師、助教發問課業問題，並與綁定之家長聯繫。',
+                    parent: '家長帳戶：可向導師、助教提交學生請假申請及即時掌握子女學習進度。',
+                  };
+
+                  return (
+                    <div
+                      key={role}
+                      className={`p-4 rounded-2xl border transition-all bg-white shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                        isEnabled ? 'border-emerald-200 ring-1 ring-emerald-50' : 'border-amber-200 ring-1 ring-amber-50'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-xl shrink-0 ${cfg.bgLight} ${cfg.color}`}>
+                          {cfg.emoji}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <span className="font-extrabold text-sm text-gray-900">{cfg.label}帳戶</span>
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold flex items-center gap-1 ${
+                                isEnabled
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                  : 'bg-amber-100 text-amber-800 border border-amber-300'
+                              }`}
+                            >
+                              {isEnabled ? '🟢 即時訊息已啟動' : '⏸️ 即時訊息已暫停'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-gray-500 max-w-sm leading-relaxed">
+                            {descMap[role]}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 flex sm:justify-end">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleRoleChat(role, !isEnabled)}
+                          className={`w-full sm:w-auto px-4 py-2.5 rounded-xl font-extrabold text-xs shadow-xs transition-all active:scale-95 flex items-center justify-center gap-1.5 ${
+                            isEnabled
+                              ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                              : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                          }`}
+                        >
+                          {isEnabled ? (
+                            <>
+                              <span>⏸️</span>
+                              <span>暫停此角色訊息功能</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>🟢</span>
+                              <span>啟動此角色訊息功能</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* 說明備註 */}
+              <div className="bg-gray-50 p-3.5 rounded-xl border border-gray-200 text-[11px] text-gray-500 space-y-1">
+                <div className="font-bold text-gray-700">📌 系統運作說明：</div>
+                <div>1. 系統管理員 (Admin) 始終保留即時訊息全部權限，不受此控制開關影響。</div>
+                <div>2. 當某一角色被暫停時，該角色用戶登入後底部「即時訊息」導航鍵將隱藏，若進入訊息頁將顯示暫停開放之說明。</div>
+                <div>3. 狀態變更後將立即存入本機儲存與 Appwrite 雲端資料庫（`homework_settings` 表），全校帳戶即時同步。</div>
               </div>
             </div>
           )}

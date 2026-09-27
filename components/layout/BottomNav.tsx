@@ -9,6 +9,7 @@ interface BottomNavProps {
   onTabChange: (tab: TabType) => void;
   userRole?: UserRole;
   unreadChatCount?: number;
+  isChatEnabled?: boolean;
 }
 
 export const BottomNav: React.FC<BottomNavProps> = ({
@@ -16,6 +17,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   onTabChange,
   userRole,
   unreadChatCount = 0,
+  isChatEnabled = true,
 }) => {
   const isStudentOrParent = userRole === 'student' || userRole === 'parent';
 
@@ -27,13 +29,16 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         active={activeTab === 'home'}
         onClick={() => onTabChange('home')}
       />
-      <TabButton
-        icon={<MessageCircle size={20} />}
-        label="即時訊息"
-        active={activeTab === 'msg'}
-        badge={unreadChatCount}
-        onClick={() => onTabChange('msg')}
-      />
+      {/* ⭐ 需求：依系統管理員所設定之角色即時訊息權限動態呈現 (啟動 / 暫停) */}
+      {isChatEnabled && (
+        <TabButton
+          icon={<MessageCircle size={20} />}
+          label="即時訊息"
+          active={activeTab === 'msg'}
+          badge={unreadChatCount}
+          onClick={() => onTabChange('msg')}
+        />
+      )}
       {/* ⭐ 需求：家長及學生只顯示自己的課程，不顯示管理員/導師之會員與點名 */}
       {!isStudentOrParent && (
         <TabButton

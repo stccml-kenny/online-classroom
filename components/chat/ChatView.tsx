@@ -25,8 +25,8 @@ import {
   X,
   GripVertical,
 } from 'lucide-react';
-import type { UserProfile, UserRole } from '@/components/auth/AuthModal';
-import type { ChatMessage, ChatConversation, ChatContact, MessageType, CustomChatGroup } from '@/types/chat';
+import { ROLE_CONFIGS, type UserProfile, type UserRole } from '@/components/auth/AuthModal';
+import type { ChatMessage, ChatConversation, ChatContact, MessageType, CustomChatGroup, RoleChatPermissions } from '@/types/chat';
 import { chatService, makeConversationId } from '@/lib/chatService';
 
 interface ChatViewProps {
@@ -35,6 +35,7 @@ interface ChatViewProps {
   courses?: any[];
   initialTargetUser?: UserProfile | null;
   onOpenAuth?: () => void;
+  roleChatPermissions?: RoleChatPermissions;
 }
 
 // 嚴格訊息去重輔助函數 (解決即時連線與樂觀更新造成的重複渲染)
@@ -76,7 +77,15 @@ export const ChatView: React.FC<ChatViewProps> = ({
   courses = [],
   initialTargetUser,
   onOpenAuth,
+  roleChatPermissions,
 }) => {
+  // ⭐ 檢查當前用戶角色之即時訊息是否啟用
+  const isMyRoleChatEnabled = useMemo(() => {
+    if (!currentUser) return false;
+    if (currentUser.role === 'admin') return true;
+    if (!roleChatPermissions) return true;
+    return !!roleChatPermissions[currentUser.role as keyof RoleChatPermissions];
+  }, [currentUser, roleChatPermissions]);
   // 對話與聯絡人狀態
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
   const [activePartner, setActivePartner] = useState<ChatContact | null>(null);
@@ -772,8 +781,15 @@ export const ChatView: React.FC<ChatViewProps> = ({
     }));
   };
 
-  // 角色中文與徽章顏色
+  // 角色中文與徽章顏色 (動態標註被管理員暫停之角色)
   const renderRoleBadge = (role: UserRole) => {
+    const isPaused = roleChatPermissions && role !== 'admin' && !roleChatPermissions[role as keyof RoleChatPermissions];
+    const pausedTag = isPaused ? (
+      <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 font-semibold border border-amber-200">
+        訊息暫停
+      </span>
+    ) : null;
+
     switch (role) {
       case 'admin':
         return (
@@ -783,26 +799,38 @@ export const ChatView: React.FC<ChatViewProps> = ({
         );
       case 'teacher':
         return (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-bold flex items-center gap-0.5">
-            <GraduationCap size={10} /> 導師
+          <span className="inline-flex items-center gap-1">
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-bold flex items-center gap-0.5">
+              <GraduationCap size={10} /> 導師
+            </span>
+            {pausedTag}
           </span>
         );
       case 'assistant':
         return (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-100 text-cyan-700 font-bold flex items-center gap-0.5">
-            <Users size={10} /> 助教
+          <span className="inline-flex items-center gap-1">
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-100 text-cyan-700 font-bold flex items-center gap-0.5">
+              <Users size={10} /> 助教
+            </span>
+            {pausedTag}
           </span>
         );
       case 'parent':
         return (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-bold flex items-center gap-0.5">
-            <User size={10} /> 家長
+          <span className="inline-flex items-center gap-1">
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-bold flex items-center gap-0.5">
+              <User size={10} /> 家長
+            </span>
+            {pausedTag}
           </span>
         );
       case 'student':
         return (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-bold flex items-center gap-0.5">
-            <User size={10} /> 學生
+          <span className="inline-flex items-center gap-1">
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-bold flex items-center gap-0.5">
+              <User size={10} /> 學生
+            </span>
+            {pausedTag}
           </span>
         );
     }
@@ -938,6 +966,22 @@ export const ChatView: React.FC<ChatViewProps> = ({
     );
   }
 
+  // ⭐ 需求：依系統管理員設定，若當前角色之即時訊息功能被暫停，則顯示暫停提示卡片
+  if (currentUser && !isMyRoleChatEnabled) {
+    const roleLabel = ROLE_CONFIGS[currentUser.role]?.label || currentUser.role;
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-white h-full">
+        <div className="w-16 h-16 rounded-3xl bg-amber-50 text-amber-500 border border-amber-200 flex items-center justify-center mb-4 shadow-xs">
+          <MessageCircle size={32} />
+        </div>
+        <h3 className="text-base font-extrabold text-gray-800 mb-2">即時訊息功能暫停開放</h3>
+        <p className="text-xs text-gray-500 mb-6 max-w-xs leading-relaxed">
+          目前【{roleLabel}】帳戶之即時訊息功能已由系統管理員暫停開放。如有課程、請假或行政查詢，請透過校方電話或官方途徑聯繫，敬請見諒。
+        </p>
+      </div>
+    );
+  }
+
   // ============================================================================
   // 子視圖 1：開啟特定聯絡人的聊天室 (Chat Room)
   // ============================================================================
@@ -981,6 +1025,18 @@ export const ChatView: React.FC<ChatViewProps> = ({
             </div>
           </div>
         </div>
+
+        {/* ⭐ 若對方角色之即時訊息功能被管理員暫停，提示警告標籤 */}
+        {roleChatPermissions &&
+          activePartner.role !== 'admin' &&
+          !roleChatPermissions[activePartner.role as keyof RoleChatPermissions] && (
+            <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 flex items-center gap-2 text-xs text-amber-900 font-bold shrink-0">
+              <span className="shrink-0 text-amber-600">⚠️</span>
+              <span>
+                注意：此用戶為【{ROLE_CONFIGS[activePartner.role]?.label || activePartner.role}】帳戶，該角色之即時訊息功能目前已由管理員暫停開放，發送訊息對方將無法登入查閱。
+              </span>
+            </div>
+          )}
 
         {/* 快捷諮詢標籤列 (Quick Topic Chips) */}
         <div className="bg-white/80 backdrop-blur-xs border-b border-gray-100 px-3 py-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
