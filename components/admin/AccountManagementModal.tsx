@@ -1569,10 +1569,10 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                                     prev.includes(cName) ? prev.filter((c) => c !== cName) : [...prev, cName]
                                   );
                                 }}
-                                className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-all ${
+                                className={`px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1 transition-all ${
                                   isSelected
                                     ? 'bg-indigo-600 text-white shadow-xs'
-                                    : 'bg-white text-indigo-700 border border-indigo-200 hover:bg-indigo-50'
+                                    : 'bg-white text-gray-900 border border-gray-300 hover:bg-gray-50'
                                 }`}
                               >
                                 {isSelected && <Check size={12} />}
@@ -1932,7 +1932,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       placeholder="搜尋帳號、姓名、分校、課程、子女帳號..."
-                      className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-xl text-xs outline-none focus:border-purple-600 placeholder:text-gray-400"
+                      className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-xl text-xs text-gray-900 font-bold bg-white outline-none focus:border-purple-600 focus:text-gray-950 placeholder:text-gray-400 shadow-2xs transition-all"
                     />
                   </div>
 
@@ -2091,7 +2091,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                                   type="text"
                                   value={editName}
                                   onChange={(e) => setEditName(e.target.value)}
-                                  className="w-full p-2 border border-gray-300 rounded-lg text-xs outline-none focus:border-purple-600 font-semibold"
+                                  className="w-full p-2 border border-gray-300 rounded-lg text-xs text-gray-900 font-bold bg-white outline-none focus:border-purple-600"
                                 />
                               </div>
                               <div>
@@ -2100,7 +2100,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                                   type="text"
                                   value={editUsername}
                                   onChange={(e) => setEditUsername(e.target.value)}
-                                  className="w-full p-2 border border-gray-300 rounded-lg text-xs outline-none focus:border-purple-600 font-semibold"
+                                  className="w-full p-2 border border-gray-300 rounded-lg text-xs text-gray-900 font-bold bg-white outline-none focus:border-purple-600"
                                 />
                               </div>
                             </div>
@@ -2147,7 +2147,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                                   value={editEmail}
                                   onChange={(e) => setEditEmail(e.target.value)}
                                   placeholder="例：user@example.com"
-                                  className="w-full p-2 border border-gray-300 rounded-lg text-xs outline-none focus:border-purple-600 font-semibold"
+                                  className="w-full p-2 border border-gray-300 rounded-lg text-xs text-gray-900 font-bold bg-white outline-none focus:border-purple-600"
                                 />
                               </div>
                             </div>
@@ -2199,10 +2199,10 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                                               prev.includes(cName) ? prev.filter((c) => c !== cName) : [...prev, cName]
                                             );
                                           }}
-                                          className={`px-2 py-0.5 rounded-full text-[10px] font-semibold flex items-center gap-1 transition-all ${
+                                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 transition-all ${
                                             isSelected
-                                              ? 'bg-indigo-600 text-white'
-                                              : 'bg-white text-indigo-700 border border-indigo-200'
+                                              ? 'bg-indigo-600 text-white shadow-2xs'
+                                              : 'bg-white text-gray-900 border border-gray-300 hover:bg-gray-50'
                                           }`}
                                         >
                                           {isSelected && <Check size={10} />}
@@ -2444,11 +2444,11 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                                     <select
                                       value={quickAddCourseSelected}
                                       onChange={(e) => setQuickAddCourseSelected(e.target.value)}
-                                      className="flex-1 p-1 bg-white border border-indigo-200 rounded text-xs outline-none"
+                                      className="flex-1 p-1.5 bg-white border border-indigo-300 rounded-lg text-xs text-gray-900 font-bold outline-none focus:ring-1 focus:ring-indigo-500 shadow-2xs"
                                     >
-                                      <option value="">-- 請選擇欲加選之課程 --</option>
+                                      <option value="" className="text-gray-500 font-normal">-- 請選擇欲加選之課程 --</option>
                                       {branchCourses.map((cName) => (
-                                        <option key={cName} value={cName}>{cName}</option>
+                                        <option key={cName} value={cName} className="text-gray-900 font-bold">{cName}</option>
                                       ))}
                                     </select>
                                     <button
@@ -2655,11 +2655,11 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                     <select
                       value={batchTargetCourse}
                       onChange={(e) => setBatchTargetCourse(e.target.value)}
-                      className="w-full bg-white border border-gray-300 rounded-xl p-2 text-xs font-semibold outline-none focus:border-purple-600"
+                      className="w-full bg-white border border-gray-300 rounded-xl p-2 text-xs text-gray-900 font-bold outline-none focus:border-purple-600 shadow-2xs"
                     >
-                      <option value="" disabled>請選擇要為選取學生集體加選的課程...</option>
+                      <option value="" disabled className="text-gray-500 font-normal">請選擇要為選取學生集體加選的課程...</option>
                       {courseNames.map((c) => (
-                        <option key={c} value={c}>{c}</option>
+                        <option key={c} value={c} className="text-gray-900 font-bold">{c}</option>
                       ))}
                     </select>
                   </div>
@@ -2671,9 +2671,9 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                     <select
                       value={batchTargetCourse}
                       onChange={(e) => setBatchTargetCourse(e.target.value)}
-                      className="w-full bg-white border border-gray-300 rounded-xl p-2 text-xs font-semibold outline-none focus:border-purple-600"
+                      className="w-full bg-white border border-gray-300 rounded-xl p-2 text-xs text-gray-900 font-bold outline-none focus:border-purple-600 shadow-2xs"
                     >
-                      <option value="" disabled>請選擇要為選取學生集體退選的課程...</option>
+                      <option value="" disabled className="text-gray-500 font-normal">請選擇要為選取學生集體退選的課程...</option>
                       {courseNames.map((c) => (
                         <option key={c} value={c}>{c}</option>
                       ))}
