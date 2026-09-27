@@ -113,6 +113,17 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // ⭐ 輸入框多於一行時自動延伸，最高延伸至 5 行高度 (約 120px)
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      const scrollHeight = textareaRef.current.scrollHeight;
+      const nextHeight = Math.min(Math.max(scrollHeight, 38), 120);
+      textareaRef.current.style.height = `${nextHeight}px`;
+    }
+  }, [inputText]);
 
   // 滾動至最新訊息
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
@@ -1061,6 +1072,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
         {/* 底部輸入工具列 */}
         <div className="bg-white border-t border-gray-200 p-2.5 flex items-end gap-2 shrink-0">
           <textarea
+            ref={textareaRef}
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={(e) => {
@@ -1071,7 +1083,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
             }}
             placeholder="輸入訊息... (Enter 傳送，Shift+Enter 換行)"
             rows={1}
-            className="flex-1 resize-none bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-800 focus:outline-hidden focus:ring-1 focus:ring-[#FF6B57] focus:bg-white max-h-24 leading-normal transition-all"
+            style={{ minHeight: '38px', maxHeight: '120px' }}
+            className="flex-1 resize-none bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 font-medium focus:outline-hidden focus:ring-1 focus:ring-[#FF6B57] focus:bg-white overflow-y-auto leading-relaxed transition-all"
           />
           <button
             onClick={() => handleSendMessage()}
@@ -1127,7 +1140,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
         <div className="flex bg-gray-100 p-0.5 rounded-lg mb-2">
           <button
             onClick={() => setActiveSubTab('conversations')}
-            className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1.5 ${
+            className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1.5 relative ${
               activeSubTab === 'conversations'
                 ? 'bg-white text-gray-800 shadow-xs'
                 : 'text-gray-500 hover:text-gray-800'
@@ -1138,6 +1151,10 @@ export const ChatView: React.FC<ChatViewProps> = ({
               <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-gray-200 text-gray-600">
                 {conversations.length}
               </span>
+            )}
+            {/* ⭐ 未讀訊息圓點提示 */}
+            {annotatedConversations.some((c) => c.unread > 0) && (
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse ml-0.5 shadow-2xs" title="有未讀訊息" />
             )}
           </button>
           <button
@@ -1571,7 +1588,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
               value={newGroupNameInput}
               onChange={(e) => setNewGroupNameInput(e.target.value)}
               placeholder="例：3A班重點跟進、升學輔導..."
-              className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg mb-3 focus:outline-hidden focus:ring-1 focus:ring-[#FF6B57]"
+              className="w-full px-3 py-2.5 text-xs text-gray-900 font-bold bg-white border border-gray-300 rounded-lg mb-3 focus:outline-hidden focus:ring-2 focus:ring-[#FF6B57] focus:text-gray-950 placeholder:text-gray-400 shadow-2xs transition-all"
               autoFocus
             />
             <div className="flex justify-end gap-2">

@@ -91,8 +91,11 @@ const TabButton: React.FC<TabButtonProps> = ({ icon, label, active, onClick, bad
     <div className="h-5 flex items-center justify-center relative">
       {icon}
       {badge && badge > 0 ? (
-        <span className="absolute -top-1.5 -right-2.5 px-1 min-w-[15px] h-[15px] bg-red-500 text-white text-[9px] font-extrabold rounded-full flex items-center justify-center shadow-xs border border-white">
-          {badge > 99 ? '99+' : badge}
+        <span className="absolute -top-1.5 -right-2 flex items-center justify-center">
+          <span className="animate-ping absolute inline-flex h-3 w-3 rounded-full bg-red-400 opacity-75"></span>
+          <span className="relative inline-flex items-center justify-center px-1 min-w-[15px] h-[15px] bg-red-500 text-white text-[8px] font-black rounded-full border-2 border-white shadow-xs">
+            {badge > 99 ? '99+' : badge}
+          </span>
         </span>
       ) : null}
     </div>

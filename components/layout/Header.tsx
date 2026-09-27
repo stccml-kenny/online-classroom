@@ -39,8 +39,11 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <MessageCircle size={20} />
             {unreadChatCount > 0 ? (
-              <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] bg-yellow-400 text-slate-900 text-[9px] font-extrabold rounded-full flex items-center justify-center px-0.5 border border-white">
-                {unreadChatCount > 99 ? '99+' : unreadChatCount}
+              <span className="absolute -top-1 -right-1 flex h-3 w-3 items-center justify-center">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-300 opacity-75"></span>
+                <span className="relative inline-flex items-center justify-center px-1 min-w-[14px] h-[14px] bg-yellow-400 text-slate-900 text-[8px] font-black rounded-full border border-white shadow-xs">
+                  {unreadChatCount > 9 ? '9+' : unreadChatCount}
+                </span>
               </span>
             ) : null}
           </button>

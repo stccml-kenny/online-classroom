@@ -277,6 +277,38 @@ export default function OnlineClassroomApp() {
     loadNotices();
   }, []);
 
+  // ⭐ 即時訊息未讀計數與即時同步
+  useEffect(() => {
+    if (!currentUser) {
+      setUnreadChatCount(0);
+      return;
+    }
+
+    const refreshUnread = async () => {
+      try {
+        const count = await chatService.getTotalUnreadCount(currentUser.username);
+        setUnreadChatCount(count);
+      } catch (e) {
+        console.warn('更新未讀計數失敗:', e);
+      }
+    };
+
+    refreshUnread();
+
+    // 定時 8 秒輪詢確保未讀紅點即時精確
+    const timer = setInterval(refreshUnread, 8000);
+
+    const unsub = chatService.subscribeToNewMessages(currentUser.username, () => {
+      refreshUnread();
+    });
+
+    return () => {
+      clearInterval(timer);
+      unsub();
+    };
+  }, [currentUser, activeTab]);
+
+
   const handleUpdateBranches = (newBranches: string[]) => {
     setBranches(newBranches);
     saveSettingToCloud('branches', newBranches);
