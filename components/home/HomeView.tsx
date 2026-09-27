@@ -68,7 +68,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               </div>
             </div>
 
-            {/* 登入身分標籤或訪客標籤 */}
+            {/* 登入身分標籤 (未登入時不顯示訪客標籤) */}
             {currentUser ? (
               <div className="text-right">
                 <span className="inline-flex items-center gap-1 text-[11px] font-extrabold px-2.5 py-1 rounded-full bg-white text-[#FF6B57] shadow-sm">
@@ -76,15 +76,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   <span>{ROLE_CONFIGS[currentUser.role]?.label}</span>
                 </span>
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={onOpenAuth}
-                className="text-[11px] font-bold px-3 py-1 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-xs text-white border border-white/30 transition-colors"
-              >
-                訪客 (點擊登入)
-              </button>
-            )}
+            ) : null}
           </div>
 
           {/* 歡迎與介紹文字 */}
@@ -112,44 +104,32 @@ export const HomeView: React.FC<HomeViewProps> = ({
             )}
           </div>
 
-          {/* 開始使用按鈕 */}
-          <div className="pt-1 space-y-2">
-            {!currentUser ? (
+          {/* 開始使用按鈕 (⭐ 未登入情況下首頁橙色框內的開始使用按鍵已移除，僅登入後顯示) */}
+          {currentUser && (
+            <div className="pt-1 space-y-2">
               <button
                 type="button"
-                onClick={onOpenAuth}
-                className="w-full py-4 bg-white text-[#FF6B57] hover:bg-orange-50 font-black rounded-2xl shadow-xl flex items-center justify-center gap-2 text-base transition-all active:scale-[0.98]"
+                onClick={() => onNavigateTab('courses')}
+                className="w-full py-3.5 bg-white text-[#FF6B57] hover:bg-orange-50 font-black rounded-2xl shadow-lg flex items-center justify-center gap-2 text-sm transition-all active:scale-[0.98]"
               >
                 <Sparkles size={18} className="text-[#FF6B57]" />
-                <span>開始使用 (登入帳戶)</span>
-                <ChevronRight size={18} />
+                <span>
+                  {isStudentOrParent ? '開始使用 (進入我的課程與家課)' : '開始使用 (進入課程管理)'}
+                </span>
+                <ChevronRight size={16} />
               </button>
-            ) : (
-              <div className="space-y-2">
+              {isAdmin && (
                 <button
                   type="button"
-                  onClick={() => onNavigateTab('courses')}
-                  className="w-full py-3.5 bg-white text-[#FF6B57] hover:bg-orange-50 font-black rounded-2xl shadow-lg flex items-center justify-center gap-2 text-sm transition-all active:scale-[0.98]"
+                  onClick={onOpenAccountMgmt}
+                  className="w-full py-2 bg-white/20 hover:bg-white/30 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 text-xs transition-colors backdrop-blur-xs"
                 >
-                  <Sparkles size={18} className="text-[#FF6B57]" />
-                  <span>
-                    {isStudentOrParent ? '開始使用 (進入我的課程與家課)' : '開始使用 (進入課程管理)'}
-                  </span>
-                  <ChevronRight size={16} />
+                  <UserPlus size={14} />
+                  <span>👑 系統管理員：派發新帳戶與帳號管理</span>
                 </button>
-                {isAdmin && (
-                  <button
-                    type="button"
-                    onClick={onOpenAccountMgmt}
-                    className="w-full py-2 bg-white/20 hover:bg-white/30 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 text-xs transition-colors backdrop-blur-xs"
-                  >
-                    <UserPlus size={14} />
-                    <span>👑 系統管理員：派發新帳戶與帳號管理</span>
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
