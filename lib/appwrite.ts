@@ -417,7 +417,7 @@ export async function loadAllCoursesFromCloud(): Promise<CourseItem[]> {
             sessionDates: sDates,
             status: d.status || 'active',
           };
-          const k = `${item.branch.toLowerCase()}:::${item.timeSlot.toLowerCase()}:::${item.name.toLowerCase()}`;
+          const k = `${(item.branch || '').toLowerCase()}:::${(item.timeSlot || '').toLowerCase()}:::${(item.name || '').toLowerCase()}`;
           if (item.name && !seenKeys.has(k)) {
             seenKeys.add(k);
             courseList.push(item);
@@ -438,7 +438,7 @@ export async function loadAllCoursesFromCloud(): Promise<CourseItem[]> {
             const parsed = JSON.parse(d.setting_value);
             if (parsed && parsed.name) {
               const item = normalizeCourse(parsed);
-              const k = `${item.branch.toLowerCase()}:::${(item.timeSlot || '').toLowerCase()}:::${item.name.toLowerCase()}`;
+              const k = `${(item.branch || '').toLowerCase()}:::${(item.timeSlot || '').toLowerCase()}:::${(item.name || '').toLowerCase()}`;
               if (!seenKeys.has(k)) {
                 seenKeys.add(k);
                 courseList.push(item);
@@ -449,7 +449,7 @@ export async function loadAllCoursesFromCloud(): Promise<CourseItem[]> {
             if (Array.isArray(list)) {
               list.forEach((raw) => {
                 const item = normalizeCourse(raw);
-                const k = `${item.branch.toLowerCase()}:::${(item.timeSlot || '').toLowerCase()}:::${item.name.toLowerCase()}`;
+                const k = `${(item.branch || '').toLowerCase()}:::${(item.timeSlot || '').toLowerCase()}:::${(item.name || '').toLowerCase()}`;
                 if (item.name && !seenKeys.has(k)) {
                   seenKeys.add(k);
                   courseList.push(item);
@@ -471,7 +471,7 @@ export async function loadAllCoursesFromCloud(): Promise<CourseItem[]> {
         if (Array.isArray(list)) {
           list.forEach((raw) => {
             const item = normalizeCourse(raw);
-            const k = `${item.branch.toLowerCase()}:::${(item.timeSlot || '').toLowerCase()}:::${item.name.toLowerCase()}`;
+            const k = `${(item.branch || '').toLowerCase()}:::${(item.timeSlot || '').toLowerCase()}:::${(item.name || '').toLowerCase()}`;
             if (item.name && !seenKeys.has(k)) {
               seenKeys.add(k);
               courseList.push(item);
