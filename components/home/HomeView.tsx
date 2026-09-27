@@ -37,13 +37,19 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const isStudentOrParent = currentUser?.role === 'student' || currentUser?.role === 'parent';
   const isAdmin = currentUser?.role === 'admin';
 
-  // 依真實時間動態計算問候語 (早安 05:00-11:59, 午安 12:00-17:59, 晚安 18:00-04:59)
-  const getGreeting = () => {
+  // 依真實時間動態計算問候語 (預設早安，客戶端加載後依真實小時切換，防 SSR 水合錯誤)
+  const [greeting, setGreeting] = React.useState('早安');
+  React.useEffect(() => {
     const hour = new Date().getHours();
-    if (hour >= 5 && hour < 12) return '早安';
-    if (hour >= 12 && hour < 18) return '午安';
-    return '晚安';
-  };
+    if (hour >= 5 && hour < 12) setGreeting('早安');
+    else if (hour >= 12 && hour < 18) setGreeting('午安');
+    else setGreeting('晚安');
+  }, []);
+
+  const userRole = currentUser?.role || 'student';
+  const roleConfig = (ROLE_CONFIGS && ROLE_CONFIGS[userRole])
+    ? ROLE_CONFIGS[userRole]
+    : { label: '用戶', emoji: '👤', color: 'text-gray-700', bgLight: 'bg-gray-100', border: 'border-gray-200', desc: '' };
 
   return (
     <div className="flex-1 overflow-y-auto bg-[#F8F9FA] pb-20">
@@ -72,8 +78,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
             {currentUser ? (
               <div className="text-right">
                 <span className="inline-flex items-center gap-1 text-[11px] font-extrabold px-2.5 py-1 rounded-full bg-white text-[#FF6B57] shadow-sm">
-                  <span>{ROLE_CONFIGS[currentUser.role]?.emoji}</span>
-                  <span>{ROLE_CONFIGS[currentUser.role]?.label}</span>
+                  <span>{roleConfig.emoji}</span>
+                  <span>{roleConfig.label}</span>
                 </span>
               </div>
             ) : null}
@@ -84,12 +90,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
             {currentUser ? (
               <>
                 <p className="text-base font-extrabold">
-                  {getGreeting()}，{currentUser.name}！
+                  {greeting}，{currentUser.name}！
                 </p>
                 <p className="text-xs text-white/90">
                   {isStudentOrParent
                     ? `您目前的專屬課程：${currentUser.branch || '總校'} · ${currentUser.className || '班別'}`
-                    : `身分：${ROLE_CONFIGS[currentUser.role]?.label} · ${currentUser.branch || '總校'}`}
+                    : `身分：${roleConfig.label} · ${currentUser.branch || '總校'}`}
                 </p>
               </>
             ) : (

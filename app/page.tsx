@@ -17,6 +17,7 @@ import {
   DATABASE_ID,
   saveAllAccountsToCloud,
   loadAllAccountsFromCloud,
+  directLoginFromCloud,
   saveAllCoursesToCloud,
   loadAllCoursesFromCloud,
 } from '@/lib/appwrite';
@@ -305,12 +306,14 @@ export default function OnlineClassroomApp() {
   };
 
   const handleLoginSuccess = (user: UserProfile) => {
+    if (!user) return;
     setCurrentUser(user);
     try {
       localStorage.setItem('oc_current_user', JSON.stringify(user));
     } catch (e) {}
     setUsersList((prev) => {
-      if (!prev.some((u) => u.username.toLowerCase() === user.username.toLowerCase())) {
+      if (!user.username) return prev;
+      if (!prev.some((u) => u && u.username && u.username.toLowerCase() === user.username.toLowerCase())) {
         const updated = [user, ...prev];
         try { localStorage.setItem('oc_users_list', JSON.stringify(updated)); } catch (e) {}
         return updated;
@@ -552,6 +555,7 @@ export default function OnlineClassroomApp() {
           onLoginSuccess={handleLoginSuccess}
           onRegisterSuccess={handleRegisterSuccess}
           onLogout={handleLogout}
+          onVerifyLogin={directLoginFromCloud}
         />
 
         {/* 8. 👑 系統管理員專屬：帳戶管理與派發中心 (統一派發5大身分帳號) */}

@@ -1,5 +1,4 @@
 ﻿import React, { useState } from 'react';
-import { directLoginFromCloud } from '@/lib/appwrite';
 import {
   X, User, Lock, Eye, EyeOff, CheckCircle2, AlertCircle,
   Sparkles, LogOut
@@ -104,6 +103,7 @@ interface AuthModalProps {
   onLoginSuccess: (user: UserProfile) => void;
   onRegisterSuccess?: (user: UserProfile) => void;
   onLogout: () => void;
+  onVerifyLogin?: (username: string, password: string) => Promise<UserProfile | null>;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -112,7 +112,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   currentUser,
   usersList = [],
   onLoginSuccess,
-  onLogout
+  onLogout,
+  onVerifyLogin
 }) => {
   // 登入表單狀態
   const [loginUsername, setLoginUsername] = useState('');
@@ -151,9 +152,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     );
 
     // 2. 若本地未找到，即刻直接向 Appwrite 雲端發起精準查詢 (解決跨機器本地快取尚未加載完成問題)
-    if (!found) {
+    if (!found && onVerifyLogin) {
       try {
-        found = await directLoginFromCloud(uname, pwd, allUsers);
+        found = await onVerifyLogin(uname, pwd);
       } catch (err: any) {
         console.warn('雲端直接登入驗證錯誤:', err);
       }

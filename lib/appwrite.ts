@@ -1,5 +1,5 @@
 ﻿import { Client, Databases, Storage, ID, Query } from 'appwrite';
-import { UserProfile } from '@/components/auth/AuthModal';
+import type { UserProfile, UserRole } from '@/components/auth/AuthModal';
 import { CourseItem, normalizeCourse } from '@/components/homework/HomeworkSetupModal';
 
 const client = new Client();
