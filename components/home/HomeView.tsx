@@ -228,15 +228,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   <CalendarIcon size={18} />
                 </div>
                 <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600 font-bold">
-                  {isStudentOrParent ? '功課清單' : '行事曆'}
+                  行事曆
                 </span>
               </div>
               <div>
                 <div className="text-xs font-bold text-gray-800 group-hover:text-indigo-600">
-                  {isStudentOrParent ? '功課行事曆' : '學校行事曆'}
+                  課程行事曆
                 </div>
                 <div className="text-[10px] text-gray-400">
-                  {isStudentOrParent ? '個人功課截止與日程' : '校曆活動與課程日程'}
+                  課程節次與功課清單
                 </div>
               </div>
             </button>

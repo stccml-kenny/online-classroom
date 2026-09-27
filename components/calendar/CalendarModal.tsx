@@ -4,26 +4,23 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   X,
   Calendar as CalendarIcon,
-  ChevronLeft,
-  ChevronRight,
   Plus,
   Trash2,
   Edit2,
   Clock,
   MapPin,
-  Tag,
   BookOpen,
   GraduationCap,
-  CalendarDays,
   ListOrdered,
   Sparkles,
   School,
   FileText,
-  CheckCircle2
+  Search,
+  CheckCircle2,
+  Loader2
 } from 'lucide-react';
-import type { UserProfile, UserRole } from '@/components/auth/AuthModal';
+import type { UserProfile } from '@/components/auth/AuthModal';
 import type { CalendarEvent } from '@/types/calendar';
-import { EVENT_TYPE_CONFIG } from '@/types/calendar';
 import { CourseItem, getCourseDisplayName, isCourseMatch } from '@/components/homework/HomeworkSetupModal';
 import { HomeworkItem } from '@/components/homework/HomeworkCard';
 import { databases, DATABASE_ID } from '@/lib/appwrite';
@@ -73,30 +70,25 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
     return currentUser.role === 'admin' || currentUser.role === 'teacher' || currentUser.role === 'assistant';
   }, [currentUser, isStudentOrParent]);
 
-  // 2. 視圖模式：'month' (月曆網格) 或 'agenda' (日程清單)
-  const [viewMode, setViewMode] = useState<'month' | 'agenda'>(isStudentOrParent ? 'agenda' : 'month');
+  // 2. ⭐ 增加【課程清單】與【功課清單】雙標籤切換
+  const [activeSubTab, setActiveSubTab] = useState<'courses' | 'homework'>('courses');
 
-  // 3. 當前瀏覽的月份基準日期 (預設今天)
-  const [currentMonthDate, setCurrentMonthDate] = useState<Date>(() => new Date());
-
-  // 4. 當前選取的日期 (預設今天 YYYY-MM-DD)
-  const [selectedDate, setSelectedDate] = useState<string>(() => formatDateToYMD(new Date()));
-
-  // 5. 篩選條件 (學生及家長預設鎖定所屬學校)
+  // 3. 搜尋與過濾條件 (學生及家長預設鎖定所屬學校)
   const studentSchool = (currentUser?.branch || '').trim();
   const [filterBranch, setFilterBranch] = useState<string>(
     isStudentOrParent && studentSchool && studentSchool !== '全部分校' ? studentSchool : 'all'
   );
   const [filterCourse, setFilterCourse] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // 6. 新增 / 編輯日程表單狀態 (僅限管理員/導師)
+  // 4. 新增 / 編輯課程上課日程表單狀態 (僅限管理員/導師)
   const [showFormModal, setShowFormModal] = useState<boolean>(false);
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
 
   // 表單內部欄位
   const [formCourseName, setFormCourseName] = useState(courseNames[0] || '');
   const [formTitle, setFormTitle] = useState('');
-  const [formDate, setFormDate] = useState(selectedDate);
+  const [formDate, setFormDate] = useState(() => formatDateToYMD(new Date()));
   const [formTimeSlot, setFormTimeSlot] = useState('14:00 - 15:30');
   const [formBranch, setFormBranch] = useState(branches[0] || '全部分校');
   const [formClass, setFormClass] = useState('全體班別');
@@ -110,27 +102,13 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // 年與月計算
-  const year = currentMonthDate.getFullYear();
-  const month = currentMonthDate.getMonth();
-
-  const handlePrevMonth = () => {
-    setCurrentMonthDate(new Date(year, month - 1, 1));
-  };
-  const handleNextMonth = () => {
-    setCurrentMonthDate(new Date(year, month + 1, 1));
-  };
-  const handleToday = () => {
-    const today = new Date();
-    setCurrentMonthDate(new Date(today.getFullYear(), today.getMonth(), 1));
-    setSelectedDate(formatDateToYMD(today));
-  };
-
-  // 讀取家課清單 (供學生及家長專屬功課行事曆使用)
+  // 讀取家課清單 (供功課清單使用)
   const [homeworkList, setHomeworkList] = useState<HomeworkItem[]>([]);
+  const [loadingHomework, setLoadingHomework] = useState(false);
 
   useEffect(() => {
     const fetchHomework = async () => {
+      setLoadingHomework(true);
       try {
         const res = await databases.listDocuments(DATABASE_ID, 'homework', [
           Query.orderAsc('due_date'),
@@ -142,6 +120,8 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
           const saved = localStorage.getItem('oc_local_homework');
           if (saved) setHomeworkList(JSON.parse(saved));
         } catch (e) {}
+      } finally {
+        setLoadingHomework(false);
       }
     };
     fetchHomework();
@@ -151,52 +131,28 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
     return Array.isArray(currentUser?.enrolledCourses) ? currentUser!.enrolledCourses : [];
   }, [currentUser]);
 
-  // ⭐ 需求 2：學生及家長行事曆【只有甘課清單】(功課清單)
-  const allCourseScheduleEvents = useMemo<CalendarEvent[]>(() => {
-    // 學生與家長身分：行事曆嚴格且僅有功課清單，排除所有非功課日程
-    if (isStudentOrParent) {
-      const hwEvents: CalendarEvent[] = [];
-      homeworkList.forEach((hw, idx) => {
-        // 1. 分校過濾
-        if (studentSchool && studentSchool !== '全部分校') {
-          if (hw.branch && hw.branch !== '全部分校' && hw.branch !== studentSchool) {
-            return;
-          }
+  // ============================================================================
+  // ⭐ 核心資料 A：【課程清單】(各課程排定的每節上課日程)
+  // ============================================================================
+  const allCourseEvents = useMemo<CalendarEvent[]>(() => {
+    const events: CalendarEvent[] = [];
+
+    // 1. 從 courses 提取排定的課節日期 (sessionDates)
+    courses.forEach((c) => {
+      if (typeof c === 'object' && c !== null) {
+        const cBranch = (c.branch || '').trim();
+
+        // 學生與家長身分：只納入該學校的課程
+        if (isStudentOrParent && studentSchool && studentSchool !== '全部分校') {
+          if (cBranch && cBranch !== studentSchool) return;
         }
-        // 2. 學生修讀課程過濾
-        if (enrolledCoursesList.length > 0 && hw.course_name) {
-          const matched = enrolledCoursesList.some((ec) =>
-            isCourseMatch(ec, hw.course_name || '')
-          );
+
+        // 學生與家長身分：只納入自己有修讀的課程
+        if (isStudentOrParent && enrolledCoursesList.length > 0) {
+          const matched = enrolledCoursesList.some((ec) => isCourseMatch(ec, c.name));
           if (!matched) return;
         }
 
-        const dueDateStr = (hw.due_date || '').substring(0, 10);
-        if (!dueDateStr) return;
-
-        hwEvents.push({
-          id: hw.$id || `hw_${idx}_${dueDateStr}`,
-          title: `📝 ${hw.title}`,
-          description: hw.description || (hw.unit_title ? `單元：${hw.unit_title}` : '在線功課作業'),
-          eventType: 'homework',
-          startDate: dueDateStr,
-          endDate: dueDateStr,
-          isAllDay: true,
-          timeSlot: '截止日期',
-          courseName: hw.course_name || '一般功課',
-          branch: hw.branch || studentSchool || '全部分校',
-          className: hw.unit_title ? `單元：${hw.unit_title}` : '',
-          location: '在線功課作業',
-          creatorName: '導師發布',
-        });
-      });
-      return hwEvents;
-    }
-
-    // 教職員身分：顯示課程上課節次與排程日曆
-    const events: CalendarEvent[] = [];
-    courses.forEach((c) => {
-      if (typeof c === 'object' && c !== null) {
         const dates = Array.isArray(c.sessionDates) ? c.sessionDates : [];
         const courseTitle = c.name;
         const branchName = c.branch || '全部分校';
@@ -226,205 +182,192 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
       }
     });
 
+    // 2. 合併手動建立的課程事件
     const validManualEvents = calendarEvents.filter((e) => {
       if (e.eventType && e.eventType !== 'course') return false;
+      if (isStudentOrParent && studentSchool && studentSchool !== '全部分校') {
+        if (e.branch && e.branch !== '全部分校' && e.branch !== studentSchool) return false;
+      }
+      if (isStudentOrParent && enrolledCoursesList.length > 0 && e.courseName) {
+        const matched = enrolledCoursesList.some((ec) => isCourseMatch(ec, e.courseName || ''));
+        if (!matched) return false;
+      }
       return true;
     });
 
     return [...events, ...validManualEvents];
-  }, [isStudentOrParent, homeworkList, studentSchool, enrolledCoursesList, courses, calendarEvents]);
+  }, [courses, calendarEvents, isStudentOrParent, studentSchool, enrolledCoursesList]);
 
-  // 7. 套用頂部下拉過濾（分校與特定課程）
-  const displayedEvents = useMemo(() => {
-    return allCourseScheduleEvents.filter((evt) => {
-      // 分校過濾 (非學生家長時可用)
-      if (!isStudentOrParent && filterBranch !== 'all') {
-        if (evt.branch && evt.branch !== '全部分校' && evt.branch !== filterBranch) {
-          return false;
+  // 套用篩選至【課程清單】
+  const displayedCourseEvents = useMemo(() => {
+    return allCourseEvents
+      .filter((evt) => {
+        // 分校過濾 (非學生家長時可用)
+        if (!isStudentOrParent && filterBranch !== 'all') {
+          if (evt.branch && evt.branch !== '全部分校' && evt.branch !== filterBranch) return false;
         }
+        // 課程過濾
+        if (filterCourse !== 'all') {
+          if (evt.courseName && evt.courseName !== '全部課程' && evt.courseName !== filterCourse) return false;
+        }
+        // 關鍵字搜尋
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase().trim();
+          const t = (evt.title || '').toLowerCase();
+          const d = (evt.description || '').toLowerCase();
+          const c = (evt.courseName || '').toLowerCase();
+          if (!t.includes(q) && !d.includes(q) && !c.includes(q)) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''));
+  }, [allCourseEvents, filterBranch, filterCourse, searchQuery, isStudentOrParent]);
+
+  // ============================================================================
+  // ⭐ 核心資料 B：【功課清單】(作業與截止日程)
+  // ============================================================================
+  const allHomeworkEvents = useMemo<CalendarEvent[]>(() => {
+    const hwEvents: CalendarEvent[] = [];
+    homeworkList.forEach((hw, idx) => {
+      // 1. 分校過濾
+      if (studentSchool && studentSchool !== '全部分校') {
+        if (hw.branch && hw.branch !== '全部分校' && hw.branch !== studentSchool) return;
+      }
+      // 2. 學生修讀課程過濾
+      if (enrolledCoursesList.length > 0 && hw.course_name) {
+        const matched = enrolledCoursesList.some((ec) => isCourseMatch(ec, hw.course_name || ''));
+        if (!matched) return;
       }
 
-      // 課程過濾
-      if (filterCourse !== 'all') {
-        if (evt.courseName && evt.courseName !== '全部課程' && evt.courseName !== filterCourse) {
-          return false;
+      const dueDateStr = (hw.due_date || '').substring(0, 10);
+      if (!dueDateStr) return;
+
+      hwEvents.push({
+        id: hw.$id || `hw_${idx}_${dueDateStr}`,
+        title: hw.title,
+        description: hw.description || (hw.unit_title ? `單元：${hw.unit_title}` : '在線功課作業'),
+        eventType: 'homework',
+        startDate: dueDateStr,
+        endDate: dueDateStr,
+        isAllDay: true,
+        timeSlot: '截止日期',
+        courseName: hw.course_name || '一般功課',
+        branch: hw.branch || studentSchool || '全部分校',
+        className: hw.unit_title ? `單元：${hw.unit_title}` : '',
+        location: '在線功課作業',
+        creatorName: '導師發布',
+      });
+    });
+    return hwEvents;
+  }, [homeworkList, studentSchool, enrolledCoursesList]);
+
+  // 套用篩選至【功課清單】
+  const displayedHomeworkEvents = useMemo(() => {
+    return allHomeworkEvents
+      .filter((evt) => {
+        // 分校過濾
+        if (!isStudentOrParent && filterBranch !== 'all') {
+          if (evt.branch && evt.branch !== '全部分校' && evt.branch !== filterBranch) return false;
         }
-      }
+        // 課程過濾
+        if (filterCourse !== 'all') {
+          if (evt.courseName && evt.courseName !== '全部課程' && evt.courseName !== filterCourse) return false;
+        }
+        // 關鍵字搜尋
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase().trim();
+          const t = (evt.title || '').toLowerCase();
+          const d = (evt.description || '').toLowerCase();
+          const c = (evt.courseName || '').toLowerCase();
+          if (!t.includes(q) && !d.includes(q) && !c.includes(q)) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''));
+  }, [allHomeworkEvents, filterBranch, filterCourse, searchQuery, isStudentOrParent]);
 
-      return true;
-    });
-  }, [allCourseScheduleEvents, filterBranch, filterCourse, isStudentOrParent]);
-
-  // 8. 建立月曆網格矩陣
-  const calendarGrid = useMemo(() => {
-    const firstDayIndex = new Date(year, month, 1).getDay(); // 0 is Sunday
-    const daysInCurrentMonth = new Date(year, month + 1, 0).getDate();
-    const daysInPrevMonth = new Date(year, month, 0).getDate();
-
-    const cells: {
-      dateStr: string;
-      dayNumber: number;
-      isCurrentMonth: boolean;
-      isToday: boolean;
-      isSelected: boolean;
-      events: CalendarEvent[];
-    }[] = [];
-
-    const todayStr = formatDateToYMD(new Date());
-
-    // 填充上個月的尾巴
-    for (let i = firstDayIndex - 1; i >= 0; i--) {
-      const prevDate = new Date(year, month - 1, daysInPrevMonth - i);
-      const dateStr = formatDateToYMD(prevDate);
-      const dayEvts = displayedEvents.filter((e) => {
-        const s = (e.startDate || '').substring(0, 10);
-        const ed = (e.endDate || e.startDate || '').substring(0, 10);
-        return s <= dateStr && dateStr <= ed;
-      });
-      cells.push({
-        dateStr,
-        dayNumber: daysInPrevMonth - i,
-        isCurrentMonth: false,
-        isToday: dateStr === todayStr,
-        isSelected: dateStr === selectedDate,
-        events: dayEvts,
-      });
+  // 可供下拉選單篩選的課程名稱清單
+  const availableCourseNames = useMemo(() => {
+    if (isStudentOrParent && enrolledCoursesList.length > 0) {
+      return enrolledCoursesList;
     }
+    return courseNames.length > 0 ? courseNames : ['小學英語常規班', '中學數學專修班'];
+  }, [isStudentOrParent, enrolledCoursesList, courseNames]);
 
-    // 填充當月的日期
-    for (let d = 1; d <= daysInCurrentMonth; d++) {
-      const thisDate = new Date(year, month, d);
-      const dateStr = formatDateToYMD(thisDate);
-      const dayEvts = displayedEvents.filter((e) => {
-        const s = (e.startDate || '').substring(0, 10);
-        const ed = (e.endDate || e.startDate || '').substring(0, 10);
-        return s <= dateStr && dateStr <= ed;
-      });
-      cells.push({
-        dateStr,
-        dayNumber: d,
-        isCurrentMonth: true,
-        isToday: dateStr === todayStr,
-        isSelected: dateStr === selectedDate,
-        events: dayEvts,
-      });
-    }
-
-    // 填充下個月的開頭至 35 或 42 格 (保證網格完整)
-    const remaining = (7 - (cells.length % 7)) % 7;
-    for (let nextD = 1; nextD <= remaining; nextD++) {
-      const nextDate = new Date(year, month + 1, nextD);
-      const dateStr = formatDateToYMD(nextDate);
-      const dayEvts = displayedEvents.filter((e) => {
-        const s = (e.startDate || '').substring(0, 10);
-        const ed = (e.endDate || e.startDate || '').substring(0, 10);
-        return s <= dateStr && dateStr <= ed;
-      });
-      cells.push({
-        dateStr,
-        dayNumber: nextD,
-        isCurrentMonth: false,
-        isToday: dateStr === todayStr,
-        isSelected: dateStr === selectedDate,
-        events: dayEvts,
-      });
-    }
-
-    return cells;
-  }, [year, month, selectedDate, displayedEvents]);
-
-  // 9. 當前選中日期的上課日程清單
-  const selectedDateEvents = useMemo(() => {
-    return displayedEvents.filter((e) => {
-      const s = (e.startDate || '').substring(0, 10);
-      const ed = (e.endDate || e.startDate || '').substring(0, 10);
-      return s <= selectedDate && selectedDate <= ed;
-    });
-  }, [displayedEvents, selectedDate]);
-
-  // 開啟新增表單 (僅管理員/導師)
-  const handleOpenCreateForm = (targetDate?: string) => {
-    if (!canManage) return;
+  // 處理開啟表單
+  const handleOpenCreateForm = () => {
     setEditingEvent(null);
-    setFormCourseName(courseNames[0] || '');
+    setFormCourseName(availableCourseNames[0] || '一般課程');
     setFormTitle('');
-    setFormDate(targetDate || selectedDate || formatDateToYMD(new Date()));
+    setFormDate(formatDateToYMD(new Date()));
     setFormTimeSlot('14:00 - 15:30');
-    setFormBranch(branches[0] || '全部分校');
+    setFormBranch(studentSchool && studentSchool !== '全部分校' ? studentSchool : (branches[0] || '全部分校'));
     setFormClass('全體班別');
     setFormLocation('');
     setFormDescription('');
     setShowFormModal(true);
   };
 
-  // 開啟編輯表單 (僅手動建立之事件可編輯)
   const handleOpenEditForm = (evt: CalendarEvent) => {
-    if (!canManage) return;
     setEditingEvent(evt);
-    setFormCourseName(evt.courseName || courseNames[0] || '');
+    setFormCourseName(evt.courseName || availableCourseNames[0] || '一般課程');
     setFormTitle(evt.title || '');
     setFormDate((evt.startDate || '').substring(0, 10));
-    setFormTimeSlot(evt.timeSlot || '');
-    setFormBranch(evt.branch || branches[0] || '全部分校');
+    setFormTimeSlot(evt.timeSlot || '14:00 - 15:30');
+    setFormBranch(evt.branch || '全部分校');
     setFormClass(evt.className || '全體班別');
     setFormLocation(evt.location || '');
     setFormDescription(evt.description || '');
     setShowFormModal(true);
   };
 
-  // 儲存表單
   const handleSubmitForm = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canManage) return;
+    if (!formTitle.trim()) {
+      showToast('請輸入上課日程標題');
+      return;
+    }
 
-    const finalTitle = formTitle.trim() || `${formCourseName} 上課`;
     setFormSubmitting(true);
     try {
-      const payload: CalendarEvent = {
-        title: finalTitle,
+      const eventData: CalendarEvent = {
+        title: formTitle.trim(),
         description: formDescription.trim(),
         eventType: 'course',
         startDate: formDate,
         endDate: formDate,
         isAllDay: !formTimeSlot,
-        timeSlot: formTimeSlot.trim(),
+        timeSlot: formTimeSlot,
         branch: formBranch,
         courseName: formCourseName,
         className: formClass,
-        location: formLocation.trim() || (formTimeSlot ? `時間：${formTimeSlot}` : ''),
-        creatorUsername: currentUser?.username || 'admin',
-        creatorName: currentUser?.name || '教職員',
-        createdAt: editingEvent?.createdAt || new Date().toISOString(),
+        location: formLocation,
+        creatorUsername: currentUser?.username || '',
+        creatorName: currentUser?.name || currentUser?.username || '導師',
+        createdAt: new Date().toISOString(),
       };
 
-      const targetId = editingEvent?.$id || editingEvent?.id;
-      await onSaveEvent(payload, targetId);
+      await onSaveEvent(eventData, editingEvent?.$id || editingEvent?.id);
       setShowFormModal(false);
-      showToast(editingEvent ? '✅ 課程日程已更新！' : '🎉 新課程日程已發布！');
+      showToast(editingEvent ? '上課日程已成功更新！' : '上課日程已成功新增！');
     } catch (err: any) {
-      alert('儲存失敗：' + (err.message || '未知錯誤'));
+      showToast('儲存失敗：' + (err.message || '未知錯誤'));
     } finally {
       setFormSubmitting(false);
     }
   };
 
-  // 刪除事件
-  const handleDeleteEvent = async (evt: CalendarEvent) => {
-    if (!canManage) return;
-    const idToDelete = evt.$id || evt.id;
-    if (!idToDelete) return;
-    if (window.confirm(`確定要刪除「${evt.title}」此上課日程嗎？`)) {
-      try {
-        await onDeleteEvent(idToDelete);
-        showToast('🗑️ 日程已刪除');
-      } catch (err: any) {
-        alert('刪除失敗：' + (err.message || '未知錯誤'));
-      }
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('確定要刪除此上課日程記錄嗎？')) return;
+    try {
+      await onDeleteEvent(id);
+      showToast('上課日程已刪除');
+    } catch (err: any) {
+      showToast('刪除失敗：' + (err.message || '未知錯誤'));
     }
   };
 
   return (
-    /* ⭐ 需求 1：行事曆全板顯示 (滿板視窗，佔滿全螢幕) */
     <div className={isInline ? "flex-1 w-full flex flex-col bg-[#F8F9FA] overflow-hidden" : "fixed inset-0 z-50 flex flex-col bg-[#F8F9FA] w-screen h-screen overflow-hidden animate-in fade-in duration-200"}>
       
       {/* 1. 頂部滿板功能導航列 */}
@@ -436,7 +379,7 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-base sm:text-lg font-black tracking-wide">
-                {isStudentOrParent ? '功課行事曆 · 功課清單' : '課程行事曆 · 上課日程'}
+                課程行事曆
               </h1>
               {isStudentOrParent && studentSchool && (
                 <span className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-white/25 text-white flex items-center gap-1">
@@ -447,38 +390,44 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
             </div>
             <p className="text-xs text-white/90">
               {isStudentOrParent
-                ? '專屬個人功課繳交截止與作業清單'
-                : '檢視各分校課程上課節次與排程日曆'}
+                ? `專屬 ${studentSchool || '本校'} 課程上課節次與功課截止清單`
+                : '檢視各分校課程上課節次與功課排程清單'}
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2.5">
-          {/* 視圖切換 (月曆 / 清單) */}
+          {/* ⭐ 增加【課程清單】與【功課清單】雙標籤切換 */}
           <div className="bg-black/15 p-1 rounded-xl flex items-center">
             <button
               type="button"
-              onClick={() => setViewMode('month')}
+              onClick={() => setActiveSubTab('courses')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                viewMode === 'month'
+                activeSubTab === 'courses'
                   ? 'bg-white text-[#FF6B57] shadow-sm'
                   : 'text-white/80 hover:text-white'
               }`}
             >
-              <CalendarDays size={14} />
-              <span>月曆網格</span>
+              <BookOpen size={14} />
+              <span>課程清單</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-orange-100 text-[#FF6B57] font-black">
+                {displayedCourseEvents.length}
+              </span>
             </button>
             <button
               type="button"
-              onClick={() => setViewMode('agenda')}
+              onClick={() => setActiveSubTab('homework')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                viewMode === 'agenda'
+                activeSubTab === 'homework'
                   ? 'bg-white text-[#FF6B57] shadow-sm'
                   : 'text-white/80 hover:text-white'
               }`}
             >
               <ListOrdered size={14} />
-              <span>{isStudentOrParent ? '功課清單' : '上課清單'}</span>
+              <span>功課清單</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-800 font-black">
+                {displayedHomeworkEvents.length}
+              </span>
             </button>
           </div>
 
@@ -492,12 +441,17 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
         </div>
       </div>
 
-      {/* 2. 篩選與操作工具列 */}
-      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-2.5 flex items-center justify-between gap-3 shrink-0">
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-          <span className="text-xs font-bold text-gray-500 shrink-0">篩選課程：</span>
+      {/* Toast 提示 */}
+      {toastMessage && (
+        <div className="bg-gray-900 text-white text-xs font-bold px-4 py-2 text-center animate-in fade-in shrink-0">
+          {toastMessage}
+        </div>
+      )}
 
-          {/* ⭐ 需求 4：學生及家長只顯示該學校的課程，因此分校選單僅限教職員可用 */}
+      {/* 2. 篩選與搜尋工具列 */}
+      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-2.5 flex items-center justify-between gap-3 shrink-0 flex-wrap">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar flex-1 min-w-[280px]">
+          {/* 分校篩選 (僅教職員) */}
           {!isStudentOrParent && branches.length > 1 && (
             <select
               value={filterBranch}
@@ -511,220 +465,101 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
             </select>
           )}
 
-          {/* 課程下拉篩選 */}
-          {courseNames.length > 0 && (
-            <select
-              value={filterCourse}
-              onChange={(e) => setFilterCourse(e.target.value)}
-              className="bg-gray-50 border border-gray-300 text-gray-800 font-bold rounded-xl px-2.5 py-1.5 text-xs outline-none focus:border-[#FF6B57] shrink-0 max-w-[200px] truncate"
-            >
-              <option value="all">全部課程</option>
-              {courseNames.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          )}
+          {/* 課程篩選 */}
+          <select
+            value={filterCourse}
+            onChange={(e) => setFilterCourse(e.target.value)}
+            className="bg-gray-50 border border-gray-300 text-gray-800 font-bold rounded-xl px-2.5 py-1.5 text-xs outline-none focus:border-[#FF6B57] shrink-0"
+          >
+            <option value="all">全部課程</option>
+            {availableCourseNames.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
 
-          <span className="text-xs text-indigo-700 font-bold bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-100 shrink-0">
-            📚 上課課節共 {displayedEvents.length} 堂
-          </span>
+          {/* 關鍵字搜尋 */}
+          <div className="relative flex-1 min-w-[120px]">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder={activeSubTab === 'courses' ? "搜尋上課節次..." : "搜尋功課名稱..."}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-7 pr-3 py-1.5 bg-gray-50 border border-gray-300 text-gray-800 rounded-xl text-xs outline-none focus:border-[#FF6B57] focus:bg-white"
+            />
+          </div>
         </div>
 
-        {/* ⭐ 需求 5：學生及家長帳戶沒有新增當日行程 (僅管理員/導師可見新增按鈕) */}
-        {canManage && (
+        {/* 管理員/導師快捷新增上課日按鈕 */}
+        {canManage && activeSubTab === 'courses' && (
           <button
             type="button"
-            onClick={() => handleOpenCreateForm()}
-            className="px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl font-extrabold text-xs flex items-center gap-1.5 shrink-0 shadow-xs hover:opacity-95 transition-all active:scale-95"
+            onClick={handleOpenCreateForm}
+            className="px-3.5 py-1.5 bg-[#FF6B57] hover:bg-[#e05a48] text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1 shrink-0"
           >
-            <Plus size={15} />
-            <span>新增課程上課日</span>
+            <Plus size={14} />
+            <span>新增上課日</span>
           </button>
         )}
       </div>
 
-      {/* 提示訊息 Toast */}
-      {toastMessage && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 bg-slate-800 text-white px-5 py-2.5 rounded-2xl text-xs font-bold shadow-xl animate-in fade-in slide-in-from-top-2">
-          {toastMessage}
-        </div>
-      )}
-
-      {/* 3. 核心全板內容區 */}
-      <div className="flex-1 overflow-y-auto flex flex-col p-4 sm:p-6 space-y-4">
-        
+      {/* 3. 核心內容清單區 */}
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
         {/* ============================================================ */}
-        {/* 視圖 A：月曆網格視圖 */}
+        {/* 頁面 A：【課程清單】(排定課堂節次清單) */}
         {/* ============================================================ */}
-        {viewMode === 'month' && (
-          <div className="flex-1 flex flex-col space-y-4 max-w-6xl w-full mx-auto">
-            
-            {/* 月份導航橫列 */}
-            <div className="bg-white p-3 rounded-2xl border border-gray-200 shadow-2xs flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-2 sm:gap-3">
-                <h2 className="text-lg sm:text-xl font-black text-gray-900">
-                  {year}年 {month + 1}月
-                </h2>
-                <button
-                  type="button"
-                  onClick={handleToday}
-                  className="px-2.5 py-1 text-xs font-bold text-[#FF6B57] bg-orange-50 hover:bg-orange-100 rounded-lg transition-colors"
-                >
-                  回到今天
-                </button>
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={handlePrevMonth}
-                  className="p-2 text-gray-600 hover:text-gray-900 rounded-xl hover:bg-gray-100 transition-colors border border-gray-200"
-                  title="上個月"
-                >
-                  <ChevronLeft size={20} />
-                </button>
-                <button
-                  type="button"
-                  onClick={handleNextMonth}
-                  className="p-2 text-gray-600 hover:text-gray-900 rounded-xl hover:bg-gray-100 transition-colors border border-gray-200"
-                  title="下個月"
-                >
-                  <ChevronRight size={20} />
-                </button>
-              </div>
+        {activeSubTab === 'courses' && (
+          <div className="max-w-4xl w-full mx-auto space-y-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-extrabold text-gray-800">
+                {isStudentOrParent
+                  ? `我的課程上課日程（共 ${displayedCourseEvents.length} 堂課）`
+                  : `全部已排定之課程上課日程（共 ${displayedCourseEvents.length} 堂課）`}
+              </span>
             </div>
 
-            {/* 7 欄月曆全板網格 */}
-            <div className="bg-white rounded-3xl border border-gray-200 shadow-xs overflow-hidden shrink-0">
-              {/* 星期標頭 */}
-              <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50/90 text-center text-xs sm:text-sm font-extrabold text-gray-600 py-2.5">
-                <span className="text-red-500">週日</span>
-                <span>週一</span>
-                <span>週二</span>
-                <span>週三</span>
-                <span>週四</span>
-                <span>週五</span>
-                <span className="text-blue-600">週六</span>
-              </div>
-
-              {/* 日期單元格 */}
-              <div className="grid grid-cols-7 divide-x divide-y divide-gray-100">
-                {calendarGrid.map((cell, idx) => {
-                  const isSunday = idx % 7 === 0;
-                  const isSaturday = idx % 7 === 6;
-
-                  return (
-                    <div
-                      key={cell.dateStr}
-                      onClick={() => setSelectedDate(cell.dateStr)}
-                      className={`min-h-[78px] sm:min-h-[96px] p-1.5 flex flex-col justify-between cursor-pointer transition-all relative ${
-                        !cell.isCurrentMonth
-                          ? 'bg-gray-50/40 text-gray-300'
-                          : 'bg-white hover:bg-orange-50/30'
-                      } ${
-                        cell.isSelected
-                          ? 'ring-2 ring-[#FF6B57] ring-inset bg-orange-50/40 z-10'
-                          : ''
-                      }`}
-                    >
-                      {/* 日期數字 */}
-                      <div className="flex items-center justify-between">
-                        <span
-                          className={`text-xs sm:text-sm font-black w-6 h-6 flex items-center justify-center rounded-full leading-none ${
-                            cell.isToday
-                              ? 'bg-[#FF6B57] text-white shadow-xs'
-                              : cell.isSelected
-                              ? 'text-[#FF6B57]'
-                              : isSunday
-                              ? 'text-red-500'
-                              : isSaturday
-                              ? 'text-blue-600'
-                              : 'text-gray-800'
-                          }`}
-                        >
-                          {cell.dayNumber}
-                        </span>
-
-                        {cell.events.length > 2 && (
-                          <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1 rounded">
-                            {cell.events.length} 堂
-                          </span>
-                        )}
-                      </div>
-
-                      {/* 課程上課標籤 */}
-                      <div className="space-y-1 mt-1 overflow-hidden">
-                        {cell.events.slice(0, 2).map((ev) => (
-                          <div
-                            key={ev.id || ev.$id || ev.title}
-                            className="text-[10px] sm:text-[11px] px-1.5 py-0.5 rounded-md truncate font-extrabold leading-tight bg-indigo-50 text-indigo-900 border border-indigo-200 flex items-center gap-1 shadow-2xs"
-                            title={`${ev.title} ${ev.timeSlot ? `(${ev.timeSlot})` : ''}`}
-                          >
-                            <span className="shrink-0 text-indigo-600">📚</span>
-                            <span className="truncate">{ev.title}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 選取日期之「當日課程上課日程」區塊 */}
-            <div className="bg-white p-4 sm:p-5 rounded-3xl border border-gray-200 shadow-2xs space-y-3">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center">
-                    <BookOpen size={16} />
-                  </div>
-                  <div>
-                    <h3 className="font-extrabold text-sm sm:text-base text-gray-900">
-                      {selectedDate} {isStudentOrParent ? '功課清單' : '上課日程'}
-                    </h3>
-                    <p className="text-[11px] text-gray-500">
-                      {isStudentOrParent ? `當日截止 ${selectedDateEvents.length} 項功課` : `當日排定 ${selectedDateEvents.length} 節課程`}
-                    </p>
-                  </div>
-                </div>
-
-                {/* ⭐ 需求 5：學生及家長帳戶沒有新增當日行程 (僅教職員顯示) */}
+            {displayedCourseEvents.length === 0 ? (
+              <div className="bg-white p-12 rounded-3xl border border-gray-200 text-center text-gray-400 text-sm space-y-2">
+                <BookOpen size={32} className="mx-auto text-gray-300" />
+                <p className="font-bold">目前沒有符合條件之課程上課日程</p>
                 {canManage && (
                   <button
                     type="button"
-                    onClick={() => handleOpenCreateForm(selectedDate)}
-                    className="text-xs text-purple-700 hover:text-purple-900 font-bold flex items-center gap-1 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-xl transition-colors"
+                    onClick={handleOpenCreateForm}
+                    className="mt-2 px-4 py-2 bg-[#FF6B57] text-white rounded-xl text-xs font-bold hover:bg-[#e05a48] transition-colors"
                   >
-                    <Plus size={14} /> 新增當日課程
+                    立即排定第一節上課日
                   </button>
                 )}
               </div>
+            ) : (
+              displayedCourseEvents.map((evt) => {
+                const dateOnly = (evt.startDate || '').substring(0, 10);
 
-              {/* 當日課程卡片列表 */}
-              <div className="space-y-2.5">
-                {selectedDateEvents.length === 0 ? (
-                  <div className="text-center py-8 text-gray-400 text-xs">
-                    {isStudentOrParent ? '當日無待繳交之功課' : '當日無排定任何課程上課'}
-                  </div>
-                ) : (
-                  selectedDateEvents.map((evt) => (
-                    <div
-                      key={evt.id || evt.$id}
-                      className="p-3.5 sm:p-4 rounded-2xl border border-gray-200 bg-white hover:border-indigo-300 transition-all shadow-2xs flex items-start justify-between gap-3"
-                    >
-                      <div className="space-y-1.5 flex-1 min-w-0">
+                return (
+                  <div
+                    key={evt.id || evt.$id}
+                    className="p-4 rounded-2xl border border-gray-200 bg-white hover:border-indigo-300 transition-all shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
+                  >
+                    <div className="flex items-start gap-3.5 flex-1 min-w-0">
+                      {/* 左側日期方塊 */}
+                      <div className="w-14 h-14 rounded-2xl bg-indigo-50 border border-indigo-200 text-center flex flex-col justify-center shrink-0 shadow-2xs">
+                        <span className="text-[11px] font-bold text-indigo-600 leading-none">
+                          {dateOnly.substring(5, 7)}月
+                        </span>
+                        <span className="text-lg font-black text-gray-900 leading-tight">
+                          {dateOnly.substring(8, 10)}
+                        </span>
+                      </div>
+
+                      {/* 內容主體 */}
+                      <div className="space-y-1 flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-black border flex items-center gap-1 ${
-                            evt.eventType === 'homework'
-                              ? 'bg-amber-100 text-amber-800 border-amber-300'
-                              : 'bg-indigo-100 text-indigo-800 border-indigo-300'
-                          }`}>
-                            <span>{evt.eventType === 'homework' ? '📝 功課清單' : '📚 課程上課'}</span>
-                            {evt.sessionIndex && (
-                              <span>· 第 {evt.sessionIndex} 節</span>
-                            )}
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-indigo-100 text-indigo-800 border border-indigo-300 flex items-center gap-1">
+                            <span>📚 課程上課</span>
+                            {evt.sessionIndex && <span>· 第 {evt.sessionIndex} 節</span>}
                           </span>
-                          <h4 className="text-xs sm:text-sm font-black text-gray-900 truncate">
+                          <h4 className="text-sm font-black text-gray-900 truncate">
                             {evt.title}
                           </h4>
                           {evt.branch && (
@@ -739,14 +574,19 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
                           )}
                         </div>
 
-                        {/* 時間資訊 */}
                         <div className="flex items-center gap-3 text-xs text-gray-600 flex-wrap">
                           <span className="flex items-center gap-1 font-bold text-indigo-700">
                             <Clock size={13} />
-                            {evt.timeSlot || (evt.isAllDay ? '全天' : '請參閱排程')}
+                            {evt.timeSlot || '全天'}
                           </span>
-                          {evt.location && evt.location !== evt.timeSlot && (
+                          {evt.courseName && (
                             <span className="flex items-center gap-1 text-gray-500">
+                              <BookOpen size={13} />
+                              {evt.courseName}
+                            </span>
+                          )}
+                          {evt.location && evt.location !== evt.timeSlot && (
+                            <span className="flex items-center gap-1 text-gray-400">
                               <MapPin size={13} />
                               {evt.location}
                             </span>
@@ -754,167 +594,134 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
                         </div>
 
                         {evt.description && (
-                          <p className="text-xs text-gray-600 leading-relaxed bg-gray-50 p-2.5 rounded-xl border border-gray-100">
+                          <p className="text-xs text-gray-600 line-clamp-2 pt-0.5">
                             {evt.description}
                           </p>
                         )}
                       </div>
-
-                      {/* 僅手動建立之課程事件且具管理權限時顯示編輯刪除 */}
-                      {canManage && evt.$id && (
-                        <div className="flex items-center gap-1 shrink-0 ml-1">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEditForm(evt)}
-                            className="p-1.5 text-gray-400 hover:text-indigo-600 rounded-lg hover:bg-gray-100"
-                            title="編輯"
-                          >
-                            <Edit2 size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteEvent(evt)}
-                            className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50"
-                            title="刪除"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      )}
                     </div>
-                  ))
-                )}
-              </div>
-            </div>
 
-          </div>
-        )}
-
-        {/* ============================================================ */}
-        {/* 視圖 B：上課日程列表視圖 (Agenda / List View) */}
-        {/* ============================================================ */}
-        {viewMode === 'agenda' && (
-          <div className="max-w-4xl w-full mx-auto space-y-3">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-extrabold text-gray-800">
-                {isStudentOrParent
-                  ? `全部功課清單（共 ${displayedEvents.length} 項功課）`
-                  : `全部已排定之課程上課日程（共 ${displayedEvents.length} 堂）`}
-              </span>
-              {canManage && (
-                <button
-                  type="button"
-                  onClick={() => handleOpenCreateForm()}
-                  className="text-xs text-purple-700 hover:text-purple-900 font-bold flex items-center gap-1 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-xl transition-colors"
-                >
-                  <Plus size={14} /> 新增課程上課日
-                </button>
-              )}
-            </div>
-
-            {displayedEvents.length === 0 ? (
-              <div className="bg-white p-12 rounded-3xl border border-gray-200 text-center text-gray-400 text-sm">
-                {isStudentOrParent ? '目前沒有待繳交之功課清單' : '目前沒有排定的課程上課日程'}
-              </div>
-            ) : (
-              displayedEvents
-                .sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''))
-                .map((evt) => {
-                  const dateOnly = (evt.startDate || '').substring(0, 10);
-
-                  return (
-                    <div
-                      key={evt.id || evt.$id}
-                      className="p-4 rounded-2xl border border-gray-200 bg-white hover:border-indigo-300 transition-all shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                    >
-                      <div className="flex items-start gap-3.5 flex-1 min-w-0">
-                        {/* 左側日期方塊 */}
-                        <div className="w-14 h-14 rounded-2xl bg-indigo-50 border border-indigo-200 text-center flex flex-col justify-center shrink-0 shadow-2xs">
-                          <span className="text-[11px] font-bold text-indigo-600 leading-none">
-                            {dateOnly.substring(5, 7)}月
-                          </span>
-                          <span className="text-lg font-black text-gray-900 leading-tight">
-                            {dateOnly.substring(8, 10)}
-                          </span>
-                        </div>
-
-                        {/* 內容 */}
-                        <div className="space-y-1 flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-black border ${
-                              evt.eventType === 'homework'
-                                ? 'bg-amber-100 text-amber-800 border-amber-300'
-                                : 'bg-indigo-100 text-indigo-800 border-indigo-300'
-                            }`}>
-                              {evt.eventType === 'homework' ? '📝 功課清單' : '📚 課程上課'}
-                            </span>
-                            <h4 className="text-sm font-black text-gray-900 truncate">
-                              {evt.title}
-                            </h4>
-                            {evt.branch && (
-                              <span className="text-[10px] px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 font-bold border border-purple-200">
-                                {evt.branch}
-                              </span>
-                            )}
-                            {evt.className && (
-                              <span className="text-[10px] px-2 py-0.5 rounded-md bg-gray-100 text-gray-700 font-bold">
-                                {evt.className}
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="flex items-center gap-3 text-xs text-gray-600 flex-wrap">
-                            <span className="flex items-center gap-1 font-bold text-indigo-700">
-                              <Clock size={13} />
-                              {evt.timeSlot || '全天'}
-                            </span>
-                            {evt.location && evt.location !== evt.timeSlot && (
-                              <span className="flex items-center gap-1 text-gray-500">
-                                <MapPin size={13} />
-                                {evt.location}
-                              </span>
-                            )}
-                          </div>
-
-                          {evt.description && (
-                            <p className="text-xs text-gray-600 leading-relaxed bg-gray-50 p-2.5 rounded-xl border border-gray-100">
-                              {evt.description}
-                            </p>
-                          )}
-                        </div>
+                    {/* 教職員管理按鈕 */}
+                    {canManage && (
+                      <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditForm(evt)}
+                          className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors"
+                          title="編輯"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => evt.id && handleDelete(evt.id)}
+                          className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                          title="刪除"
+                        >
+                          <Trash2 size={16} />
+                        </button>
                       </div>
-
-                      {/* 編輯刪除 (僅限教職員手動發布之項目) */}
-                      {canManage && evt.$id && (
-                        <div className="flex items-center gap-1 shrink-0 self-end sm:self-center">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEditForm(evt)}
-                            className="px-3 py-1.5 text-xs border border-gray-200 text-gray-700 hover:text-indigo-600 rounded-xl hover:bg-gray-50 font-bold flex items-center gap-1 transition-colors"
-                          >
-                            <Edit2 size={13} />
-                            <span>編輯</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteEvent(evt)}
-                            className="px-3 py-1.5 text-xs border border-red-200 text-red-600 hover:bg-red-50 rounded-xl font-bold flex items-center gap-1 transition-colors"
-                          >
-                            <Trash2 size={13} />
-                            <span>刪除</span>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
         )}
 
+        {/* ============================================================ */}
+        {/* 頁面 B：【功課清單】(功課截止與作業清單) */}
+        {/* ============================================================ */}
+        {activeSubTab === 'homework' && (
+          <div className="max-w-4xl w-full mx-auto space-y-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-extrabold text-gray-800">
+                {isStudentOrParent
+                  ? `我的功課繳交清單（共 ${displayedHomeworkEvents.length} 項功課）`
+                  : `全部課程之功課繳交日程（共 ${displayedHomeworkEvents.length} 項功課）`}
+              </span>
+            </div>
+
+            {loadingHomework ? (
+              <div className="flex flex-col items-center justify-center py-16 text-gray-400 space-y-2">
+                <Loader2 size={24} className="animate-spin text-[#FF6B57]" />
+                <p className="text-xs font-bold">載入功課清單中...</p>
+              </div>
+            ) : displayedHomeworkEvents.length === 0 ? (
+              <div className="bg-white p-12 rounded-3xl border border-gray-200 text-center text-gray-400 text-sm space-y-2">
+                <ListOrdered size={32} className="mx-auto text-gray-300" />
+                <p className="font-bold">目前沒有待繳交之功課清單</p>
+              </div>
+            ) : (
+              displayedHomeworkEvents.map((evt) => {
+                const dateOnly = (evt.startDate || '').substring(0, 10);
+
+                return (
+                  <div
+                    key={evt.id || evt.$id}
+                    className="p-4 rounded-2xl border border-amber-200 bg-white hover:border-amber-400 transition-all shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
+                  >
+                    <div className="flex items-start gap-3.5 flex-1 min-w-0">
+                      {/* 左側日期方塊 */}
+                      <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200 text-center flex flex-col justify-center shrink-0 shadow-2xs text-amber-800">
+                        <span className="text-[11px] font-bold leading-none">
+                          {dateOnly.substring(5, 7)}月
+                        </span>
+                        <span className="text-lg font-black leading-tight">
+                          {dateOnly.substring(8, 10)}
+                        </span>
+                      </div>
+
+                      {/* 內容主體 */}
+                      <div className="space-y-1 flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-black border bg-amber-100 text-amber-800 border-amber-300 flex items-center gap-1">
+                            <FileText size={11} /> 功課清單
+                          </span>
+                          <h4 className="text-sm font-black text-gray-900 truncate">
+                            {evt.title}
+                          </h4>
+                          {evt.branch && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 font-bold border border-purple-200">
+                              {evt.branch}
+                            </span>
+                          )}
+                          {evt.className && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 font-bold border border-amber-200">
+                              {evt.className}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-3 text-xs text-gray-600 flex-wrap">
+                          <span className="flex items-center gap-1 font-bold text-amber-700">
+                            <Clock size={13} />
+                            截止日期：{dateOnly}
+                          </span>
+                          {evt.courseName && (
+                            <span className="flex items-center gap-1 text-gray-500">
+                              <BookOpen size={13} />
+                              {evt.courseName}
+                            </span>
+                          )}
+                        </div>
+
+                        {evt.description && (
+                          <p className="text-xs text-gray-600 line-clamp-2 pt-0.5">
+                            {evt.description}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
       </div>
 
-      {/* 4. 底部滿板關閉列 (浮動模式下呈現，內嵌模式下已有底部導航) */}
+      {/* 4. 底部滿板關閉列 (僅在浮動彈窗模式下呈現) */}
       {!isInline && (
         <div className="p-3.5 bg-white border-t border-gray-200 flex justify-end shrink-0 shadow-md">
           <button
@@ -928,180 +735,157 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
       )}
 
       {/* ============================================================ */}
-      {/* 5. 新增 / 編輯課程上課日 Modal (僅限教職員) */}
+      {/* 新增 / 編輯課程上課日表單彈窗 (教職員專屬) */}
       {/* ============================================================ */}
-      {showFormModal && canManage && (
-        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-3 sm:p-4 animate-in fade-in">
-          <div className="bg-white rounded-3xl max-w-md w-full p-5 space-y-4 shadow-2xl overflow-y-auto max-h-[90vh] border border-gray-100 animate-in zoom-in-95">
-            
-            <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+      {showFormModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3">
+          <div className="bg-white rounded-3xl w-full max-w-md max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-gray-200 animate-in zoom-in-95">
+            <div className="bg-gradient-to-r from-[#FF6B57] to-[#FF8E7D] text-white px-5 py-3.5 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
-                <div className="p-2 bg-gradient-to-tr from-purple-600 to-indigo-600 text-white rounded-xl shadow-xs">
-                  <CalendarIcon size={18} />
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-sm text-gray-900">
-                    {editingEvent ? '編輯課程上課日程' : '新增課程上課日程'}
-                  </h3>
-                  <p className="text-[11px] text-gray-500">排定特定分校與班別之上課日期</p>
-                </div>
+                <CalendarIcon size={16} />
+                <h3 className="font-extrabold text-sm">
+                  {editingEvent ? '編輯課程上課日' : '新增課程上課日'}
+                </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setShowFormModal(false)}
-                className="p-1 text-gray-400 hover:text-gray-600 rounded-lg"
+                className="text-white/80 hover:text-white"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleSubmitForm} className="space-y-3.5">
-              
-              {/* 選擇課程 */}
+            <form onSubmit={handleSubmitForm} className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 text-xs">
+              {/* 所屬課程 */}
               <div>
-                <label className="block text-xs font-bold text-gray-800 mb-1">
+                <label className="block font-bold text-gray-700 mb-1">
                   所屬課程 <span className="text-red-500">*</span>
                 </label>
-                {courseNames.length > 0 ? (
-                  <select
-                    value={formCourseName}
-                    onChange={(e) => {
-                      setFormCourseName(e.target.value);
-                      if (!formTitle) setFormTitle(`${e.target.value} 上課`);
-                    }}
-                    className="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-xs text-gray-900 font-bold outline-none focus:border-purple-600"
-                  >
-                    {courseNames.map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    type="text"
-                    required
-                    value={formCourseName}
-                    onChange={(e) => setFormCourseName(e.target.value)}
-                    placeholder="輸入課程名稱"
-                    className="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-xs text-gray-900 font-bold outline-none"
-                  />
-                )}
+                <select
+                  value={formCourseName}
+                  onChange={(e) => setFormCourseName(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-[#FF6B57] font-bold text-gray-800"
+                >
+                  {availableCourseNames.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
               </div>
 
-              {/* 標題 (選填) */}
+              {/* 上課日標題 */}
               <div>
-                <label className="block text-xs font-bold text-gray-800 mb-1">
-                  日程標題 (選填)
+                <label className="block font-bold text-gray-700 mb-1">
+                  日程標題 <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
+                  required
+                  placeholder="例如：第 5 節 - 口語演練與模擬測試"
                   value={formTitle}
                   onChange={(e) => setFormTitle(e.target.value)}
-                  placeholder={`預設：${formCourseName || '課程'} 上課`}
-                  className="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-xs text-gray-900 font-bold outline-none focus:border-purple-600 shadow-2xs"
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-[#FF6B57] focus:bg-white font-bold text-gray-900"
                 />
               </div>
 
-              {/* 上課日期與時間 */}
-              <div className="grid grid-cols-2 gap-2">
+              {/* 上課日期與時段 */}
+              <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block text-xs font-bold text-gray-800 mb-1">
-                    上課日期 <span className="text-red-500">*</span>
-                  </label>
+                  <label className="block font-bold text-gray-700 mb-1">上課日期</label>
                   <input
                     type="date"
                     required
                     value={formDate}
                     onChange={(e) => setFormDate(e.target.value)}
-                    className="w-full p-2 bg-white border border-gray-300 rounded-xl text-xs text-gray-900 font-bold outline-none"
+                    className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-[#FF6B57] font-bold text-gray-800"
                   />
                 </div>
+
                 <div>
-                  <label className="block text-xs font-bold text-gray-800 mb-1">
-                    上課時間
-                  </label>
+                  <label className="block font-bold text-gray-700 mb-1">上課時段</label>
                   <input
                     type="text"
+                    placeholder="14:00 - 15:30"
                     value={formTimeSlot}
                     onChange={(e) => setFormTimeSlot(e.target.value)}
-                    placeholder="例：14:00 - 15:30"
-                    className="w-full p-2 bg-white border border-gray-300 rounded-xl text-xs text-gray-900 font-bold outline-none"
+                    className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-[#FF6B57] font-bold text-gray-800"
                   />
                 </div>
               </div>
 
-              {/* 學校/分校 與 班別 */}
-              <div className="grid grid-cols-2 gap-2">
+              {/* 分校與班別 */}
+              <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block text-xs font-bold text-gray-800 mb-1">所屬學校/分校</label>
+                  <label className="block font-bold text-gray-700 mb-1">分校</label>
                   <select
                     value={formBranch}
                     onChange={(e) => setFormBranch(e.target.value)}
-                    className="w-full p-2 bg-white border border-gray-300 rounded-xl text-xs text-gray-900 font-bold outline-none"
+                    className="w-full px-2.5 py-2 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-[#FF6B57] font-bold text-gray-800"
                   >
-                    <option value="全部分校">全部分校</option>
                     {branches.map((b) => (
                       <option key={b} value={b}>{b}</option>
                     ))}
                   </select>
                 </div>
+
                 <div>
-                  <label className="block text-xs font-bold text-gray-800 mb-1">目標班別</label>
+                  <label className="block font-bold text-gray-700 mb-1">目標班別</label>
                   <select
                     value={formClass}
                     onChange={(e) => setFormClass(e.target.value)}
-                    className="w-full p-2 bg-white border border-gray-300 rounded-xl text-xs text-gray-900 font-bold outline-none"
+                    className="w-full px-2.5 py-2 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-[#FF6B57] font-bold text-gray-800"
                   >
                     <option value="全體班別">全體班別</option>
-                    {classes.map((c) => (
-                      <option key={c} value={c}>{c}</option>
+                    {classes.map((cls) => (
+                      <option key={cls} value={cls}>{cls}</option>
                     ))}
                   </select>
                 </div>
               </div>
 
-              {/* 上課地點 */}
+              {/* 上課地點 / 課室 */}
               <div>
-                <label className="block text-xs font-bold text-gray-800 mb-1">課室或地點 (選填)</label>
+                <label className="block font-bold text-gray-700 mb-1">上課地點 / 課室 (選填)</label>
                 <input
                   type="text"
+                  placeholder="例如：302 課室 或 線上 Zoom 會議室"
                   value={formLocation}
                   onChange={(e) => setFormLocation(e.target.value)}
-                  placeholder="例：302 課室、線上會議室..."
-                  className="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-xs text-gray-900 font-bold outline-none shadow-2xs"
+                  className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-[#FF6B57] text-gray-800"
                 />
               </div>
 
-              {/* 備註 */}
+              {/* 課堂說明 */}
               <div>
-                <label className="block text-xs font-bold text-gray-800 mb-1">上課備註 (選填)</label>
+                <label className="block font-bold text-gray-700 mb-1">課堂說明 (選填)</label>
                 <textarea
-                  rows={2}
+                  rows={3}
+                  placeholder="可備註當堂所需教材或重點事項..."
                   value={formDescription}
                   onChange={(e) => setFormDescription(e.target.value)}
-                  placeholder="請攜帶之講義或課前準備事項..."
-                  className="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-xs text-gray-900 font-bold outline-none shadow-2xs resize-none"
-                />
+                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-[#FF6B57] text-xs text-gray-800 resize-none"
+                ></textarea>
               </div>
 
-              {/* 提交按鈕 */}
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+              {/* 表單操作按鈕 */}
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-150">
                 <button
                   type="button"
                   onClick={() => setShowFormModal(false)}
-                  className="px-4 py-2 border border-gray-200 text-gray-600 rounded-xl text-xs font-bold hover:bg-gray-50 transition-colors"
+                  className="px-4 py-2 border border-gray-200 text-gray-600 hover:bg-gray-100 rounded-xl font-bold transition-colors"
                 >
                   取消
                 </button>
                 <button
                   type="submit"
                   disabled={formSubmitting}
-                  className="px-5 py-2 bg-gradient-to-r from-[#FF6B57] to-[#FF8573] text-white rounded-xl text-xs font-bold hover:opacity-95 shadow-md transition-all disabled:opacity-50"
+                  className="px-6 py-2 bg-[#FF6B57] hover:bg-[#e05a48] text-white rounded-xl font-bold transition-colors flex items-center gap-1.5 shadow-sm disabled:opacity-50"
                 >
-                  {formSubmitting ? '儲存中...' : editingEvent ? '儲存修改' : '確認新增上課日'}
+                  {formSubmitting && <Loader2 size={13} className="animate-spin" />}
+                  <span>{editingEvent ? '儲存變更' : '立即新增'}</span>
                 </button>
               </div>
             </form>
-
           </div>
         </div>
       )}

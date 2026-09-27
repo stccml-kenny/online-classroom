@@ -97,12 +97,15 @@ export const MoreView: React.FC<MoreViewProps> = ({
           </>
         )}
 
-        <MenuItem icon={<Radio className="text-[#FF6B57]" size={20} />} title="最新消息" />
+        <MenuItem
+          icon={<Radio className="text-[#FF6B57]" size={20} />}
+          title="最新消息"
+          badge={noticeCount && noticeCount > 0 ? `${noticeCount}` : undefined}
+          onClick={onOpenNotices}
+        />
         <MenuItem
           icon={<FileText className="text-[#FF6B57]" size={20} />}
           title="電子通告"
-          badge={noticeCount && noticeCount > 0 ? `${noticeCount}` : undefined}
-          onClick={onOpenNotices}
         />
         {/* 只有導師或管理員才可進行學校與班別設定 */}
         {!isStudentOrParent && (
