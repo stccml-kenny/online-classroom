@@ -37,6 +37,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const isStudentOrParent = currentUser?.role === 'student' || currentUser?.role === 'parent';
   const isAdmin = currentUser?.role === 'admin';
 
+  // 依真實時間動態計算問候語 (早安 05:00-11:59, 午安 12:00-17:59, 晚安 18:00-04:59)
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) return '早安';
+    if (hour >= 12 && hour < 18) return '午安';
+    return '晚安';
+  };
+
   return (
     <div className="flex-1 overflow-y-auto bg-[#F8F9FA] pb-20">
       
@@ -84,7 +92,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
             {currentUser ? (
               <>
                 <p className="text-base font-extrabold">
-                  早安，{currentUser.name}！
+                  {getGreeting()}，{currentUser.name}！
                 </p>
                 <p className="text-xs text-white/90">
                   {isStudentOrParent
@@ -310,49 +318,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
             )}
           </div>
 
-          {/* 4. 登入用戶專屬卡片與登出控制 */}
-          <div className="p-4 bg-white border border-gray-150 rounded-2xl shadow-xs space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-gray-700">目前登入身分</span>
-              <button
-                type="button"
-                onClick={onOpenAuth}
-                className="text-[11px] text-[#FF6B57] font-bold hover:underline"
-              >
-                切換帳戶
-              </button>
-            </div>
-            <div className="flex items-center justify-between bg-gray-50 p-3 rounded-xl border border-gray-100">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-full bg-white border border-gray-200 flex items-center justify-center text-lg shadow-2xs">
-                  {ROLE_CONFIGS[currentUser.role]?.emoji || '👤'}
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-gray-800 flex items-center gap-1">
-                    <span>{currentUser.name}</span>
-                    <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-orange-100 text-[#FF6B57]">
-                      {ROLE_CONFIGS[currentUser.role]?.label}
-                    </span>
-                  </div>
-                  <div className="text-[10px] text-gray-500 font-mono">
-                    帳號：{currentUser.username} · 分校：{currentUser.branch || '總校'}
-                  </div>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  if (window.confirm('確定要登出目前帳戶嗎？')) {
-                    onLogout();
-                  }
-                }}
-                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
-                title="登出帳戶"
-              >
-                <LogOut size={16} />
-              </button>
-            </div>
-          </div>
+
 
         </div>
       )}

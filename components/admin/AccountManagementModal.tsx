@@ -62,7 +62,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
 
   // ⭐ 需求：參加課程 (Courses) 功能移送至帳戶中心
   const [selectedCourses, setSelectedCourses] = useState<string[]>([]);
-  const [customCourseInput, setCustomCourseInput] = useState('');
+
 
   // 家長帳戶關聯多個子女帳號
   const [linkedChildrenUsernames, setLinkedChildrenUsernames] = useState<string[]>([]);
@@ -87,7 +87,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
   const [editBranch, setEditBranch] = useState('');
   const [editClass, setEditClass] = useState('');
   const [editCourses, setEditCourses] = useState<string[]>([]);
-  const [editCustomCourse, setEditCustomCourse] = useState('');
+
   const [editChildrenUsernames, setEditChildrenUsernames] = useState<string[]>([]);
   const [editStudentPicker, setEditStudentPicker] = useState('');
   const [editManualChildInput, setEditManualChildInput] = useState('');
@@ -353,9 +353,6 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
     const finalCourses: string[] = [];
     if (role === 'student') {
       selectedCourses.forEach((c) => finalCourses.push(c));
-      if (customCourseInput.trim() && !finalCourses.includes(customCourseInput.trim())) {
-        finalCourses.push(customCourseInput.trim());
-      }
     }
 
     const finalChildrenUsernames = role === 'parent' ? linkedChildrenUsernames : undefined;
@@ -414,7 +411,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
     setPhone('');
     setPassword('');
     setSelectedCourses([]);
-    setCustomCourseInput('');
+
     setLinkedChildrenUsernames([]);
     setSelectedStudentToLink('');
     setCustomChildUsernameInput('');
@@ -474,7 +471,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
     setEditBranch(u.branch || branches[0] || '總校');
     setEditClass(u.className || classes[0] || '未分班');
     setEditCourses(u.enrolledCourses || []);
-    setEditCustomCourse('');
+
     setEditChildrenUsernames(u.childrenUsernames || []);
     setEditStudentPicker('');
     setEditManualChildInput('');
@@ -508,9 +505,6 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
     const updatedCourses: string[] = [];
     if (editRole === 'student') {
       editCourses.forEach((c) => updatedCourses.push(c));
-      if (editCustomCourse.trim() && !updatedCourses.includes(editCustomCourse.trim())) {
-        updatedCourses.push(editCustomCourse.trim());
-      }
     }
 
     const updatedUser: UserProfile = {
@@ -1539,7 +1533,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                         <span className="text-[10px] text-gray-500 font-normal">(選填，可複選多個課程)</span>
                       </label>
                       <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full">
-                        已選 {selectedCourses.length + (customCourseInput.trim() ? 1 : 0)} 門課程
+                        已選 {selectedCourses.length} 門課程
                       </span>
                     </div>
 
@@ -1549,7 +1543,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                       </p>
                     ) : availableCoursesForSelectedBranch.length === 0 ? (
                       <p className="text-xs text-gray-400 py-2 text-center">
-                        「{parseBranchInfo(branch).name}」暫無預設課程，可於下方手動輸入課程名稱
+                        「{parseBranchInfo(branch).name}」暫無課程
                       </p>
                     ) : (
                       <div className="space-y-1.5">
@@ -1582,16 +1576,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                       </div>
                     )}
 
-                    {/* 自訂課程輸入 */}
-                    <div className="pt-1.5 border-t border-indigo-100">
-                      <input
-                        type="text"
-                        placeholder="+ 自訂或填寫其他課程名稱 (選填)..."
-                        value={customCourseInput}
-                        onChange={(e) => setCustomCourseInput(e.target.value)}
-                        className="w-full p-2 border border-gray-200 bg-white rounded-lg text-xs outline-none focus:border-indigo-600 placeholder:text-gray-400 font-semibold"
-                      />
-                    </div>
+
                   </div>
                 )}
 
@@ -2217,13 +2202,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                                       );
                                     })}
                                   </div>
-                                  <input
-                                    type="text"
-                                    placeholder="+ 自訂其他課程名稱..."
-                                    value={editCustomCourse}
-                                    onChange={(e) => setEditCustomCourse(e.target.value)}
-                                    className="w-full p-1.5 bg-white border border-gray-300 rounded text-xs outline-none"
-                                  />
+                                  
                                 </div>
                               </div>
                             )}

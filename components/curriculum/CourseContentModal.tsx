@@ -146,6 +146,19 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
   const [selectedCourse, setSelectedCourse] = useState('全部課程');
   const [statusFilter, setStatusFilter] = useState<'all' | PublishStatusType>('all');
 
+  const isStudent = currentUser?.role === 'student';
+  const studentEnrolledCourses = useMemo(() => {
+    if (!currentUser || currentUser.role !== 'student') return [];
+    return Array.isArray(currentUser.enrolledCourses) ? currentUser.enrolledCourses : [];
+  }, [currentUser]);
+
+  const isCourseMatchSimple = (uCourse?: string, targetCourse?: string) => {
+    if (!uCourse || !targetCourse) return true;
+    const uC = uCourse.trim().toLowerCase();
+    const tC = targetCourse.trim().toLowerCase();
+    return uC === tC || uC.includes(tC) || tC.includes(uC);
+  };
+
   // ⭐ 需求 6：課程內容中，課程選擇會因揀選的學校而變更 (嚴格遵循 React Rules of Hooks，置於 early return 之前)
   const filteredCourses = useMemo(() => {
     let list: string[] = [];
@@ -681,8 +694,19 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
     } catch (e) {}
   };
 
-    // 篩選單元清單
+    // 篩選單元清單 (⭐ 學生帳戶模式中只顯示已參加課程之單元)
   const filteredUnits = units.filter((u) => {
+    if (isStudent) {
+      if (studentEnrolledCourses.length === 0) return false;
+      const matchCourse =
+        selectedCourse === '全部課程'
+          ? studentEnrolledCourses.some((sc) => isCourseMatchSimple(u.course_name, sc))
+          : isCourseMatchSimple(u.course_name, selectedCourse);
+      const { status } = checkPublishStatus(u.publish_date, u.unpublish_date);
+      const matchStatus = statusFilter === 'all' || status === statusFilter;
+      return matchCourse && matchStatus;
+    }
+
     const matchBranch = selectedBranch === '全部分校' || !u.branch || u.branch === selectedBranch;
     const matchCourse =
       selectedCourse === '全部課程' ||
@@ -695,8 +719,19 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
     return matchBranch && matchCourse && matchStatus;
   });
 
-  // 篩選家課清單
+  // 篩選家課清單 (⭐ 學生帳戶模式中只顯示已參加課程之家課)
   const filteredHomework = homeworkList.filter((hw) => {
+    if (isStudent) {
+      if (studentEnrolledCourses.length === 0) return false;
+      const matchCourse =
+        selectedCourse === '全部課程'
+          ? studentEnrolledCourses.some((sc) => isCourseMatchSimple(hw.course_name, sc))
+          : isCourseMatchSimple(hw.course_name, selectedCourse);
+      const { status } = checkPublishStatus(hw.publish_date, hw.unpublish_date);
+      const matchStatus = statusFilter === 'all' || status === statusFilter;
+      return matchCourse && matchStatus;
+    }
+
     const matchBranch = selectedBranch === '全部分校' || !hw.branch || hw.branch === selectedBranch;
     const matchCourse =
       selectedCourse === '全部課程' ||
@@ -807,6 +842,28 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
               <span className="text-[10px] text-gray-400 shrink-0 font-medium ml-2">
                 🔒 選項已鎖定
               </span>
+            </div>
+          ) : isStudent ? (
+            /* ⭐ 需求 2 & 3：學生帳戶模式中課程內容與單元進度移除學校下拉選單，只提供已參加的課程選項 */
+            <div className="grid grid-cols-1 gap-1.5">
+              <select
+                value={selectedCourse}
+                onChange={(e) => setSelectedCourse(e.target.value)}
+                className="w-full bg-indigo-50 text-indigo-700 text-xs font-bold px-2.5 py-2 rounded-lg border border-indigo-100 outline-none"
+              >
+                {studentEnrolledCourses.length === 0 ? (
+                  <option value="">暫未參加任何課程</option>
+                ) : (
+                  <>
+                    {studentEnrolledCourses.length > 1 && (
+                      <option value="全部課程">全部已參加課程 ({studentEnrolledCourses.length} 門)</option>
+                    )}
+                    {studentEnrolledCourses.map((c, idx) => (
+                      <option key={`${c}_${idx}`} value={c}>{c}</option>
+                    ))}
+                  </>
+                )}
+              </select>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-1.5">

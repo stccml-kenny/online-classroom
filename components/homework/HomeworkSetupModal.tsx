@@ -272,6 +272,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
   usersList = [],
   onUpdateUsersList,
 }) => {
+  const isStudent = currentUser?.role === 'student';
   // ⭐ 標準化課程項目清單 (置於 Hook 前以供計算各項指標)
   const normalizedCourses = React.useMemo(() => courses.map(normalizeCourse), [courses]);
 
@@ -1091,10 +1092,18 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
             </div>
             <div>
               <h4 className="font-bold text-sm text-gray-800 leading-tight">
-                {mode === 'courses_only' ? '課程設定與排程管理' : '課程與班級設定'}
+                {isStudent
+                  ? '我的課程管理'
+                  : mode === 'courses_only'
+                  ? '課程設定與排程管理'
+                  : '課程與班級設定'}
               </h4>
               <p className="text-[10px] text-gray-400">
-                {mode === 'courses_only' ? '管理各校課程名稱、時段、每節課堂日期與自動排程' : '管理各校課程、上課時段、自動排程、學校與班別名冊'}
+                {isStudent
+                  ? '查閱我的專屬修讀課程、上課時段與每節課堂日期進度'
+                  : mode === 'courses_only'
+                  ? '管理各校課程名稱、時段、每節課堂日期與自動排程'
+                  : '管理各校課程、上課時段、自動排程、學校與班別名冊'}
               </p>
             </div>
           </div>
@@ -1640,11 +1649,13 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                             <span className="text-[10px] font-semibold text-purple-700 bg-purple-50 border border-purple-100 px-1.5 py-0.5 rounded">
                               共 {sessionsCount} 節
                             </span>
-                            {/* ⭐ 需求 7：於課程中顯示已參加學生人數 */}
-                            <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
-                              <Users size={10} className="text-blue-600" />
-                              <span>已參加: {getEnrolledStudentCount(c)} 人</span>
-                            </span>
+                            {/* ⭐ 需求 6：學生帳戶模式中課程設定與排程管理不要顯示已參加人數 */}
+                            {!isStudent && (
+                              <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                                <Users size={10} className="text-blue-600" />
+                                <span>已參加: {getEnrolledStudentCount(c)} 人</span>
+                              </span>
+                            )}
                           </div>
                           {/* ⭐ 課程名稱 + (課程時間)，懸浮呈現品牌亮色 */}
                           <h4 className="font-bold text-gray-900 group-hover/title:text-indigo-600 text-sm leading-snug truncate transition-colors flex items-center gap-1.5">

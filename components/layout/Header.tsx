@@ -26,19 +26,9 @@ export const Header: React.FC<HeaderProps> = ({
         {title}
       </h1>
 
-      {/* 右側登入狀態與角色徽章 */}
-      <div>
-        {currentUser ? (
-          <button
-            type="button"
-            onClick={onOpenAuth}
-            className="flex items-center gap-1 bg-white/20 hover:bg-white/30 backdrop-blur-xs px-2 py-1 rounded-full text-xs font-bold transition-colors"
-            title="查看帳戶資訊 / 切換身分"
-          >
-            <span>{ROLE_CONFIGS[currentUser.role]?.emoji || '👤'}</span>
-            <span className="truncate max-w-[65px]">{currentUser.name}</span>
-          </button>
-        ) : (
+      {/* 右側：已移除查看帳戶資訊 / 切換身分按鈕，僅未登入時保留登入按鈕 */}
+      <div className="min-w-[48px] flex justify-end">
+        {!currentUser && onOpenAuth && (
           <button
             type="button"
             onClick={onOpenAuth}
