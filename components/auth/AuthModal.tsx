@@ -115,14 +115,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onLogout,
   onVerifyLogin
 }) => {
-  // 登入表單狀態
+  // 登入表單狀態 (所有 Hook 嚴格置於 early return 之前，遵守 React Rules of Hooks)
   const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   if (!isOpen) return null;
-
-  const [submitting, setSubmitting] = useState(false);
 
   // 登入送出處理 (⭐ 支援跨機器即時向 Appwrite 雲端直連驗證)
   const handleLoginSubmit = async (e: React.FormEvent) => {
