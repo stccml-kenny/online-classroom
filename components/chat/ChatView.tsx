@@ -14,6 +14,12 @@ import {
   Check,
   CheckCheck,
   Sparkles,
+  ChevronDown,
+  ChevronRight,
+  Filter,
+  ListFilter,
+  Layers,
+  CalendarDays,
 } from 'lucide-react';
 import type { UserProfile, UserRole } from '@/components/auth/AuthModal';
 import type { ChatMessage, ChatConversation, ChatContact, MessageType } from '@/types/chat';
@@ -25,6 +31,41 @@ interface ChatViewProps {
   courses?: any[];
   initialTargetUser?: UserProfile | null;
   onOpenAuth?: () => void;
+}
+
+// 嚴格訊息去重輔助函數 (解決即時連線與樂觀更新造成的重複渲染)
+function dedupeMessages(msgs: ChatMessage[]): ChatMessage[] {
+  const result: ChatMessage[] = [];
+  const seenIds = new Set<string>();
+
+  for (const m of msgs) {
+    if (!m) continue;
+    // 1. 若已有相同 ID，略過
+    if (m.$id && seenIds.has(m.$id)) continue;
+
+    // 2. 檢查是否與已有訊息 (特別是 tempId 暫存訊息) 內容、發言者及時間極為接近
+    const duplicateIdx = result.findIndex(
+      (existing) =>
+        existing.senderId.toLowerCase() === m.senderId.toLowerCase() &&
+        existing.content === m.content &&
+        Math.abs(new Date(existing.timestamp).getTime() - new Date(m.timestamp).getTime()) < 10000
+    );
+
+    if (duplicateIdx !== -1) {
+      // 若原先是暫存 tempId，而當前是伺服器正式 ID，則用正式 ID 覆蓋
+      if (result[duplicateIdx].$id?.startsWith('temp_') && !m.$id?.startsWith('temp_')) {
+        result[duplicateIdx] = m;
+        if (m.$id) seenIds.add(m.$id);
+      }
+      // 否則視為重複略過
+      continue;
+    }
+
+    if (m.$id) seenIds.add(m.$id);
+    result.push(m);
+  }
+
+  return result;
 }
 
 export const ChatView: React.FC<ChatViewProps> = ({
@@ -46,6 +87,11 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+
+  // ⭐ 對話分組過濾狀態
+  const [activeConvFilter, setActiveConvFilter] = useState<'all' | 'leave' | 'parent' | 'student' | 'teacher' | 'admin'>('all');
+  const [groupViewMode, setGroupViewMode] = useState<'grouped' | 'flat'>('grouped');
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -130,17 +176,44 @@ export const ChatView: React.FC<ChatViewProps> = ({
     fetchConversations();
   }, [currentUser]);
 
-  // 3. Appwrite Realtime 監聽新訊息
+  // 3. Appwrite Realtime 監聽新訊息 (嚴格去重，防止發出與推播雙重顯示)
   useEffect(() => {
     if (!currentUser) return;
 
     const unsubscribe = chatService.subscribeToNewMessages(currentUser.username, (newMsg) => {
-      // 若當前正開啟此對話室，立即追加訊息並標記已讀
+      // 若當前正開啟此對話室，安全替換暫存訊息並標記已讀
       if (activeConversationId && newMsg.conversationId === activeConversationId) {
         setMessages((prev) => {
+          // 檢查是否已有該真正 ID
           if (prev.some((m) => m.$id === newMsg.$id)) return prev;
-          return [...prev, newMsg];
+
+          // 檢查是否能覆蓋自己的 tempId 樂觀訊息
+          const tempIdx = prev.findIndex(
+            (m) =>
+              m.$id?.startsWith('temp_') &&
+              m.senderId.toLowerCase() === newMsg.senderId.toLowerCase() &&
+              m.content === newMsg.content &&
+              Math.abs(new Date(m.timestamp).getTime() - new Date(newMsg.timestamp).getTime()) < 15000
+          );
+
+          if (tempIdx !== -1) {
+            const next = [...prev];
+            next[tempIdx] = newMsg;
+            return dedupeMessages(next);
+          }
+
+          // 避免短時間內重複內容
+          const isDup = prev.some(
+            (m) =>
+              m.senderId.toLowerCase() === newMsg.senderId.toLowerCase() &&
+              m.content === newMsg.content &&
+              Math.abs(new Date(m.timestamp).getTime() - new Date(newMsg.timestamp).getTime()) < 3000
+          );
+          if (isDup) return prev;
+
+          return dedupeMessages([...prev, newMsg]);
         });
+
         chatService.markMessagesAsRead(activeConversationId, currentUser.username);
         setTimeout(() => scrollToBottom('smooth'), 100);
       }
@@ -180,7 +253,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
     try {
       const msgs = await chatService.getMessages(convId);
-      setMessages(msgs);
+      setMessages(dedupeMessages(msgs));
       await chatService.markMessagesAsRead(convId, currentUser.username);
       fetchConversations();
     } catch (e) {
@@ -216,7 +289,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
     startChatWithPartner(found);
   };
 
-  // 7. 發送訊息
+  // 7. 發送訊息 (防重覆機制：先發送暫存，再嚴格替換或忽略，杜絕雙重氣泡)
   const handleSendMessage = async (customContent?: string, type: MessageType = 'text') => {
     const textToSend = (customContent !== undefined ? customContent : inputText).trim();
     if (!textToSend || !currentUser || !activePartner || !activeConversationId || sending) {
@@ -228,8 +301,28 @@ export const ChatView: React.FC<ChatViewProps> = ({
       setInputText('');
     }
 
+    const tempId = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const optimisticMsg: ChatMessage = {
+      $id: tempId,
+      conversationId: activeConversationId,
+      senderId: currentUser.username,
+      senderName: currentUser.name || currentUser.username,
+      senderRole: currentUser.role,
+      receiverId: activePartner.username,
+      content: textToSend,
+      type,
+      fileUrl: '',
+      fileName: '',
+      isRead: false,
+      timestamp: new Date().toISOString(),
+    };
+
+    // 立即顯示樂觀訊息
+    setMessages((prev) => dedupeMessages([...prev, optimisticMsg]));
+    scrollToBottom('smooth');
+
     try {
-      const newMsg = await chatService.sendMessage({
+      const savedMsg = await chatService.sendMessage({
         conversationId: activeConversationId,
         sender: currentUser,
         receiver: activePartner,
@@ -239,8 +332,15 @@ export const ChatView: React.FC<ChatViewProps> = ({
         className: activePartner.className || currentUser.className,
       });
 
-      setMessages((prev) => [...prev, newMsg]);
-      scrollToBottom('smooth');
+      // 嚴格替換暫存訊息，若 Realtime 早已插入該 savedMsg.$id 則過濾掉 tempId
+      setMessages((prev) => {
+        const hasRealDoc = prev.some((m) => m.$id === savedMsg.$id);
+        if (hasRealDoc) {
+          return prev.filter((m) => m.$id !== tempId);
+        }
+        return prev.map((m) => (m.$id === tempId ? savedMsg : m));
+      });
+
       fetchConversations();
     } catch (err) {
       console.error('發送訊息失敗:', err);
@@ -268,24 +368,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
     });
   }, [eligibleContacts, searchQuery]);
 
-  // 過濾進行中對話
-  const filteredConversations = useMemo(() => {
-    if (!currentUser) return [];
-    const myLower = currentUser.username.toLowerCase();
-    return conversations.filter((conv) => {
-      const q = searchQuery.toLowerCase().trim();
-      if (!q) return true;
-      const partnerName =
-        conv.participantNames?.find(
-          (_, idx) => conv.participants[idx]?.toLowerCase() !== myLower
-        ) || '';
-      return (
-        partnerName.toLowerCase().includes(q) ||
-        (conv.lastMessage && conv.lastMessage.toLowerCase().includes(q))
-      );
-    });
-  }, [conversations, currentUser, searchQuery]);
-
   // 取得對話未讀數
   const getUnreadCount = (conv: ChatConversation): number => {
     if (!currentUser) return 0;
@@ -295,6 +377,190 @@ export const ChatView: React.FC<ChatViewProps> = ({
     } catch {
       return 0;
     }
+  };
+
+  // ⭐ 計算每個對話的詳細資訊與分組歸屬
+  const annotatedConversations = useMemo(() => {
+    if (!currentUser) return [];
+    const myLower = currentUser.username.toLowerCase();
+
+    return conversations.map((conv) => {
+      const partnerIdx = conv.participants.findIndex((p) => p.toLowerCase() !== myLower);
+      const partnerUsername = conv.participants[partnerIdx] || '';
+      const partnerName = conv.participantNames?.[partnerIdx] || partnerUsername;
+      
+      // 從 usersList 查找最新角色與子女名稱
+      const foundUser = usersList.find((u) => u.username.toLowerCase() === partnerUsername.toLowerCase());
+      const partnerRole: UserRole = foundUser?.role || conv.participantRoles?.[partnerIdx] || 'teacher';
+      
+      let childrenNames: string[] = [];
+      if (partnerRole === 'parent' && foundUser?.childrenUsernames) {
+        const cSet = new Set(foundUser.childrenUsernames.map((c) => c.toLowerCase()));
+        childrenNames = usersList
+          .filter((st) => cSet.has(st.username.toLowerCase()))
+          .map((st) => st.name || st.username);
+      }
+
+      const isLeave = (conv.lastMessage || '').includes('【請假申請】') || (conv.lastMessage || '').includes('請假');
+      const isHomework = (conv.lastMessage || '').includes('【作業') || (conv.lastMessage || '').includes('功課');
+      const unread = getUnreadCount(conv);
+
+      return {
+        ...conv,
+        partnerUsername,
+        partnerName,
+        partnerRole,
+        childrenNames,
+        isLeave,
+        isHomework,
+        unread,
+      };
+    });
+  }, [conversations, currentUser, usersList]);
+
+  // ⭐ 各分組統計數量
+  const groupCounts = useMemo(() => {
+    let leave = 0;
+    let parent = 0;
+    let student = 0;
+    let teacher = 0;
+    let admin = 0;
+
+    annotatedConversations.forEach((c) => {
+      if (c.isLeave) leave++;
+      if (c.partnerRole === 'parent') parent++;
+      else if (c.partnerRole === 'student') student++;
+      else if (c.partnerRole === 'teacher' || c.partnerRole === 'assistant') teacher++;
+      else if (c.partnerRole === 'admin') admin++;
+    });
+
+    return {
+      all: annotatedConversations.length,
+      leave,
+      parent,
+      student,
+      teacher,
+      admin,
+    };
+  }, [annotatedConversations]);
+
+  // 搜尋過濾後的對話列表
+  const searchedConversations = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return annotatedConversations;
+
+    return annotatedConversations.filter(
+      (c) =>
+        c.partnerName.toLowerCase().includes(q) ||
+        c.partnerUsername.toLowerCase().includes(q) ||
+        (c.lastMessage && c.lastMessage.toLowerCase().includes(q)) ||
+        (c.branch && c.branch.toLowerCase().includes(q)) ||
+        (c.className && c.className.toLowerCase().includes(q))
+    );
+  }, [annotatedConversations, searchQuery]);
+
+  // 依選取的 filter pill 過濾
+  const displayedConversations = useMemo(() => {
+    if (activeConvFilter === 'leave') {
+      return searchedConversations.filter((c) => c.isLeave);
+    }
+    if (activeConvFilter === 'parent') {
+      return searchedConversations.filter((c) => c.partnerRole === 'parent');
+    }
+    if (activeConvFilter === 'student') {
+      return searchedConversations.filter((c) => c.partnerRole === 'student');
+    }
+    if (activeConvFilter === 'teacher') {
+      return searchedConversations.filter((c) => c.partnerRole === 'teacher' || c.partnerRole === 'assistant');
+    }
+    if (activeConvFilter === 'admin') {
+      return searchedConversations.filter((c) => c.partnerRole === 'admin');
+    }
+    return searchedConversations;
+  }, [searchedConversations, activeConvFilter]);
+
+  // ⭐ 樹狀分組對話列表 (依類別折疊分區)
+  const groupedSections = useMemo(() => {
+    const sections: {
+      id: string;
+      title: string;
+      icon: string;
+      color: string;
+      items: typeof annotatedConversations;
+    }[] = [];
+
+    const leaves = searchedConversations.filter((c) => c.isLeave);
+    if (leaves.length > 0) {
+      sections.push({
+        id: 'leave',
+        title: '請假申請專區',
+        icon: '📝',
+        color: 'text-red-600 bg-red-50 border-red-200',
+        items: leaves,
+      });
+    }
+
+    // 依使用者角色排序其餘分組
+    if (currentUser?.role === 'teacher' || currentUser?.role === 'assistant' || currentUser?.role === 'admin') {
+      const parents = searchedConversations.filter((c) => !c.isLeave && c.partnerRole === 'parent');
+      if (parents.length > 0) {
+        sections.push({
+          id: 'parent',
+          title: '家長諮詢對話',
+          icon: '👨‍👩‍👧',
+          color: 'text-amber-600 bg-amber-50 border-amber-200',
+          items: parents,
+        });
+      }
+
+      const students = searchedConversations.filter((c) => !c.isLeave && c.partnerRole === 'student');
+      if (students.length > 0) {
+        sections.push({
+          id: 'student',
+          title: '學生作業與輔導',
+          icon: '🎓',
+          color: 'text-emerald-600 bg-emerald-50 border-emerald-200',
+          items: students,
+        });
+      }
+
+      const colleagues = searchedConversations.filter(
+        (c) => !c.isLeave && (c.partnerRole === 'teacher' || c.partnerRole === 'assistant' || c.partnerRole === 'admin')
+      );
+      if (colleagues.length > 0) {
+        sections.push({
+          id: 'colleague',
+          title: '導師與行政團隊',
+          icon: '👨‍🏫',
+          color: 'text-blue-600 bg-blue-50 border-blue-200',
+          items: colleagues,
+        });
+      }
+    } else {
+      // 家長或學生登入時
+      const teachers = searchedConversations.filter(
+        (c) => !c.isLeave && (c.partnerRole === 'teacher' || c.partnerRole === 'assistant' || c.partnerRole === 'admin')
+      );
+      if (teachers.length > 0) {
+        sections.push({
+          id: 'teacher',
+          title: '導師與助教',
+          icon: '👨‍🏫',
+          color: 'text-blue-600 bg-blue-50 border-blue-200',
+          items: teachers,
+        });
+      }
+    }
+
+    return sections;
+  }, [searchedConversations, currentUser]);
+
+  // 切換折疊區塊
+  const toggleSection = (sectionId: string) => {
+    setCollapsedSections((prev) => ({
+      ...prev,
+      [sectionId]: !prev[sectionId],
+    }));
   };
 
   // 角色中文與徽章顏色
@@ -333,6 +599,77 @@ export const ChatView: React.FC<ChatViewProps> = ({
     }
   };
 
+  // 渲染單張對話卡片
+  const renderConversationCard = (conv: typeof annotatedConversations[0]) => (
+    <div
+      key={conv.conversationId}
+      onClick={() => openConversation(conv)}
+      className="p-3 hover:bg-gray-50 cursor-pointer flex items-center gap-3 transition-colors border-b border-gray-50 last:border-b-0"
+    >
+      <div className="relative shrink-0">
+        <div className={`w-10 h-10 rounded-full font-bold flex items-center justify-center text-sm shadow-xs text-white ${
+          conv.isLeave
+            ? 'bg-linear-to-tr from-red-500 to-rose-400'
+            : conv.partnerRole === 'parent'
+            ? 'bg-linear-to-tr from-amber-500 to-orange-400'
+            : conv.partnerRole === 'student'
+            ? 'bg-linear-to-tr from-emerald-500 to-teal-400'
+            : 'bg-linear-to-tr from-blue-600 to-indigo-400'
+        }`}>
+          {(conv.partnerName || 'U').substring(0, 1)}
+        </div>
+        {conv.unread > 0 && (
+          <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center shadow-xs">
+            {conv.unread}
+          </span>
+        )}
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-xs font-bold text-gray-800 truncate">{conv.partnerName}</span>
+            {renderRoleBadge(conv.partnerRole)}
+            {conv.isLeave && (
+              <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-red-100 text-red-700 font-extrabold border border-red-200">
+                📝 請假
+              </span>
+            )}
+            {conv.isHomework && !conv.isLeave && (
+              <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-700 font-extrabold border border-emerald-200">
+                ❓ 作業
+              </span>
+            )}
+          </div>
+          {conv.lastMessageTime && (
+            <span className="text-[10px] text-gray-400 shrink-0 ml-1">
+              {new Date(conv.lastMessageTime).toLocaleDateString([], {
+                month: 'numeric',
+                day: 'numeric',
+              })}
+            </span>
+          )}
+        </div>
+
+        {/* 補充標籤 (例如子女名稱或班級) */}
+        {conv.childrenNames && conv.childrenNames.length > 0 && (
+          <div className="text-[10px] text-amber-700/80 mb-0.5 truncate">
+            子女: {conv.childrenNames.join(', ')}
+            {conv.className && ` · ${conv.className}`}
+          </div>
+        )}
+
+        <p
+          className={`text-[11px] truncate ${
+            conv.unread > 0 ? 'text-gray-900 font-bold' : 'text-gray-500'
+          }`}
+        >
+          {conv.lastMessage || '點擊開啟對話...'}
+        </p>
+      </div>
+    </div>
+  );
+
   // 若尚未登入，提示登入
   if (!currentUser) {
     return (
@@ -360,6 +697,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
   // 子視圖 1：開啟特定聯絡人的聊天室 (Chat Room)
   // ============================================================================
   if (activePartner && activeConversationId) {
+    // 嚴格保證渲染時無重複訊息
+    const uniqueMessages = dedupeMessages(messages);
+
     return (
       <div className="flex-1 flex flex-col bg-slate-50 h-full overflow-hidden">
         {/* 聊天室頂部資訊列 */}
@@ -509,13 +849,13 @@ export const ChatView: React.FC<ChatViewProps> = ({
           )}
         </div>
 
-        {/* 聊天訊息流 */}
+        {/* 聊天訊息流 (100% 保證無重複氣泡) */}
         <div className="flex-1 p-4 overflow-y-auto space-y-3">
           {loading ? (
             <div className="flex items-center justify-center h-32 text-gray-400 text-xs">
               <Clock className="w-4 h-4 animate-spin mr-1.5" /> 載入歷史對話中...
             </div>
-          ) : messages.length === 0 ? (
+          ) : uniqueMessages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-48 text-center text-gray-400 px-4">
               <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 mb-2">
                 <MessageCircle size={24} />
@@ -526,15 +866,15 @@ export const ChatView: React.FC<ChatViewProps> = ({
               </p>
             </div>
           ) : (
-            messages.map((msg, index) => {
+            uniqueMessages.map((msg, index) => {
               const isMe = msg.senderId.toLowerCase() === currentUser.username.toLowerCase();
               const showDate =
                 index === 0 ||
                 new Date(msg.timestamp).toDateString() !==
-                  new Date(messages[index - 1].timestamp).toDateString();
+                  new Date(uniqueMessages[index - 1].timestamp).toDateString();
 
               return (
-                <React.Fragment key={msg.$id || index}>
+                <React.Fragment key={msg.$id || `msg_${index}`}>
                   {showDate && (
                     <div className="flex justify-center my-2">
                       <span className="text-[10px] bg-gray-200/80 text-gray-600 px-2 py-0.5 rounded-full font-medium">
@@ -629,11 +969,11 @@ export const ChatView: React.FC<ChatViewProps> = ({
   }
 
   // ============================================================================
-  // 子視圖 2：對話清單 & 聯絡人首頁
+  // 子視圖 2：對話清單 (支援多重分組) & 聯絡人首頁
   // ============================================================================
   return (
     <div className="flex-1 flex flex-col bg-white h-full overflow-hidden">
-      {/* 頂部搜尋與身分說明 */}
+      {/* 頂部搜尋與分頁 */}
       <div className="p-3 border-b border-gray-100 bg-white shrink-0">
         <div className="relative mb-2.5">
           <Search size={15} className="absolute left-3 top-2.5 text-gray-400" />
@@ -647,7 +987,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
         </div>
 
         {/* 雙分頁標籤 */}
-        <div className="flex bg-gray-100 p-0.5 rounded-lg">
+        <div className="flex bg-gray-100 p-0.5 rounded-lg mb-2">
           <button
             onClick={() => setActiveSubTab('conversations')}
             className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1.5 ${
@@ -677,16 +1017,118 @@ export const ChatView: React.FC<ChatViewProps> = ({
             </span>
           </button>
         </div>
+
+        {/* ⭐ 對話分組過濾標籤列 (僅在「進行中對話」時顯示) */}
+        {activeSubTab === 'conversations' && (
+          <div className="flex items-center justify-between pt-1 border-t border-gray-100">
+            {/* 分組過濾 Pills */}
+            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 flex-1 mr-2">
+              <button
+                onClick={() => setActiveConvFilter('all')}
+                className={`text-[11px] px-2 py-0.8 rounded-full font-bold whitespace-nowrap transition-colors flex items-center gap-1 ${
+                  activeConvFilter === 'all'
+                    ? 'bg-slate-800 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                全部 ({groupCounts.all})
+              </button>
+
+              {groupCounts.leave > 0 && (
+                <button
+                  onClick={() => setActiveConvFilter('leave')}
+                  className={`text-[11px] px-2 py-0.8 rounded-full font-bold whitespace-nowrap transition-colors flex items-center gap-1 ${
+                    activeConvFilter === 'leave'
+                      ? 'bg-red-600 text-white shadow-xs'
+                      : 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'
+                  }`}
+                >
+                  📝 請假 ({groupCounts.leave})
+                </button>
+              )}
+
+              {(currentUser?.role === 'teacher' || currentUser?.role === 'assistant' || currentUser?.role === 'admin') && (
+                <>
+                  {groupCounts.parent > 0 && (
+                    <button
+                      onClick={() => setActiveConvFilter('parent')}
+                      className={`text-[11px] px-2 py-0.8 rounded-full font-bold whitespace-nowrap transition-colors flex items-center gap-1 ${
+                        activeConvFilter === 'parent'
+                          ? 'bg-amber-600 text-white shadow-xs'
+                          : 'bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200'
+                      }`}
+                    >
+                      👨‍👩‍👧 家長 ({groupCounts.parent})
+                    </button>
+                  )}
+
+                  {groupCounts.student > 0 && (
+                    <button
+                      onClick={() => setActiveConvFilter('student')}
+                      className={`text-[11px] px-2 py-0.8 rounded-full font-bold whitespace-nowrap transition-colors flex items-center gap-1 ${
+                        activeConvFilter === 'student'
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+                      }`}
+                    >
+                      🎓 學生 ({groupCounts.student})
+                    </button>
+                  )}
+
+                  {groupCounts.teacher > 0 && (
+                    <button
+                      onClick={() => setActiveConvFilter('teacher')}
+                      className={`text-[11px] px-2 py-0.8 rounded-full font-bold whitespace-nowrap transition-colors flex items-center gap-1 ${
+                        activeConvFilter === 'teacher'
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200'
+                      }`}
+                    >
+                      👨‍🏫 導師 ({groupCounts.teacher})
+                    </button>
+                  )}
+                </>
+              )}
+
+              {(currentUser?.role === 'parent' || currentUser?.role === 'student') && groupCounts.teacher > 0 && (
+                <button
+                  onClick={() => setActiveConvFilter('teacher')}
+                  className={`text-[11px] px-2 py-0.8 rounded-full font-bold whitespace-nowrap transition-colors flex items-center gap-1 ${
+                    activeConvFilter === 'teacher'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200'
+                  }`}
+                >
+                  👨‍🏫 導師與助教 ({groupCounts.teacher})
+                </button>
+              )}
+            </div>
+
+            {/* 分組模式切換 (折疊區塊 vs 時間排序) */}
+            {activeConvFilter === 'all' && (
+              <button
+                onClick={() => setGroupViewMode(groupViewMode === 'grouped' ? 'flat' : 'grouped')}
+                className="text-[10px] text-gray-500 hover:text-gray-800 p-1 rounded-md hover:bg-gray-100 transition-colors flex items-center gap-0.5 shrink-0"
+                title={groupViewMode === 'grouped' ? '切換為時間排序清單' : '切換為依類別分組'}
+              >
+                {groupViewMode === 'grouped' ? <Layers size={13} className="text-[#FF6B57]" /> : <ListFilter size={13} />}
+                <span className="hidden sm:inline">{groupViewMode === 'grouped' ? '分組中' : '平鋪'}</span>
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 列表內容區 */}
       <div className="flex-1 overflow-y-auto divide-y divide-gray-50">
         {activeSubTab === 'conversations' ? (
           /* 對話列表 */
-          filteredConversations.length === 0 ? (
+          searchedConversations.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-8 text-center text-gray-400">
               <MessageCircle size={32} className="text-gray-300 mb-2" />
-              <p className="text-xs font-bold text-gray-600 mb-1">暫無進行中的對話</p>
+              <p className="text-xs font-bold text-gray-600 mb-1">
+                {activeConvFilter !== 'all' ? '該分類下暫無對話' : '暫無進行中的對話'}
+              </p>
               <p className="text-[11px] text-gray-400 mb-4 max-w-xs">
                 切換到「可聯絡人」分頁，即可直接向老師提問或提交請假諮詢。
               </p>
@@ -697,56 +1139,52 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 尋找聯絡人
               </button>
             </div>
-          ) : (
-            filteredConversations.map((conv) => {
-              const myLower = currentUser.username.toLowerCase();
-              const partnerIdx = conv.participants.findIndex((p) => p.toLowerCase() !== myLower);
-              const partnerName = conv.participantNames?.[partnerIdx] || conv.participants[partnerIdx];
-              const partnerRole = conv.participantRoles?.[partnerIdx] || ('teacher' as UserRole);
-              const unread = getUnreadCount(conv);
+          ) : activeConvFilter === 'all' && groupViewMode === 'grouped' ? (
+            /* ⭐ 類別折疊分組視圖 */
+            <div className="divide-y divide-gray-100">
+              {groupedSections.map((sec) => {
+                const isCollapsed = !!collapsedSections[sec.id];
+                const secUnread = sec.items.reduce((acc, cur) => acc + cur.unread, 0);
 
-              return (
-                <div
-                  key={conv.conversationId}
-                  onClick={() => openConversation(conv)}
-                  className="p-3 hover:bg-gray-50 cursor-pointer flex items-center gap-3 transition-colors"
-                >
-                  <div className="relative shrink-0">
-                    <div className="w-10 h-10 rounded-full bg-linear-to-tr from-slate-600 to-slate-400 text-white font-bold flex items-center justify-center text-sm shadow-xs">
-                      {(partnerName || 'U').substring(0, 1)}
+                return (
+                  <div key={sec.id} className="bg-white">
+                    {/* 分組區塊標題欄 */}
+                    <div
+                      onClick={() => toggleSection(sec.id)}
+                      className="px-3 py-2 bg-gray-50/80 hover:bg-gray-100/80 cursor-pointer flex items-center justify-between transition-colors select-none"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm">{sec.icon}</span>
+                        <span className="text-xs font-bold text-gray-700">{sec.title}</span>
+                        <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white border border-gray-200 text-gray-600 font-bold">
+                          {sec.items.length}
+                        </span>
+                        {secUnread > 0 && (
+                          <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-red-500 text-white font-extrabold animate-pulse">
+                            {secUnread} 則未讀
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-gray-400">
+                        {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                      </div>
                     </div>
-                    {unread > 0 && (
-                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center shadow-xs">
-                        {unread}
-                      </span>
+
+                    {/* 分組內容 */}
+                    {!isCollapsed && (
+                      <div className="divide-y divide-gray-50">
+                        {sec.items.map((conv) => renderConversationCard(conv))}
+                      </div>
                     )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold text-gray-800 truncate">{partnerName}</span>
-                        {renderRoleBadge(partnerRole)}
-                      </div>
-                      {conv.lastMessageTime && (
-                        <span className="text-[10px] text-gray-400 shrink-0">
-                          {new Date(conv.lastMessageTime).toLocaleDateString([], {
-                            month: 'numeric',
-                            day: 'numeric',
-                          })}
-                        </span>
-                      )}
-                    </div>
-                    <p
-                      className={`text-[11px] truncate ${
-                        unread > 0 ? 'text-gray-900 font-bold' : 'text-gray-500'
-                      }`}
-                    >
-                      {conv.lastMessage || '點擊開啟對話...'}
-                    </p>
-                  </div>
-                </div>
-              );
-            })
+                );
+              })}
+            </div>
+          ) : (
+            /* ⭐ 平鋪時間排序視圖 (或特定 Filter 視圖) */
+            <div className="divide-y divide-gray-50">
+              {displayedConversations.map((conv) => renderConversationCard(conv))}
+            </div>
           )
         ) : (
           /* 聯絡人清單 (嚴格依身分過濾) */
