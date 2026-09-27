@@ -2,7 +2,7 @@
 import {
   GraduationCap, Users, User, BookOpen, Clock,
   Sparkles, CheckCircle2, ChevronRight, LogOut,
-  Bell, UserPlus
+  Bell, UserPlus, Calendar as CalendarIcon
 } from 'lucide-react';
 import { UserProfile, ROLE_CONFIGS } from '@/components/auth/AuthModal';
 import { TabType } from '@/components/layout/BottomNav';
@@ -13,6 +13,7 @@ interface HomeViewProps {
   onLogout: () => void;
   onNavigateTab: (tab: TabType) => void;
   onOpenNotices: () => void;
+  onOpenCalendar?: () => void;
   onOpenSetup?: () => void;
   onOpenAccountMgmt?: () => void; // 👑 管理員派發帳戶入口
   onOpenStudentHomework?: () => void; // ⭐ 學生直接開啟所有已參加課程家課
@@ -27,6 +28,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onLogout,
   onNavigateTab,
   onOpenNotices,
+  onOpenCalendar,
   onOpenSetup,
   onOpenAccountMgmt,
   onOpenStudentHomework,
@@ -303,6 +305,30 @@ export const HomeView: React.FC<HomeViewProps> = ({
               </>
             )}
           </div>
+
+          {/* 📅 學校行事曆與活動日程捷徑橫幅 */}
+          {onOpenCalendar && (
+            <button
+              type="button"
+              onClick={onOpenCalendar}
+              className="w-full p-3 bg-linear-to-r from-orange-500/10 via-amber-500/10 to-orange-500/5 hover:from-orange-500/15 hover:to-amber-500/10 border border-orange-200/80 rounded-2xl flex items-center justify-between transition-all group shadow-2xs"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-[#FF6B57] text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
+                  <CalendarIcon size={16} />
+                </div>
+                <div className="text-left">
+                  <div className="text-xs font-extrabold text-gray-900 group-hover:text-[#FF6B57] transition-colors">
+                    學校行事曆與重要日程
+                  </div>
+                  <div className="text-[10px] text-gray-500">
+                    點擊查閱公眾假期、校務活動與近期功課截止
+                  </div>
+                </div>
+              </div>
+              <ChevronRight size={16} className="text-gray-400 group-hover:text-[#FF6B57] transition-colors" />
+            </button>
+          )}
 
 
 

@@ -18,6 +18,8 @@ import { chatService } from '@/lib/chatService';
 import { RoleChatPermissions, DEFAULT_ROLE_CHAT_PERMISSIONS } from '@/types/chat';
 
 import { AccountManagementModal } from '@/components/admin/AccountManagementModal';
+import { CalendarModal } from '@/components/calendar/CalendarModal';
+import type { CalendarEvent } from '@/types/calendar';
 import {
   databases,
   DATABASE_ID,
@@ -26,6 +28,9 @@ import {
   directLoginFromCloud,
   saveAllCoursesToCloud,
   loadAllCoursesFromCloud,
+  loadCalendarEventsFromCloud,
+  saveCalendarEventToCloud,
+  deleteCalendarEventFromCloud,
 } from '@/lib/appwrite';
 import { ID, Query } from 'appwrite';
 
@@ -65,6 +70,37 @@ export default function OnlineClassroomApp() {
   }, [currentUser, roleChatPermissions]);
 
   const [showNoticeModal, setShowNoticeModal] = useState(false);
+  const [showCalendarModal, setShowCalendarModal] = useState<boolean>(false);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+
+  const handleSaveCalendarEvent = async (eventData: CalendarEvent, existingId?: string) => {
+    const savedDoc = await saveCalendarEventToCloud(eventData, existingId);
+    setCalendarEvents((prev) => {
+      const idx = prev.findIndex((e) => (e.$id && e.$id === (existingId || savedDoc.$id)) || (e.id && e.id === (existingId || savedDoc.id)));
+      let updated: CalendarEvent[];
+      if (idx !== -1) {
+        updated = [...prev];
+        updated[idx] = { ...updated[idx], ...savedDoc };
+      } else {
+        updated = [savedDoc, ...prev];
+      }
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('oc_calendar_events', JSON.stringify(updated));
+      }
+      return updated;
+    });
+  };
+
+  const handleDeleteCalendarEvent = async (eventId: string) => {
+    await deleteCalendarEventFromCloud(eventId);
+    setCalendarEvents((prev) => {
+      const updated = prev.filter((e) => e.$id !== eventId && e.id !== eventId);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('oc_calendar_events', JSON.stringify(updated));
+      }
+      return updated;
+    });
+  };
   const [showHomeworkModal, setShowHomeworkModal] = useState(false);
   const [showCourseContentModal, setShowCourseContentModal] = useState(false);
   const [courseModalInitialCourse, setCourseModalInitialCourse] = useState<string>('');
@@ -237,6 +273,14 @@ export default function OnlineClassroomApp() {
 
       if (loadedBranches.length > 0) setBranches(loadedBranches);
       if (loadedClasses.length > 0) setClasses(loadedClasses);
+
+      // 4. 讀取 Appwrite 雲端行事曆事件 (calendar_events)
+      try {
+        const cloudEvents = await loadCalendarEventsFromCloud();
+        if (cloudEvents && cloudEvents.length > 0) {
+          setCalendarEvents(cloudEvents);
+        }
+      } catch (e) {}
     } catch (err: any) {
       console.warn('雲端資料庫初始化同步完成:', err.message);
     }
@@ -288,6 +332,13 @@ export default function OnlineClassroomApp() {
       if (savedRoleChat) {
         try {
           setRoleChatPermissions(JSON.parse(savedRoleChat));
+        } catch (e) {}
+      }
+
+      const savedCalEvents = localStorage.getItem('oc_calendar_events');
+      if (savedCalEvents) {
+        try {
+          setCalendarEvents(JSON.parse(savedCalEvents));
         } catch (e) {}
       }
 
@@ -464,6 +515,7 @@ export default function OnlineClassroomApp() {
             onLogout={handleLogout}
             onNavigateTab={setActiveTab}
             onOpenNotices={() => setShowNoticeModal(true)}
+            onOpenCalendar={() => setShowCalendarModal(true)}
             onOpenSetup={() => setShowSetupModal(true)}
             onOpenAccountMgmt={() => handleOpenAccountMgmt('issue')}
             onOpenStudentHomework={handleOpenStudentHomework}
@@ -477,6 +529,7 @@ export default function OnlineClassroomApp() {
           <MoreView
             noticeCount={notices.length}
             onOpenNotices={() => setShowNoticeModal(true)}
+            onOpenCalendar={() => setShowCalendarModal(true)}
             onOpenSetup={() => setShowSetupModal(true)}
             onOpenAccountMgmt={handleOpenAccountMgmt}
             currentUser={currentUser}
@@ -685,6 +738,20 @@ export default function OnlineClassroomApp() {
             onUpdateRoleChatPermissions={handleUpdateRoleChatPermissions}
           />
         )}
+
+        {/* 9. 📅 學校校曆與行事曆彈窗 */}
+        <CalendarModal
+          isOpen={showCalendarModal}
+          onClose={() => setShowCalendarModal(false)}
+          currentUser={currentUser}
+          branches={branches}
+          classes={classes}
+          courses={courses}
+          courseNames={courseNames}
+          calendarEvents={calendarEvents}
+          onSaveEvent={handleSaveCalendarEvent}
+          onDeleteEvent={handleDeleteCalendarEvent}
+        />
       </div>
     </div>
   );

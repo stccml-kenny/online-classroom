@@ -728,3 +728,76 @@ export async function loadAllCourseUnitsFromCloud(): Promise<any[]> {
   }
   return [];
 }
+
+// ==============================================================================
+// 6. 行事曆事件 (calendar_events) 雙軌持久化服務
+// ==============================================================================
+export async function loadCalendarEventsFromCloud(): Promise<any[]> {
+  try {
+    const res = await databases.listDocuments(DATABASE_ID, 'calendar_events', [
+      Query.limit(500),
+      Query.orderAsc('startDate')
+    ]);
+    if (res.documents) {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('oc_calendar_events', JSON.stringify(res.documents));
+      }
+      return res.documents;
+    }
+  } catch (err: any) {
+    console.warn('從 Appwrite calendar_events 讀取失敗，使用本地快取:', err.message);
+  }
+
+  if (typeof window !== 'undefined') {
+    try {
+      const cached = localStorage.getItem('oc_calendar_events');
+      if (cached) return JSON.parse(cached);
+    } catch (e) {}
+  }
+  return [];
+}
+
+export async function saveCalendarEventToCloud(eventData: any, existingId?: string): Promise<any> {
+  const payload: any = {
+    title: eventData.title || '',
+    description: eventData.description || '',
+    eventType: eventData.eventType || 'activity',
+    startDate: eventData.startDate || '',
+    endDate: eventData.endDate || eventData.startDate || '',
+    isAllDay: eventData.isAllDay !== false,
+    branch: eventData.branch || '全部分校',
+    courseName: eventData.courseName || '全部課程',
+    className: eventData.className || '全體班別',
+    targetRoles: typeof eventData.targetRoles === 'string' ? eventData.targetRoles : JSON.stringify(eventData.targetRoles || ['all']),
+    location: eventData.location || '',
+    color: eventData.color || '',
+    creatorUsername: eventData.creatorUsername || '',
+    creatorName: eventData.creatorName || '',
+    createdAt: eventData.createdAt || new Date().toISOString(),
+  };
+
+  try {
+    if (existingId && !existingId.startsWith('evt_')) {
+      const doc = await databases.updateDocument(DATABASE_ID, 'calendar_events', existingId, payload);
+      return doc;
+    } else {
+      const doc = await databases.createDocument(DATABASE_ID, 'calendar_events', ID.unique(), payload);
+      return doc;
+    }
+  } catch (err: any) {
+    console.warn('寫入 Appwrite calendar_events 失敗，轉由本機保存:', err.message);
+    return { ...payload, $id: existingId || `evt_${Date.now()}` };
+  }
+}
+
+export async function deleteCalendarEventFromCloud(eventId: string): Promise<boolean> {
+  try {
+    if (eventId && !eventId.startsWith('evt_')) {
+      await databases.deleteDocument(DATABASE_ID, 'calendar_events', eventId);
+    }
+    return true;
+  } catch (err: any) {
+    console.warn('從 Appwrite calendar_events 刪除失敗:', err.message);
+    return false;
+  }
+}

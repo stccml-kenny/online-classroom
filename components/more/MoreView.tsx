@@ -10,6 +10,7 @@ import { UserProfile, ROLE_CONFIGS } from '@/components/auth/AuthModal';
 interface MoreViewProps {
   noticeCount?: number;
   onOpenNotices: () => void;
+  onOpenCalendar?: () => void;
   onOpenHomework?: () => void;
   onOpenAttendance?: () => void;
   onOpenClasses?: () => void;
@@ -24,6 +25,7 @@ interface MoreViewProps {
 export const MoreView: React.FC<MoreViewProps> = ({
   noticeCount,
   onOpenNotices,
+  onOpenCalendar,
   onOpenSetup,
   onOpenAccountMgmt,
   currentUser,
@@ -98,7 +100,7 @@ export const MoreView: React.FC<MoreViewProps> = ({
         )}
 
         <MenuItem icon={<Radio className="text-[#FF6B57]" size={20} />} title="最新消息" />
-        <MenuItem icon={<Calendar className="text-[#FF6B57]" size={20} />} title="行事曆" />
+        <MenuItem icon={<Calendar className="text-[#FF6B57]" size={20} />} title="行事曆 (校曆與活動日程)" onClick={onOpenCalendar} />
         <MenuItem
           icon={<FileText className="text-[#FF6B57]" size={20} />}
           title="電子通告"
