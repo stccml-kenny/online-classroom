@@ -168,9 +168,19 @@ export const ChatView: React.FC<ChatViewProps> = ({
           return false;
         }
 
-        // 規則 2：家長 只能找 導師、助教、管理員 (嚴格禁止家長找家長、家長找其他學生)
+        // ⭐ 規則 2：家長 只能找 導師、助教 以及 關聯學生 (不顯示系統管理員，嚴格禁止家長找其他無關學生或無關家長)
         if (myRole === 'parent') {
-          return u.role === 'teacher' || u.role === 'assistant' || u.role === 'admin';
+          if (u.role === 'teacher' || u.role === 'assistant') {
+            return true;
+          }
+          if (u.role === 'student') {
+            const isMyChild =
+              parentChildrenUsernames.has(u.username.toLowerCase()) ||
+              (currentUser.childName && u.name && u.name.trim().toLowerCase() === currentUser.childName.trim().toLowerCase()) ||
+              (currentUser.studentName && u.name && u.name.trim().toLowerCase() === currentUser.studentName.trim().toLowerCase());
+            return !!isMyChild;
+          }
+          return false;
         }
 
         // 規則 3：導師 與 助教 可找 學生、家長、同事(導師/助教)、管理員
@@ -473,6 +483,26 @@ export const ChatView: React.FC<ChatViewProps> = ({
         }
         return false;
       }
+
+      // ⭐ 家長帳戶對話清單限定：只顯示導師/助教 及 關聯學生 (不顯示系統管理員與無關學生)
+      if (currentUser?.role === 'parent') {
+        if (conv.partnerRole === 'teacher' || conv.partnerRole === 'assistant') {
+          return true;
+        }
+        if (conv.partnerRole === 'student') {
+          const sUser = usersList.find((u) => u.username.toLowerCase() === conv.partnerUsername.toLowerCase());
+          if (sUser) {
+            const pChildrenSet = new Set((currentUser.childrenUsernames || []).map((cu) => cu.toLowerCase()));
+            const isMyChild =
+              pChildrenSet.has(sUser.username.toLowerCase()) ||
+              (currentUser.childName && sUser.name && sUser.name.trim().toLowerCase() === currentUser.childName.trim().toLowerCase()) ||
+              (currentUser.studentName && sUser.name && sUser.name.trim().toLowerCase() === currentUser.studentName.trim().toLowerCase());
+            return !!isMyChild;
+          }
+        }
+        return false;
+      }
+
       return true;
     });
   }, [conversations, currentUser, usersList, customGroups]);
@@ -691,7 +721,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
       }
     } else {
       const teachers = searchedConversations.filter((c) => {
-        if (currentUser?.role === 'student') {
+        if (currentUser?.role === 'student' || currentUser?.role === 'parent') {
           return !c.isLeave && (c.partnerRole === 'teacher' || c.partnerRole === 'assistant');
         }
         return !c.isLeave && (c.partnerRole === 'teacher' || c.partnerRole === 'assistant' || c.partnerRole === 'admin');
@@ -714,6 +744,19 @@ export const ChatView: React.FC<ChatViewProps> = ({
             title: '關聯家長',
             icon: '👨‍👩‍👧',
             items: parents,
+          });
+        }
+      }
+
+      // ⭐ 家長帳號專屬分組：關聯學生 (子女)
+      if (currentUser?.role === 'parent') {
+        const myChildrenConvs = searchedConversations.filter((c) => !c.isLeave && c.partnerRole === 'student');
+        if (myChildrenConvs.length > 0) {
+          sections.push({
+            id: 'child',
+            title: '關聯學生 (子女)',
+            icon: '🎓',
+            items: myChildrenConvs,
           });
         }
       }
@@ -946,35 +989,61 @@ export const ChatView: React.FC<ChatViewProps> = ({
           </span>
 
           {currentUser.role === 'parent' && (
-            <>
-              <button
-                type="button"
-                onClick={() =>
-                  handleQuickTopic(
-                    `【請假申請】\n學生姓名：\n請假日期：${new Date().toISOString().split('T')[0]}\n請假事由：病假 / 事假\n備註：`
-                  )
-                }
-                className="text-[11px] px-2.5 py-1 rounded-full bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 transition-colors whitespace-nowrap font-medium"
-              >
-                📝 請假申請
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  handleQuickTopic(`【學習進度諮詢】\n老師好，我想了解孩子最近在課堂上的學習狀況與理解程度，謝謝！`)
-                }
-                className="text-[11px] px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors whitespace-nowrap font-medium"
-              >
-                📊 學習進度
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickTopic(`【日常表現反饋】\n老師好，想向您反饋學生在家的溫習情況：`)}
-                className="text-[11px] px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors whitespace-nowrap font-medium"
-              >
-                💬 日常表現
-              </button>
-            </>
+            activePartner.role === 'student' ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleQuickTopic(`【溫習提醒】\n孩子好，今天課堂學習順利嗎？記得認真完成功課喔！`)}
+                  className="text-[11px] px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 transition-colors whitespace-nowrap font-medium"
+                >
+                  📖 溫習叮嚀
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickTopic(`【放學提醒】\n放學路上注意安全，回家小心！`)}
+                  className="text-[11px] px-2.5 py-1 rounded-full bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100 transition-colors whitespace-nowrap font-medium"
+                >
+                  ⏰ 注意安全
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickTopic(`學習加油，爸媽為你打氣！`)}
+                  className="text-[11px] px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 transition-colors whitespace-nowrap font-medium"
+                >
+                  ❤️ 為你加油
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleQuickTopic(
+                      `【請假申請】\n學生姓名：\n請假日期：${new Date().toISOString().split('T')[0]}\n請假事由：病假 / 事假\n備註：`
+                    )
+                  }
+                  className="text-[11px] px-2.5 py-1 rounded-full bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 transition-colors whitespace-nowrap font-medium"
+                >
+                  📝 請假申請
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleQuickTopic(`【學習進度諮詢】\n老師好，我想了解孩子最近在課堂上的學習狀況與理解程度，謝謝！`)
+                  }
+                  className="text-[11px] px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors whitespace-nowrap font-medium"
+                >
+                  📊 學習進度
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickTopic(`【日常表現反饋】\n老師好，想向您反饋學生在家的溫習情況：`)}
+                  className="text-[11px] px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors whitespace-nowrap font-medium"
+                >
+                  💬 日常表現
+                </button>
+              </>
+            )
           )}
 
           {currentUser.role === 'student' && (
@@ -1387,6 +1456,19 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   }`}
                 >
                   👨‍👩‍👧 關聯家長 ({groupCounts.parent})
+                </button>
+              )}
+
+              {currentUser?.role === 'parent' && groupCounts.student > 0 && (
+                <button
+                  onClick={() => setActiveFilterId('student')}
+                  className={`text-[11px] px-2 py-0.8 rounded-full font-bold whitespace-nowrap transition-colors flex items-center gap-1 ${
+                    activeFilterId === 'student'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+                  }`}
+                >
+                  🎓 關聯學生 ({groupCounts.student})
                 </button>
               )}
 
