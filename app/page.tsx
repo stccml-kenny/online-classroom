@@ -11,6 +11,10 @@ import { ClassManagementModal } from '@/components/classes/ClassManagementModal'
 import { HomeworkSetupModal, CourseItem, isCourseMatch } from '@/components/homework/HomeworkSetupModal';
 import { AuthModal, UserProfile } from '@/components/auth/AuthModal';
 import { HomeView } from '@/components/home/HomeView';
+import { ChatView } from '@/components/chat/ChatView';
+import { DirectMessageModal } from '@/components/chat/DirectMessageModal';
+import { chatService } from '@/lib/chatService';
+
 import { AccountManagementModal } from '@/components/admin/AccountManagementModal';
 import {
   databases,
@@ -31,6 +35,9 @@ export default function OnlineClassroomApp() {
 
   // ⭐ 核心架構：以登入用戶帳號 (currentUser) 為系統絕對核心，所有權限、課程與家課跟著帳戶走
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [unreadChatCount, setUnreadChatCount] = useState<number>(0);
+  const [showChatModal, setShowChatModal] = useState<boolean>(false);
+  const [chatTargetUser, setChatTargetUser] = useState<UserProfile | null>(null);
   const [usersList, setUsersList] = useState<UserProfile[]>([]);
 
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
@@ -357,7 +364,7 @@ export default function OnlineClassroomApp() {
   const getHeaderTitle = () => {
     switch (activeTab) {
       case 'home': return '智能網上教室';
-      case 'msg': return '即時訊息';
+      case 'msg': return '即時訊息 · 一對一諮詢';
       case 'members': return '會員目錄';
       case 'courses': return currentUser?.role === 'student' ? '我的課程' : '課程管理';
       case 'attendance': return '課程點名';
@@ -374,6 +381,8 @@ export default function OnlineClassroomApp() {
           currentUser={currentUser}
           onOpenAuth={() => handleOpenAuth('login')}
           onLogout={handleLogout}
+          onOpenChat={() => setActiveTab('msg')}
+          unreadChatCount={unreadChatCount}
         />
 
         {/* ⭐ 首頁視窗：登入介紹、開始使用入口、5大身分說明與快捷工作區 */}
@@ -458,9 +467,19 @@ export default function OnlineClassroomApp() {
           </div>
         )}
 
-        {activeTab === 'msg' && <div className="p-5 text-center text-gray-400">即時訊息模組開發中</div>}
+        {activeTab === 'msg' && (
+          <div className="flex-1 w-full bg-[#F8F9FA] flex flex-col overflow-hidden pb-16">
+            <ChatView
+              currentUser={currentUser}
+              usersList={usersList}
+              courses={courses}
+              initialTargetUser={chatTargetUser}
+              onOpenAuth={() => handleOpenAuth('login')}
+            />
+          </div>
+        )}
 
-        {currentUser && <BottomNav activeTab={activeTab} onTabChange={setActiveTab} userRole={currentUser?.role} />}
+        {currentUser && <BottomNav activeTab={activeTab} onTabChange={setActiveTab} userRole={currentUser?.role} unreadChatCount={unreadChatCount} />}
 
         {/* 1. 電子通告彈窗 */}
         <NoticeModal

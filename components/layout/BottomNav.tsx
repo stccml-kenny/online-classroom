@@ -8,9 +8,15 @@ interface BottomNavProps {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
   userRole?: UserRole;
+  unreadChatCount?: number;
 }
 
-export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange, userRole }) => {
+export const BottomNav: React.FC<BottomNavProps> = ({
+  activeTab,
+  onTabChange,
+  userRole,
+  unreadChatCount = 0,
+}) => {
   const isStudentOrParent = userRole === 'student' || userRole === 'parent';
 
   return (
@@ -25,6 +31,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange, us
         icon={<MessageCircle size={20} />}
         label="即時訊息"
         active={activeTab === 'msg'}
+        badge={unreadChatCount}
         onClick={() => onTabChange('msg')}
       />
       {/* ⭐ 需求：家長及學生只顯示自己的課程，不顯示管理員/導師之會員與點名 */}
@@ -71,16 +78,24 @@ interface TabButtonProps {
   label: string;
   active: boolean;
   onClick: () => void;
+  badge?: number;
 }
 
-const TabButton: React.FC<TabButtonProps> = ({ icon, label, active, onClick }) => (
+const TabButton: React.FC<TabButtonProps> = ({ icon, label, active, onClick, badge }) => (
   <button
     onClick={onClick}
-    className={`flex-1 flex flex-col items-center justify-center py-1 px-0.5 transition-colors shrink-0 ${
+    className={`flex-1 flex flex-col items-center justify-center py-1 px-0.5 transition-colors shrink-0 relative ${
       active ? 'text-[#FF6B57]' : 'text-gray-400 hover:text-gray-600'
     }`}
   >
-    <div className="h-5 flex items-center justify-center">{icon}</div>
+    <div className="h-5 flex items-center justify-center relative">
+      {icon}
+      {badge && badge > 0 ? (
+        <span className="absolute -top-1.5 -right-2.5 px-1 min-w-[15px] h-[15px] bg-red-500 text-white text-[9px] font-extrabold rounded-full flex items-center justify-center shadow-xs border border-white">
+          {badge > 99 ? '99+' : badge}
+        </span>
+      ) : null}
+    </div>
     <span className="text-[10px] mt-1 font-medium leading-none whitespace-nowrap">{label}</span>
   </button>
 );

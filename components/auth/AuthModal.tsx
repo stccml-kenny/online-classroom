@@ -12,6 +12,7 @@ export interface UserProfile {
   name: string;
   role: UserRole;
   password: string; // 嚴格 8 位純數字
+  email?: string;   // ⭐ 電郵地址 (選填)
   phone?: string;
   branch?: string;
   className?: string;

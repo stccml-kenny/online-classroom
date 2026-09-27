@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect } from 'react';
 import {
-  X, User, Lock, Phone, MapPin, Layers, Shield, GraduationCap,
+  X, User, Lock, Phone, Mail, MapPin, Layers, Shield, GraduationCap,
   Users, Eye, EyeOff, CheckCircle2, AlertCircle,
   UserPlus, Sparkles, LogOut, Check, Search, Filter, Trash2,
   RotateCcw, Copy, Edit2, KeyRound, Download, UploadCloud,
@@ -51,14 +51,16 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
   const [batchTargetPassword, setBatchTargetPassword] = useState<string>('12345678');
   const [batchProcessing, setBatchProcessing] = useState<boolean>(false);
 
-  // 派發新帳戶單筆表單狀態
-  const [role, setRole] = useState<UserRole>('student');
+  // 新增帳戶單筆表單狀態 (⭐ 需求：新增帳戶不預選角色，學生不預選學校與班別，電話改為電郵)
+  const [role, setRole] = useState<UserRole | ''>('');
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [branch, setBranch] = useState(branches[0] || '總校');
-  const [className, setClassName] = useState(classes[0] || '未分班');
+  const [branch, setBranch] = useState('');
+  const [className, setClassName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
 
   // ⭐ 需求：參加課程 (Courses) 功能移送至帳戶中心
   const [selectedCourses, setSelectedCourses] = useState<string[]>([]);
@@ -234,14 +236,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
 
   // 保留所有建立與預設帳戶，不再自動清理任何老師或學生帳號
 
-  useEffect(() => {
-    if (branches.length > 0 && !branch) {
-      setBranch(branches[0]);
-    }
-    if (classes.length > 0 && !className) {
-      setClassName(classes[0]);
-    }
-  }, [branches, classes, branch, className]);
+  // 不自動預設學校與班別，保持空白待用戶自選
 
   // 依當前選擇的學校解析學校代號
   const currentSchoolInfo = parseBranchInfo(branch);
@@ -304,6 +299,20 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
     const rawUsername = username.trim();
     const trimmedPassword = password.trim();
 
+    if (!role) {
+      alert('請先選擇身分角色（管理員、導師、助教、學生或家長）！');
+      return;
+    }
+    if (role === 'student') {
+      if (!branch) {
+        alert('請為學生選擇所屬學校/分校！');
+        return;
+      }
+      if (!className) {
+        alert('請為學生選擇所屬班別！');
+        return;
+      }
+    }
     if (!trimmedName) {
       alert('請輸入用戶姓名或稱謂！');
       return;
@@ -338,8 +347,8 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
       return;
     }
 
-    const finalBranch = role === 'student' ? (branch || (branches.length > 0 ? branches[0] : '總校')) : undefined;
-    const finalClass = role === 'student' ? (className || (classes.length > 0 ? classes[0] : '未分班')) : undefined;
+    const finalBranch = role === 'student' ? branch : undefined;
+    const finalClass = role === 'student' ? className : undefined;
 
     // 整合參加課程
     const finalCourses: string[] = [];
@@ -355,6 +364,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
       name: trimmedName,
       role,
       password: trimmedPassword,
+      email: email.trim() || undefined,
       phone: phone.trim() || undefined,
       branch: finalBranch,
       className: finalClass,
@@ -397,18 +407,22 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
       });
     }
 
-    // 清空表單
+    // 清空表單 (不預選身分、學校與班別)
+    setRole('');
     setName('');
     setUsername('');
+    setEmail('');
     setPhone('');
     setPassword('');
+    setBranch('');
+    setClassName('');
     setSelectedCourses([]);
 
     setLinkedChildrenUsernames([]);
     setSelectedStudentToLink('');
     setCustomChildUsernameInput('');
 
-    alert(`✅ 成功派發新帳戶！
+    alert(`✅ 成功新增帳戶！
 姓名：${newUser.name}
 身分：${ROLE_CONFIGS[newUser.role]?.label || newUser.role}
 帳號：${newUser.username}
@@ -459,6 +473,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
     setEditRole(u.role || 'student');
     setEditPassword(u.password || '');
     setShowEditPassword(false);
+    setEditEmail(u.email || u.phone || '');
     setEditPhone(u.phone || '');
     setEditBranch(u.branch || branches[0] || '總校');
     setEditClass(u.className || classes[0] || '未分班');
@@ -505,6 +520,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
       username: finalUname,
       role: editRole,
       password: finalPwd,
+      email: editEmail.trim() || undefined,
       phone: editPhone.trim() || undefined,
       branch: editRole === 'student' ? editBranch : undefined,
       className: editRole === 'student' ? editClass : undefined,
@@ -1376,7 +1392,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
             }`}
           >
             <UserPlus size={16} />
-            <span>派發帳戶</span>
+            <span>新增帳戶</span>
           </button>
           <button
             onClick={() => setActiveTab('excel')}
@@ -1419,9 +1435,16 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
               <form onSubmit={handleIssueAccount} className="space-y-3.5">
                 {/* 1. 選擇要派發的角色 */}
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1.5">
-                    1. 選擇派發身分角色 (5大角色)
-                  </label>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="block text-xs font-bold text-gray-700">
+                      1. 選擇身分角色 (5大角色) <span className="text-red-500">*</span>
+                    </label>
+                    {!role && (
+                      <span className="text-[11px] font-bold text-amber-600 animate-pulse">
+                        ※ 請點選身分
+                      </span>
+                    )}
+                  </div>
                   <div className="grid grid-cols-5 gap-1.5">
                     {(Object.keys(ROLE_CONFIGS) as UserRole[]).map((r) => {
                       const cfg = ROLE_CONFIGS[r];
@@ -1483,13 +1506,10 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                           }}
                           className="w-full p-2.5 border border-purple-200 rounded-xl text-xs outline-none focus:border-purple-600 text-black font-semibold bg-white"
                         >
-                          {branches.length > 0 ? (
-                            branches.map((b) => (
-                              <option key={b} value={b}>{b}</option>
-                            ))
-                          ) : (
-                            <option value="總校">總校</option>
-                          )}
+                          <option value="">-- 請選擇所屬學校/分校 --</option>
+                          {branches.map((b) => (
+                            <option key={b} value={b}>{b}</option>
+                          ))}
                         </select>
                       </div>
 
@@ -1502,13 +1522,10 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                           onChange={(e) => setClassName(e.target.value)}
                           className="w-full p-2.5 border border-purple-200 rounded-xl text-xs outline-none focus:border-purple-600 text-black font-semibold bg-white"
                         >
-                          {classes.length > 0 ? (
-                            classes.map((c) => (
-                              <option key={c} value={c}>{c}</option>
-                            ))
-                          ) : (
-                            <option value="未分班">未分班</option>
-                          )}
+                          <option value="">-- 請選擇所屬班別 --</option>
+                          {classes.map((c) => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
                         </select>
                       </div>
                     </div>
@@ -1705,16 +1722,16 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                   </div>
                 )}
 
-                {/* 聯絡電話 */}
+                {/* 電郵地址 (選填) */}
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">聯絡電話 (選填)</label>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">電郵地址 (選填)</label>
                   <div className="relative">
-                    <Phone size={16} className="absolute left-3 top-3 text-gray-400" />
+                    <Mail size={16} className="absolute left-3 top-3 text-gray-400" />
                     <input
-                      type="tel"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="例：91234567"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="例：user@example.com"
                       className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-xs outline-none focus:border-purple-600 text-black font-semibold placeholder:text-gray-400"
                     />
                   </div>
@@ -1775,7 +1792,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                   className="w-full py-3.5 bg-gradient-to-r from-purple-700 to-indigo-700 hover:opacity-95 text-white font-extrabold rounded-2xl shadow-md text-xs flex items-center justify-center gap-2 transition-all active:scale-[0.99] mt-2"
                 >
                   <UserPlus size={16} />
-                  <span>確認派發此帳戶</span>
+                  <span>確認新增此帳戶</span>
                 </button>
               </form>
 
@@ -1785,7 +1802,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                   <div className="flex items-center justify-between text-xs font-bold text-emerald-800">
                     <span className="flex items-center gap-1.5">
                       <CheckCircle2 size={15} className="text-emerald-600" />
-                      剛成功派發帳戶
+                      剛成功新增帳戶
                     </span>
                     <button
                       type="button"
@@ -2124,12 +2141,12 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                                 </div>
                               </div>
                               <div>
-                                <label className="block text-[11px] font-bold text-gray-700 mb-0.5">聯絡電話</label>
+                                <label className="block text-[11px] font-bold text-gray-700 mb-0.5">電郵地址 (選填)</label>
                                 <input
-                                  type="tel"
-                                  value={editPhone}
-                                  onChange={(e) => setEditPhone(e.target.value)}
-                                  placeholder="選填"
+                                  type="email"
+                                  value={editEmail}
+                                  onChange={(e) => setEditEmail(e.target.value)}
+                                  placeholder="例：user@example.com"
                                   className="w-full p-2 border border-gray-300 rounded-lg text-xs outline-none focus:border-purple-600 font-semibold"
                                 />
                               </div>

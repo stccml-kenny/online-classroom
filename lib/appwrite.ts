@@ -28,7 +28,7 @@ try {
   console.warn('Appwrite setProject skipped:', e);
 }
 
-export const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID || 'classroom_db';
+export const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID || 'OnlineClassroomDB';
 export const BUCKET_ID = process.env.NEXT_PUBLIC_APPWRITE_BUCKET_ID || 'classroom_storage';
 export const databases = new Databases(client);
 export const storage = new Storage(client);
@@ -86,6 +86,7 @@ export const extractUserFromDoc = (d: any): UserProfile | null => {
 
   // 5. 推導密碼 (若無則預設 12345678)
   const password = obj.password ? String(obj.password).trim() : '12345678';
+  const email = obj.email ? String(obj.email).trim() : '';
 
   // 6. 解析課程
   let enrolled: string[] = [];
@@ -108,6 +109,7 @@ export const extractUserFromDoc = (d: any): UserProfile | null => {
     name,
     role,
     password,
+    email,
     phone: obj.phone ? String(obj.phone).trim() : '',
     branch: obj.branch ? String(obj.branch).trim() : '',
     className: (obj.class_name || obj.className || '').trim(),
@@ -147,6 +149,7 @@ export async function saveAllAccountsToCloud(accounts: UserProfile[]): Promise<v
           name: acc.name,
           role: acc.role,
           password: acc.password,
+          email: acc.email || '',
           phone: acc.phone || '',
           branch: acc.branch || '',
           class_name: acc.className || '',
