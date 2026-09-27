@@ -152,9 +152,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
         const uUsername = u.username.toLowerCase();
         if (uUsername === myUsername) return false; // 排除自己
 
-        // ⭐ 規則 1：學生 只能找 導師、助教、管理員 以及 關聯家長 (嚴格禁止學生找其他學生或無關家長)
+        // ⭐ 規則 1：學生 只能找 導師、助教 以及 關聯家長 (不顯示系統管理員，嚴格禁止學生找其他學生或無關家長)
         if (myRole === 'student') {
-          if (u.role === 'teacher' || u.role === 'assistant' || u.role === 'admin') {
+          if (u.role === 'teacher' || u.role === 'assistant') {
             return true;
           }
           if (u.role === 'parent') {
@@ -455,9 +455,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
         assignedGroupIds,
       };
     }).filter((conv) => {
-      // ⭐ 學生帳戶對話清單嚴格限定：只顯示導師/助教/管理員 及 關聯家長
+      // ⭐ 學生帳戶對話清單嚴格限定：只顯示導師/助教 及 關聯家長 (不顯示系統管理員)
       if (currentUser?.role === 'student') {
-        if (conv.partnerRole === 'teacher' || conv.partnerRole === 'assistant' || conv.partnerRole === 'admin') {
+        if (conv.partnerRole === 'teacher' || conv.partnerRole === 'assistant') {
           return true;
         }
         if (conv.partnerRole === 'parent') {
@@ -690,9 +690,12 @@ export const ChatView: React.FC<ChatViewProps> = ({
         });
       }
     } else {
-      const teachers = searchedConversations.filter(
-        (c) => !c.isLeave && (c.partnerRole === 'teacher' || c.partnerRole === 'assistant' || c.partnerRole === 'admin')
-      );
+      const teachers = searchedConversations.filter((c) => {
+        if (currentUser?.role === 'student') {
+          return !c.isLeave && (c.partnerRole === 'teacher' || c.partnerRole === 'assistant');
+        }
+        return !c.isLeave && (c.partnerRole === 'teacher' || c.partnerRole === 'assistant' || c.partnerRole === 'admin');
+      });
       if (teachers.length > 0) {
         sections.push({
           id: 'teacher',

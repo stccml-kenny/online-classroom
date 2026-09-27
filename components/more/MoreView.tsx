@@ -1,7 +1,7 @@
 ﻿import React from 'react';
 import {
   Radio, Calendar, FileText,
-  MessageSquare, Lock, Mail, Shield,
+  Lock, Shield,
   FileCheck, LogOut, Settings, User, Users, UserPlus
 } from 'lucide-react';
 import { MenuItem } from './MenuItem';
@@ -105,7 +105,6 @@ export const MoreView: React.FC<MoreViewProps> = ({
             onClick={onOpenSetup}
           />
         )}
-        <MenuItem icon={<MessageSquare className="text-[#FF6B57]" size={20} />} title="小組訊息" />
       </div>
 
       <div className="h-3 bg-gray-100 border-t border-b border-gray-200"></div>
@@ -119,7 +118,6 @@ export const MoreView: React.FC<MoreViewProps> = ({
             alert('💡 本系統密碼統一為 8 位數字，由學校/機構系統管理人員統一派發。如需重設密碼，請聯絡管理員。');
           }}
         />
-        <MenuItem icon={<Mail className="text-gray-600" size={20} />} title="變更電郵地址" />
         <MenuItem icon={<Shield className="text-gray-600" size={20} />} title="私隱政策" hasRedDot />
         <MenuItem icon={<FileCheck className="text-gray-600" size={20} />} title="使用條款" hasRedDot />
         {currentUser ? (
