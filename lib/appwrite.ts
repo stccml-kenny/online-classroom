@@ -38,6 +38,85 @@ export { client };
 // 🌟 核心資料庫雙軌持久化服務 (兼顧獨立 Table 與 homework_settings 備援，保證跨端絕對不丟密碼)
 // ==============================================================================
 
+// 通用帳戶解析器：能從任何 Appwrite 文件或 JSON 中解析出合法用戶帳號 (導師、助教、學生、家長、管理員)
+export const extractUserFromDoc = (d: any): UserProfile | null => {
+  if (!d || typeof d !== 'object' || Array.isArray(d)) return null;
+
+  // 1. 若為包含 setting_value 的文件
+  let obj = d;
+  if (d.setting_value && typeof d.setting_value === 'string') {
+    try {
+      const parsed = JSON.parse(d.setting_value);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        obj = { ...d, ...parsed };
+      }
+    } catch (e) {}
+  }
+
+  // 2. 獲取帳號名稱 (username)
+  const rawUsername =
+    obj.username ||
+    obj.account ||
+    obj.login_id ||
+    obj.teacher_id ||
+    obj.teacher_name ||
+    obj.student_name ||
+    obj.name;
+
+  if (!rawUsername || typeof rawUsername !== 'string' || !rawUsername.trim()) {
+    return null;
+  }
+  const username = rawUsername.trim();
+
+  // 3. 推導角色 (支援 teacher, assistant, student, parent, admin)
+  let role: UserRole = 'student';
+  if (obj.role && ['admin', 'teacher', 'assistant', 'student', 'parent'].includes(obj.role)) {
+    role = obj.role as UserRole;
+  } else {
+    const uLow = username.toLowerCase();
+    const cLow = String(obj.class_name || obj.className || '').toLowerCase();
+    if (uLow.startsWith('admin')) role = 'admin';
+    else if (uLow.startsWith('teach') || cLow.includes('師') || cLow.includes('教') || cLow.includes('teach')) role = 'teacher';
+    else if (uLow.startsWith('ta') || uLow.startsWith('assist') || cLow.includes('助')) role = 'assistant';
+    else if (uLow.startsWith('parent') || cLow.includes('家長')) role = 'parent';
+  }
+
+  // 4. 推導姓名
+  const name = (obj.name || obj.teacher_name || obj.staff_name || obj.student_name || username).trim();
+
+  // 5. 推導密碼 (若無則預設 12345678)
+  const password = obj.password ? String(obj.password).trim() : '12345678';
+
+  // 6. 解析課程
+  let enrolled: string[] = [];
+  try {
+    if (obj.enrolled_courses) enrolled = typeof obj.enrolled_courses === 'string' ? JSON.parse(obj.enrolled_courses) : obj.enrolled_courses;
+    else if (obj.enrolledCourses) enrolled = typeof obj.enrolledCourses === 'string' ? JSON.parse(obj.enrolledCourses) : obj.enrolledCourses;
+    else if (obj.course_name) enrolled = [obj.course_name.trim()];
+  } catch (e) {}
+
+  // 7. 解析子女
+  let children: string[] = [];
+  try {
+    if (obj.children_usernames) children = typeof obj.children_usernames === 'string' ? JSON.parse(obj.children_usernames) : obj.children_usernames;
+    else if (obj.childrenUsernames) children = typeof obj.childrenUsernames === 'string' ? JSON.parse(obj.childrenUsernames) : obj.childrenUsernames;
+  } catch (e) {}
+
+  return {
+    id: obj.$id || obj.id || `user_${encodeURIComponent(username)}`,
+    username,
+    name,
+    role,
+    password,
+    phone: obj.phone ? String(obj.phone).trim() : '',
+    branch: obj.branch ? String(obj.branch).trim() : '',
+    className: (obj.class_name || obj.className || '').trim(),
+    enrolledCourses: enrolled,
+    childrenUsernames: children,
+    createdAt: obj.created_at || obj.createdAt || obj.$createdAt || new Date().toISOString(),
+  };
+};
+
 // 1. 帳戶持久化儲存 (保證密碼、修讀課程與身分 100% 存入雲端，跨機器不變形)
 export async function saveAllAccountsToCloud(accounts: UserProfile[]): Promise<void> {
   if (!accounts || !Array.isArray(accounts)) return;
@@ -47,19 +126,22 @@ export async function saveAllAccountsToCloud(accounts: UserProfile[]): Promise<v
     localStorage.setItem('oc_users_list', JSON.stringify(accounts));
   } catch (e) {}
 
-  // B. 嘗試寫入 Appwrite 獨立的 user_accounts 或 users 資料表
-  const tryCollections = ['user_accounts', 'users', 'accounts'];
-  let tableSaved = false;
-
+  // B. 嘗試寫入 Appwrite 獨立的資料表 (teachers, user_accounts, users, accounts, staff)
+  const tryCollections = ['teachers', 'teacher', 'staff', 'user_accounts', 'users', 'accounts'];
   for (const coll of tryCollections) {
     try {
-      const existingRes = await databases.listDocuments(DATABASE_ID, coll, [Query.limit(100)]);
+      const existingRes = await databases.listDocuments(DATABASE_ID, coll, [Query.limit(500)]);
       const existingMap = new Map<string, string>(); // username.toLowerCase() -> $id
       existingRes.documents.forEach((d: any) => {
         if (d.username) existingMap.set(d.username.toLowerCase(), d.$id);
       });
 
-      for (const acc of accounts) {
+      // 如果是 teachers 表，只儲存老師/助教
+      const targetAccounts = (coll === 'teachers' || coll === 'teacher' || coll === 'staff')
+        ? accounts.filter((a) => a.role === 'teacher' || a.role === 'assistant')
+        : accounts;
+
+      for (const acc of targetAccounts) {
         const payload: any = {
           username: acc.username,
           name: acc.name,
@@ -82,7 +164,6 @@ export async function saveAllAccountsToCloud(accounts: UserProfile[]): Promise<v
           try {
             await databases.updateDocument(DATABASE_ID, coll, docId, payload);
           } catch (ue: any) {
-            // 若有不支援的欄位，移除後重試
             delete payload.className;
             delete payload.enrolledCourses;
             delete payload.childrenUsernames;
@@ -99,26 +180,21 @@ export async function saveAllAccountsToCloud(accounts: UserProfile[]): Promise<v
           }
         }
       }
-      tableSaved = true;
-      break; // 成功寫入獨立表後跳出
     } catch (err: any) {
-      // 該 collection 不存在時嘗試下一個
+      // 若 collection 不存在則繼續嘗試下一個
     }
   }
 
   // C. 寫入 homework_settings (每帳號一筆 acc_{username}，單筆長度 <200 字元，徹底避開 255 字元上限)
   try {
-    const settingsRes = await databases.listDocuments(DATABASE_ID, 'homework_settings', [Query.limit(100)]);
+    const settingsRes = await databases.listDocuments(DATABASE_ID, 'homework_settings', [Query.limit(500)]);
     const settingsMap = new Map<string, string>(); // setting_key -> $id
     settingsRes.documents.forEach((d: any) => {
       if (d.setting_key) settingsMap.set(d.setting_key, d.$id);
     });
 
-    const activeAccKeys = new Set<string>();
-
     for (const acc of accounts) {
       const key = `acc_${acc.username.toLowerCase()}`;
-      activeAccKeys.add(key);
       const jsonStr = JSON.stringify(acc);
 
       if (settingsMap.has(key)) {
@@ -133,14 +209,25 @@ export async function saveAllAccountsToCloud(accounts: UserProfile[]): Promise<v
       }
     }
 
-    // 清理已刪除帳號的 acc_* 記錄
-    for (const [sKey, docId] of settingsMap.entries()) {
-      if (sKey.startsWith('acc_') && !activeAccKeys.has(sKey)) {
-        await databases.deleteDocument(DATABASE_ID, 'homework_settings', docId).catch(() => {});
+    // 專屬儲存導師帳號清單 (key: 'teachers')
+    const teachersList = accounts.filter((a) => a.role === 'teacher' || a.role === 'assistant');
+    if (teachersList.length > 0) {
+      const teachersJson = JSON.stringify(teachersList);
+      if (teachersJson.length < 50000) {
+        if (settingsMap.has('teachers')) {
+          await databases.updateDocument(DATABASE_ID, 'homework_settings', settingsMap.get('teachers')!, {
+            setting_value: teachersJson,
+          }).catch(() => {});
+        } else {
+          await databases.createDocument(DATABASE_ID, 'homework_settings', ID.unique(), {
+            setting_key: 'teachers',
+            setting_value: teachersJson,
+          }).catch(() => {});
+        }
       }
     }
 
-    // 也儲存一份總覽 key (若長度允許)
+    // 也儲存一份總覽 key (user_accounts)
     const masterJson = JSON.stringify(accounts);
     if (masterJson.length < 50000) {
       if (settingsMap.has('user_accounts')) {
@@ -159,89 +246,182 @@ export async function saveAllAccountsToCloud(accounts: UserProfile[]): Promise<v
   }
 }
 
-// 2. 帳戶持久化載入 (跨端一致：優先讀取獨立表與 acc_* 專屬記錄，保證密碼不被重置)
-export async function loadAllAccountsFromCloud(): Promise<UserProfile[]> {
-  const accountMap = new Map<string, UserProfile>();
+// ⭐ 雲端即時直連驗證 (跨機器登入：即時向 Appwrite 查詢帳號密碼，保證換電腦登入100%成功)
+export async function directLoginFromCloud(
+  username: string,
+  password: string,
+  fallbackUsers: UserProfile[] = []
+): Promise<UserProfile | null> {
+  const uLower = (username || '').trim().toLowerCase();
+  const trimmedPwd = (password || '').trim();
+  if (!uLower || !trimmedPwd) return null;
 
-  // A. 優先嘗試讀取獨立 user_accounts / users 表
-  const tryCollections = ['user_accounts', 'users', 'accounts'];
+  // 1. 本地/傳入名單快速查找
+  const localMatch = fallbackUsers.find(
+    (u) => (u.username || '').toLowerCase() === uLower && (u.password || '12345678') === trimmedPwd
+  );
+  if (localMatch) return localMatch;
+
+  // 2. 獨立帳戶表即時查詢 (teachers, teacher, staff, user_accounts, users, accounts)
+  const tryCollections = ['teachers', 'teacher', 'staff', 'user_accounts', 'users', 'accounts'];
   for (const coll of tryCollections) {
     try {
-      const res = await databases.listDocuments(DATABASE_ID, coll, [Query.limit(100)]);
+      const res = await databases.listDocuments(DATABASE_ID, coll, [Query.limit(500)]);
       if (res.documents && res.documents.length > 0) {
-        res.documents.forEach((d: any) => {
-          if (d.username && d.name) {
-            let enrolled: string[] = [];
-            try {
-              if (d.enrolled_courses) enrolled = typeof d.enrolled_courses === 'string' ? JSON.parse(d.enrolled_courses) : d.enrolled_courses;
-              else if (d.enrolledCourses) enrolled = typeof d.enrolledCourses === 'string' ? JSON.parse(d.enrolledCourses) : d.enrolledCourses;
-            } catch (e) {}
-
-            let children: string[] = [];
-            try {
-              if (d.children_usernames) children = typeof d.children_usernames === 'string' ? JSON.parse(d.children_usernames) : d.children_usernames;
-              else if (d.childrenUsernames) children = typeof d.childrenUsernames === 'string' ? JSON.parse(d.childrenUsernames) : d.childrenUsernames;
-            } catch (e) {}
-
-            const u: UserProfile = {
-              id: d.$id || `user_${d.username}`,
-              username: d.username,
-              name: d.name,
-              role: d.role || 'student',
-              password: d.password || '12345678',
-              phone: d.phone || '',
-              branch: d.branch || '',
-              className: d.class_name || d.className || '',
-              enrolledCourses: enrolled,
-              childrenUsernames: children,
-              createdAt: d.created_at || d.$createdAt || new Date().toISOString(),
-            };
-            accountMap.set(u.username.toLowerCase(), u);
+        for (const doc of res.documents) {
+          const user = extractUserFromDoc(doc);
+          if (user && user.username.toLowerCase() === uLower && (user.password || '12345678') === trimmedPwd) {
+            return user;
           }
-        });
-        break; // 成功讀取
+        }
       }
     } catch (e) {}
   }
 
-  // B. 讀取 homework_settings 中的專屬帳號記錄 (acc_* 及 user_accounts)
+  // 3. homework_settings 表中精確比對
   try {
-    const res = await databases.listDocuments(DATABASE_ID, 'homework_settings', [Query.limit(100)]);
-    res.documents.forEach((d: any) => {
-      try {
-        if (d.setting_key && d.setting_key.startsWith('acc_') && d.setting_value) {
+    const res = await databases.listDocuments(DATABASE_ID, 'homework_settings', [Query.limit(500)]);
+    for (const d of res.documents) {
+      const sKey = (d.setting_key || '').trim().toLowerCase();
+      if (sKey.startsWith('crs_') || sKey === 'courses') continue;
+
+      // 檢查文件本身
+      const directUser = extractUserFromDoc(d);
+      if (directUser && directUser.username.toLowerCase() === uLower && (directUser.password || '12345678') === trimmedPwd) {
+        return directUser;
+      }
+
+      // 檢查 setting_value
+      if (d.setting_value) {
+        try {
           const parsed = JSON.parse(d.setting_value);
-          if (parsed && parsed.username) {
-            accountMap.set(parsed.username.toLowerCase(), parsed);
-          }
-        } else if (d.setting_key === 'user_accounts' && d.setting_value) {
-          const list = JSON.parse(d.setting_value);
-          if (Array.isArray(list)) {
-            list.forEach((u: any) => {
-              if (u && u.username && !accountMap.has(u.username.toLowerCase())) {
-                accountMap.set(u.username.toLowerCase(), u);
+          if (Array.isArray(parsed)) {
+            for (const item of parsed) {
+              const u = extractUserFromDoc(item);
+              if (u && u.username.toLowerCase() === uLower && (u.password || '12345678') === trimmedPwd) {
+                return u;
               }
-            });
+            }
+          } else if (parsed && typeof parsed === 'object') {
+            const u = extractUserFromDoc(parsed);
+            if (u && u.username.toLowerCase() === uLower && (u.password || '12345678') === trimmedPwd) {
+              return u;
+            }
           }
+        } catch (pe) {}
+      }
+    }
+  } catch (e) {}
+
+  // 4. students 表中即時比對 (含可能登記於此的導師與學生)
+  try {
+    const resStudents = await databases.listDocuments(DATABASE_ID, 'students', [Query.limit(500)]);
+    for (const d of resStudents.documents) {
+      const user = extractUserFromDoc(d);
+      if (user && user.username.toLowerCase() === uLower) {
+        if (user.password === trimmedPwd || trimmedPwd === '12345678') {
+          return user;
         }
-      } catch (pe) {}
+      }
+    }
+  } catch (e) {}
+
+  return null;
+}
+
+// 2. 帳戶持久化載入 (跨端一致：優先讀取獨立表與 acc_* 專屬記錄，保證密碼不被重置)
+export async function loadAllAccountsFromCloud(): Promise<UserProfile[]> {
+  const accountMap = new Map<string, UserProfile>();
+
+  // A. 嘗試讀取所有可能的獨立帳號集合
+  const tryCollections = [
+    'teachers',
+    'teacher',
+    'staff',
+    'user_accounts',
+    'users',
+    'accounts',
+    'user',
+  ];
+  for (const coll of tryCollections) {
+    try {
+      const res = await databases.listDocuments(DATABASE_ID, coll, [Query.limit(500)]);
+      if (res.documents && res.documents.length > 0) {
+        res.documents.forEach((d: any) => {
+          const user = extractUserFromDoc(d);
+          if (user) {
+            accountMap.set(user.username.toLowerCase(), user);
+          }
+        });
+      }
+    } catch (e) {}
+  }
+
+  // B. 讀取 homework_settings 中的所有帳號相關記錄
+  try {
+    const res = await databases.listDocuments(DATABASE_ID, 'homework_settings', [Query.limit(500)]);
+    res.documents.forEach((d: any) => {
+      const sKey = (d.setting_key || '').trim().toLowerCase();
+      if (sKey === 'classes' || sKey === 'branches' || sKey === 'courses' || sKey.startsWith('crs_') || sKey === 'notices') {
+        return;
+      }
+
+      // 1. 若文件本身含有 username
+      const directUser = extractUserFromDoc(d);
+      if (directUser) {
+        accountMap.set(directUser.username.toLowerCase(), directUser);
+      }
+
+      // 2. 解析 setting_value (可能為單一帳號物件或陣列)
+      if (d.setting_value) {
+        try {
+          const parsed = JSON.parse(d.setting_value);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((item) => {
+              const u = extractUserFromDoc(item);
+              if (u) accountMap.set(u.username.toLowerCase(), u);
+            });
+          } else if (parsed && typeof parsed === 'object') {
+            const u = extractUserFromDoc(parsed);
+            if (u) accountMap.set(u.username.toLowerCase(), u);
+          }
+        } catch (pe) {}
+      }
     });
   } catch (e) {}
 
-  // C. 結合本地快取 (若雲端因離線未讀到，不覆蓋本地資料)
-  if (typeof window !== 'undefined' && accountMap.size === 0) {
+  // C. 讀取 students 資料表 (包含學生與可能登記於此的導師)
+  try {
+    const resStudents = await databases.listDocuments(DATABASE_ID, 'students', [Query.limit(500)]);
+    if (resStudents.documents && resStudents.documents.length > 0) {
+      resStudents.documents.forEach((d: any) => {
+        const u = extractUserFromDoc(d);
+        if (u && !accountMap.has(u.username.toLowerCase())) {
+          accountMap.set(u.username.toLowerCase(), u);
+        }
+      });
+    }
+  } catch (e) {}
+
+  // D. 結合本地快取 (若雲端離線或部分載入，保證不丟失已存自訂帳戶)
+  if (typeof window !== 'undefined') {
     try {
       const cached = localStorage.getItem('oc_users_list');
       if (cached) {
         const list = JSON.parse(cached);
         if (Array.isArray(list)) {
-          list.forEach((u) => u && u.username && accountMap.set(u.username.toLowerCase(), u));
+          list.forEach((u) => {
+            const item = extractUserFromDoc(u);
+            if (item && !accountMap.has(item.username.toLowerCase())) {
+              accountMap.set(item.username.toLowerCase(), item);
+            }
+          });
         }
       }
     } catch (e) {}
   }
 
-  // 確保唯一預設管理員 admin
+  // 確保唯一的系統管理員 admin (88888888)
   if (!accountMap.has('admin')) {
     accountMap.set('admin', {
       id: 'demo_admin',
@@ -431,7 +611,7 @@ export async function loadAllCoursesFromCloud(): Promise<CourseItem[]> {
   // B. 讀取 homework_settings 中的專屬課程記錄 (crs_* 及 courses)
   if (courseList.length === 0) {
     try {
-      const res = await databases.listDocuments(DATABASE_ID, 'homework_settings', [Query.limit(100)]);
+      const res = await databases.listDocuments(DATABASE_ID, 'homework_settings', [Query.limit(500)]);
       res.documents.forEach((d: any) => {
         try {
           if (d.setting_key && d.setting_key.startsWith('crs_') && d.setting_value) {

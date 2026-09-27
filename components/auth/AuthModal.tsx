@@ -1,4 +1,5 @@
 ﻿import React, { useState } from 'react';
+import { directLoginFromCloud } from '@/lib/appwrite';
 import {
   X, User, Lock, Eye, EyeOff, CheckCircle2, AlertCircle,
   Sparkles, LogOut
@@ -72,7 +73,7 @@ export const ROLE_CONFIGS: Record<UserRole, {
   }
 };
 
-// 系統唯一預設管理員帳號（依需求已移除其餘所有示範 dummy 帳號）
+// ⭐ 系統唯一預設管理員帳號（無任何硬編碼偽導師/學生/家長帳號，所有角色帳戶嚴格來自雲端資料庫）
 export const DEFAULT_DEMO_USERS: UserProfile[] = [
   {
     id: 'demo_admin',
@@ -120,9 +121,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   if (!isOpen) return null;
 
-  // 登入送出處理
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const [submitting, setSubmitting] = useState(false);
+
+  // 登入送出處理 (⭐ 支援跨機器即時向 Appwrite 雲端直連驗證)
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
+
     const uname = loginUsername.trim();
     const pwd = loginPassword.trim();
 
@@ -131,17 +136,30 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    // ⭐ 需求：密碼必需為8位數字
+    // ⭐ 密碼必需為8位數字
     if (!is8DigitNumeric(pwd)) {
       alert('⚠️ 密碼必需為嚴格 8 位純數字（例如：12345678）！');
       return;
     }
 
-    // 合併全域已註冊與底層帳號進行查找
+    setSubmitting(true);
+
+    // 1. 本地/記憶體快取快速比對
     const allUsers = [...usersList, ...DEFAULT_DEMO_USERS];
-    const found = allUsers.find(
+    let found = allUsers.find(
       (u) => u.username.toLowerCase() === uname.toLowerCase() && u.password === pwd
     );
+
+    // 2. 若本地未找到，即刻直接向 Appwrite 雲端發起精準查詢 (解決跨機器本地快取尚未加載完成問題)
+    if (!found) {
+      try {
+        found = await directLoginFromCloud(uname, pwd, allUsers);
+      } catch (err: any) {
+        console.warn('雲端直接登入驗證錯誤:', err);
+      }
+    }
+
+    setSubmitting(false);
 
     if (found) {
       onLoginSuccess(found);
@@ -242,10 +260,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             {/* ⭐ 確認登入帳戶按鍵要用橙色 */}
             <button
               type="submit"
-              className="w-full py-4 bg-gradient-to-r from-[#FF6B57] to-[#FF8573] hover:opacity-95 text-white font-black rounded-2xl shadow-lg shadow-orange-500/25 text-base flex items-center justify-center gap-2 transition-all active:scale-[0.99] mt-4"
+              disabled={submitting}
+              className={`w-full py-4 bg-gradient-to-r from-[#FF6B57] to-[#FF8573] hover:opacity-95 text-white font-black rounded-2xl shadow-lg shadow-orange-500/25 text-base flex items-center justify-center gap-2 transition-all active:scale-[0.99] mt-4 ${
+                submitting ? 'opacity-70 cursor-not-allowed' : ''
+              }`}
             >
               <Sparkles size={18} />
-              <span>確認登入帳戶</span>
+              <span>{submitting ? '正在驗證帳號...' : '確認登入帳戶'}</span>
             </button>
           </form>
 

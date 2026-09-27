@@ -309,6 +309,14 @@ export default function OnlineClassroomApp() {
     try {
       localStorage.setItem('oc_current_user', JSON.stringify(user));
     } catch (e) {}
+    setUsersList((prev) => {
+      if (!prev.some((u) => u.username.toLowerCase() === user.username.toLowerCase())) {
+        const updated = [user, ...prev];
+        try { localStorage.setItem('oc_users_list', JSON.stringify(updated)); } catch (e) {}
+        return updated;
+      }
+      return prev;
+    });
   };
 
   const handleRegisterSuccess = async (user: UserProfile) => {

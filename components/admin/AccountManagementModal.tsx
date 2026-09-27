@@ -23,7 +23,7 @@ interface AccountManagementModalProps {
   onUpdateUsersList: (newUsers: UserProfile[]) => void;
 }
 
-const DUMMY_USERNAMES = ['teacher_chen', 'ta_wong', 'student_lok', 'parent_lok'];
+const DUMMY_USERNAMES: string[] = [];
 
 export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
   isOpen,
@@ -232,15 +232,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
     return list;
   }, [cleanUsersList, dbStudents, branches, classes]);
 
-  // 若偵測到傳入的 usersList 中含有舊 dummy 帳號，自動清理
-  useEffect(() => {
-    if (usersList.some((u) => DUMMY_USERNAMES.includes((u.username || '').toLowerCase()))) {
-      const sanitized = usersList.filter(
-        (u) => !DUMMY_USERNAMES.includes((u.username || '').toLowerCase())
-      );
-      onUpdateUsersList(sanitized);
-    }
-  }, [usersList, onUpdateUsersList]);
+  // 保留所有建立與預設帳戶，不再自動清理任何老師或學生帳號
 
   useEffect(() => {
     if (branches.length > 0 && !branch) {
@@ -1606,7 +1598,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                       placeholder={
                         role === 'student' && currentSchoolCode
                           ? `輸入學生帳號 (例如: 101 或 lok)`
-                          : '英數字帳號 (例: admin、teacher_chen)'
+                          : '英數字帳號 (例: admin、teacher1)'
                       }
                       className={`w-full p-2.5 border border-gray-200 ${
                         role === 'student' && currentSchoolCode ? 'rounded-r-xl' : 'rounded-xl'
