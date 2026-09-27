@@ -448,28 +448,38 @@ export const HomeworkFormModal: React.FC<HomeworkFormModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
-        <div className="bg-[#FF6B57] text-white px-5 py-3.5 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <BookOpen size={18} />
-            <div>
-              <h4 className="font-bold text-base leading-tight">
-                {initialData ? '修改家課項目 (Amend)' : '發布新家課 (Post Homework)'}
-              </h4>
-              {unitTitle && (
-                <p className="text-[11px] text-white/90">
-                  關聯單元：{unitTitle}
-                </p>
-              )}
-            </div>
+    /* ⭐ 全板顯示 (Full-board) */
+    <div className="fixed inset-0 z-50 flex flex-col bg-[#F8F9FA] w-screen h-screen overflow-hidden animate-in fade-in duration-200">
+      {/* 頂部 Header */}
+      <div className="bg-gradient-to-r from-[#FF6B57] via-[#FF7A66] to-[#FF8E7D] text-white px-5 sm:px-8 py-3.5 flex justify-between items-center shrink-0 shadow-md">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center shadow-inner">
+            <BookOpen size={22} />
           </div>
-          <button onClick={onClose} className="text-white/80 hover:text-white">
-            <X size={20} />
-          </button>
+          <div>
+            <h3 className="font-extrabold text-base sm:text-lg tracking-wide leading-tight">
+              {initialData ? '修改家課項目 (Amend Homework)' : '發布新家課 (Post Homework)'}
+            </h3>
+            {unitTitle ? (
+              <p className="text-xs text-white/90">關聯單元：{unitTitle}</p>
+            ) : (
+              <p className="text-xs text-white/90">發布線上功課、作答指引與作業附件教材</p>
+            )}
+          </div>
         </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="p-1.5 rounded-full hover:bg-white/20 transition-colors text-white"
+          title="關閉"
+        >
+          <X size={22} />
+        </button>
+      </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-3.5 overflow-y-auto text-sm">
+      <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-5 text-sm">
+          <div className="max-w-4xl w-full mx-auto space-y-5">
           {/* ⭐ 需求：如果於該課程新增家課，鎖上該頁的學校及課程選項 */}
           {isLocked ? (
             <div className="p-3 bg-orange-50/70 border border-orange-200/90 rounded-xl space-y-2">
@@ -989,25 +999,30 @@ export const HomeworkFormModal: React.FC<HomeworkFormModalProps> = ({
             )}
           </div>
 
-          <div className="flex gap-2">
+          </div>
+        </div>
+
+        {/* 底部固定全板操作列 */}
+        <div className="p-4 sm:p-5 bg-white border-t border-gray-200 shrink-0 shadow-md">
+          <div className="max-w-4xl w-full mx-auto flex justify-end gap-3">
             <button
               type="button"
               onClick={handleResetAndClose}
-              className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl text-xs hover:bg-gray-200 transition-colors"
+              className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl text-xs sm:text-sm transition-colors"
             >
               取消
             </button>
             <button
               type="submit"
               disabled={submitting || uploadingFiles}
-              className="flex-2 py-3 bg-[#FF6B57] text-white font-bold rounded-xl text-xs hover:bg-[#e05a48] transition-colors flex items-center justify-center gap-1.5 shadow-md"
+              className="px-8 py-2.5 bg-[#FF6B57] hover:bg-[#e05a48] text-white font-bold rounded-xl text-xs sm:text-sm transition-all flex items-center justify-center gap-2 shadow-md disabled:opacity-50"
             >
               <Save size={16} />
-              <span>{submitting ? '儲存中...' : initialData ? '更新家課' : '發布家課'}</span>
+              <span>{submitting ? '儲存中...' : initialData ? '更新家課' : '確認發布家課'}</span>
             </button>
           </div>
-        </form>
-      </div>
+        </div>
+      </form>
     </div>
   );
 };
