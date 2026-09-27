@@ -489,6 +489,7 @@ export default function OnlineClassroomApp() {
       case 'msg': return '即時訊息 · 一對一諮詢';
       case 'members': return '會員目錄';
       case 'courses': return currentUser?.role === 'student' ? '我的課程' : '課程管理';
+      case 'calendar': return '課程行事曆';
       case 'attendance': return '課程點名';
       case 'more': return '更多';
       default: return 'Online-Classroom';
@@ -515,7 +516,7 @@ export default function OnlineClassroomApp() {
             onLogout={handleLogout}
             onNavigateTab={setActiveTab}
             onOpenNotices={() => setShowNoticeModal(true)}
-            onOpenCalendar={() => setShowCalendarModal(true)}
+            onOpenCalendar={() => setActiveTab('calendar')}
             onOpenSetup={() => setShowSetupModal(true)}
             onOpenAccountMgmt={() => handleOpenAccountMgmt('issue')}
             onOpenStudentHomework={handleOpenStudentHomework}
@@ -529,13 +530,31 @@ export default function OnlineClassroomApp() {
           <MoreView
             noticeCount={notices.length}
             onOpenNotices={() => setShowNoticeModal(true)}
-            onOpenCalendar={() => setShowCalendarModal(true)}
             onOpenSetup={() => setShowSetupModal(true)}
             onOpenAccountMgmt={handleOpenAccountMgmt}
             currentUser={currentUser}
             onOpenAuth={handleOpenAuth}
             onLogout={handleLogout}
           />
+        )}
+
+        {/* ⭐ 課程行事曆：學生/家長由底部目錄直接點擊進入 (滿板顯示) */}
+        {activeTab === 'calendar' && (
+          <div className="flex-1 w-full bg-[#F8F9FA] flex flex-col overflow-hidden pb-16">
+            <CalendarModal
+              isOpen={true}
+              isInline={true}
+              onClose={() => setActiveTab('home')}
+              currentUser={currentUser}
+              branches={branches}
+              classes={classes}
+              courses={visibleCourses}
+              courseNames={courseNames}
+              calendarEvents={calendarEvents}
+              onSaveEvent={handleSaveCalendarEvent}
+              onDeleteEvent={handleDeleteCalendarEvent}
+            />
+          </div>
         )}
 
         {/* ⭐ 課程目錄：以帳戶為核心，學生只看自己修讀的課程 */}
@@ -739,19 +758,22 @@ export default function OnlineClassroomApp() {
           />
         )}
 
-        {/* 9. 📅 學校校曆與行事曆彈窗 */}
-        <CalendarModal
-          isOpen={showCalendarModal}
-          onClose={() => setShowCalendarModal(false)}
-          currentUser={currentUser}
-          branches={branches}
-          classes={classes}
-          courses={courses}
-          courseNames={courseNames}
-          calendarEvents={calendarEvents}
-          onSaveEvent={handleSaveCalendarEvent}
-          onDeleteEvent={handleDeleteCalendarEvent}
-        />
+        {/* 9. 📅 學校校曆與行事曆彈窗 (若非內嵌頁面且被觸發時) */}
+        {showCalendarModal && activeTab !== 'calendar' && (
+          <CalendarModal
+            isOpen={true}
+            isInline={false}
+            onClose={() => setShowCalendarModal(false)}
+            currentUser={currentUser}
+            branches={branches}
+            classes={classes}
+            courses={visibleCourses}
+            courseNames={courseNames}
+            calendarEvents={calendarEvents}
+            onSaveEvent={handleSaveCalendarEvent}
+            onDeleteEvent={handleDeleteCalendarEvent}
+          />
+        )}
       </div>
     </div>
   );

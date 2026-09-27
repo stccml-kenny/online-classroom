@@ -1,4 +1,4 @@
-﻿export type CalendarEventType = 'course';
+﻿export type CalendarEventType = 'course' | 'homework';
 
 export interface CalendarEvent {
   $id?: string;
@@ -33,5 +33,13 @@ export const EVENT_TYPE_CONFIG: Record<
     bgLight: 'bg-indigo-50',
     border: 'border-indigo-200',
     dotColor: 'bg-indigo-600',
+  },
+  homework: {
+    label: '功課清單',
+    emoji: '📝',
+    color: 'text-amber-700',
+    bgLight: 'bg-amber-50',
+    border: 'border-amber-200',
+    dotColor: 'bg-amber-600',
   },
 };

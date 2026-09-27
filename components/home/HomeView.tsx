@@ -2,7 +2,7 @@
 import {
   GraduationCap, Users, User, BookOpen, Clock,
   Sparkles, CheckCircle2, ChevronRight, LogOut,
-  Bell, UserPlus, Calendar as CalendarIcon
+  Bell, UserPlus, Calendar as CalendarIcon, Settings
 } from 'lucide-react';
 import { UserProfile, ROLE_CONFIGS } from '@/components/auth/AuthModal';
 import { TabType } from '@/components/layout/BottomNav';
@@ -173,7 +173,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            {/* 我的課程 / 課程目錄 */}
+            {/* 1. 課程目錄 / 我的課程 */}
             <button
               type="button"
               onClick={() => onNavigateTab('courses')}
@@ -197,7 +197,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               </div>
             </button>
 
-            {/* 電子通告 */}
+            {/* 2. 最新消息 (原 電子通告) */}
             <button
               type="button"
               onClick={onOpenNotices}
@@ -212,12 +212,58 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 </span>
               </div>
               <div>
-                <div className="text-xs font-bold text-gray-800 group-hover:text-emerald-600">電子通告</div>
+                <div className="text-xs font-bold text-gray-800 group-hover:text-emerald-600">最新消息</div>
                 <div className="text-[10px] text-gray-400">校務訊息與活動公告</div>
               </div>
             </button>
 
-            {/* 若非學生/家長，顯示課程點名與會員目錄 */}
+            {/* 3. 學校行事曆 (⭐ 需求 1：參照其他平台核心教學功能相同方塊卡片方式顯示) */}
+            <button
+              type="button"
+              onClick={onOpenCalendar || (() => onNavigateTab('calendar'))}
+              className="p-3.5 bg-white border border-gray-150 rounded-2xl text-left shadow-xs hover:border-[#FF6B57] hover:shadow-sm transition-all group flex flex-col justify-between h-24"
+            >
+              <div className="flex justify-between items-start">
+                <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <CalendarIcon size={18} />
+                </div>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600 font-bold">
+                  {isStudentOrParent ? '功課清單' : '行事曆'}
+                </span>
+              </div>
+              <div>
+                <div className="text-xs font-bold text-gray-800 group-hover:text-indigo-600">
+                  {isStudentOrParent ? '功課行事曆' : '學校行事曆'}
+                </div>
+                <div className="text-[10px] text-gray-400">
+                  {isStudentOrParent ? '個人功課截止與日程' : '校曆活動與課程日程'}
+                </div>
+              </div>
+            </button>
+
+            {/* 4. 若為學生/家長：在線交功課 */}
+            {isStudentOrParent && (
+              <button
+                type="button"
+                onClick={onOpenStudentHomework || (() => onNavigateTab('courses'))}
+                className="p-3.5 bg-white border border-gray-150 rounded-2xl text-left shadow-xs hover:border-[#FF6B57] hover:shadow-sm transition-all group flex flex-col justify-between h-24"
+              >
+                <div className="flex justify-between items-start">
+                  <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <CheckCircle2 size={18} />
+                  </div>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 font-bold">
+                    提交
+                  </span>
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-gray-800 group-hover:text-amber-700">在線交功課</div>
+                  <div className="text-[10px] text-gray-400">直接顯示所有已參加課程之家課</div>
+                </div>
+              </button>
+            )}
+
+            {/* 若非學生/家長，顯示課程點名、會員名冊與學校設定 (共 6 張對齊方塊卡片) */}
             {!isStudentOrParent && (
               <>
                 {/* 課程點名 */}
@@ -259,76 +305,29 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     <div className="text-[10px] text-gray-400">學生資料與班級管理</div>
                   </div>
                 </button>
-              </>
-            )}
 
-            {/* 若為學生/家長，顯示在線交功課與學習進度 */}
-            {isStudentOrParent && (
-              <>
+                {/* 學校與班別設定 */}
                 <button
                   type="button"
-                  onClick={onOpenStudentHomework || (() => onNavigateTab('courses'))}
-                  className="p-3.5 bg-white border border-gray-150 rounded-2xl text-left shadow-xs hover:border-[#FF6B57] hover:shadow-sm transition-all group flex flex-col justify-between h-24"
-                >
-                  <div className="flex justify-between items-start">
-                    <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center group-hover:scale-105 transition-transform">
-                      <CheckCircle2 size={18} />
-                    </div>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 font-bold">
-                      提交
-                    </span>
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-gray-800 group-hover:text-amber-700">在線交功課</div>
-                    <div className="text-[10px] text-gray-400">直接顯示所有已參加課程之家課</div>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => onNavigateTab('more')}
+                  onClick={onOpenSetup}
                   className="p-3.5 bg-white border border-gray-150 rounded-2xl text-left shadow-xs hover:border-[#FF6B57] hover:shadow-sm transition-all group flex flex-col justify-between h-24"
                 >
                   <div className="flex justify-between items-start">
                     <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-                      <User size={18} />
+                      <Settings size={18} />
                     </div>
                     <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-600 font-bold">
-                      資訊
+                      設定
                     </span>
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-gray-800 group-hover:text-rose-600">個人與帳號</div>
-                    <div className="text-[10px] text-gray-400">學籍資訊與密碼管理</div>
+                    <div className="text-xs font-bold text-gray-800 group-hover:text-rose-600">系統設定</div>
+                    <div className="text-[10px] text-gray-400">學校校區與班別結構</div>
                   </div>
                 </button>
               </>
             )}
           </div>
-
-          {/* 📅 學校行事曆與活動日程捷徑橫幅 */}
-          {onOpenCalendar && (
-            <button
-              type="button"
-              onClick={onOpenCalendar}
-              className="w-full p-3 bg-linear-to-r from-orange-500/10 via-amber-500/10 to-orange-500/5 hover:from-orange-500/15 hover:to-amber-500/10 border border-orange-200/80 rounded-2xl flex items-center justify-between transition-all group shadow-2xs"
-            >
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-[#FF6B57] text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
-                  <CalendarIcon size={16} />
-                </div>
-                <div className="text-left">
-                  <div className="text-xs font-extrabold text-gray-900 group-hover:text-[#FF6B57] transition-colors">
-                    學校行事曆與重要日程
-                  </div>
-                  <div className="text-[10px] text-gray-500">
-                    點擊查閱公眾假期、校務活動與近期功課截止
-                  </div>
-                </div>
-              </div>
-              <ChevronRight size={16} className="text-gray-400 group-hover:text-[#FF6B57] transition-colors" />
-            </button>
-          )}
 
 
 

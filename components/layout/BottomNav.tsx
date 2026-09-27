@@ -1,8 +1,8 @@
 ﻿import React from 'react';
-import { Home, MessageCircle, Users, GraduationCap, UserCheck } from 'lucide-react';
+import { Home, MessageCircle, Users, GraduationCap, UserCheck, Calendar as CalendarIcon } from 'lucide-react';
 import { UserRole } from '@/components/auth/AuthModal';
 
-export type TabType = 'home' | 'msg' | 'members' | 'courses' | 'attendance' | 'more' | 'staff';
+export type TabType = 'home' | 'msg' | 'members' | 'courses' | 'calendar' | 'attendance' | 'more' | 'staff';
 
 interface BottomNavProps {
   activeTab: TabType;
@@ -54,6 +54,15 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         active={activeTab === 'courses'}
         onClick={() => onTabChange('courses')}
       />
+      {/* ⭐ 需求 1：學生及家長帳戶行事曆移到底部目錄 */}
+      {isStudentOrParent && (
+        <TabButton
+          icon={<CalendarIcon size={20} />}
+          label="行事曆"
+          active={activeTab === 'calendar'}
+          onClick={() => onTabChange('calendar')}
+        />
+      )}
       {!isStudentOrParent && (
         <TabButton
           icon={<UserCheck size={20} />}
