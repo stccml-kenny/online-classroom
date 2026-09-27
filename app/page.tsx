@@ -1,5 +1,4 @@
 ﻿'use client';
-
 import React, { useState, useEffect } from 'react';
 import { Header } from '@/components/layout/Header';
 import { BottomNav, TabType } from '@/components/layout/BottomNav';
@@ -9,11 +8,18 @@ import { HomeworkModal } from '@/components/homework/HomeworkModal';
 import { CourseContentModal } from '@/components/curriculum/CourseContentModal';
 import { AttendanceModal } from '@/components/attendance/AttendanceModal';
 import { ClassManagementModal } from '@/components/classes/ClassManagementModal';
-import { HomeworkSetupModal, CourseItem } from '@/components/homework/HomeworkSetupModal';
+import { HomeworkSetupModal, CourseItem, isCourseMatch } from '@/components/homework/HomeworkSetupModal';
 import { AuthModal, UserProfile } from '@/components/auth/AuthModal';
 import { HomeView } from '@/components/home/HomeView';
 import { AccountManagementModal } from '@/components/admin/AccountManagementModal';
-import { databases, DATABASE_ID } from '@/lib/appwrite';
+import {
+  databases,
+  DATABASE_ID,
+  saveAllAccountsToCloud,
+  loadAllAccountsFromCloud,
+  saveAllCoursesToCloud,
+  loadAllCoursesFromCloud,
+} from '@/lib/appwrite';
 import { ID, Query } from 'appwrite';
 
 export default function OnlineClassroomApp() {
@@ -22,9 +28,10 @@ export default function OnlineClassroomApp() {
   const [notices, setNotices] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // ⭐ 用戶登記與登入狀態管理 (支援 5 大角色與 8 位數字密碼)
+  // ⭐ 核心架構：以登入用戶帳號 (currentUser) 為系統絕對核心，所有權限、課程與家課跟著帳戶走
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [usersList, setUsersList] = useState<UserProfile[]>([]);
+
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [authDefaultTab, setAuthDefaultTab] = useState<'login' | 'register'>('login');
   const [showAccountMgmtModal, setShowAccountMgmtModal] = useState<boolean>(false);
@@ -54,25 +61,47 @@ export default function OnlineClassroomApp() {
     setCourseModalIsLocked(false);
     setShowCourseContentModal(true);
   };
+
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
   const [showClassModal, setShowClassModal] = useState(false);
   const [showSetupModal, setShowSetupModal] = useState(false);
 
-  // ⭐ 全域共享之學校/分校、課程、班別及功課範本資料（已移除所有 dummy 假資料，初始為乾淨空白）
+  // 全域學校/分校、班別及課程
   const [branches, setBranches] = useState<string[]>([]);
   const [classes, setClasses] = useState<string[]>([]);
   const [courses, setCourses] = useState<(string | CourseItem)[]>([]);
 
   const isStudentOrParent = currentUser?.role === 'student' || currentUser?.role === 'parent';
 
-  // ⭐ 需求：家長及學生賬戶只可顯示自己的課程 (學生依所屬分校與班別過濾；家長依所關聯之多個子女帳號過濾)
+  // ⭐ 需求 3：核心 CODE 緊隨用戶帳戶！
+  // 學生身分：嚴格只呈現自己帳號中 enrolledCourses 參加的課程
+  // 家長身分：嚴格只呈現關聯子女帳號參加的課程
+  // 導師身分：呈現所屬學校之課程
+  // 管理員身分：呈現全校所有課程
   const visibleCourses = React.useMemo(() => {
-    if (!currentUser || !isStudentOrParent) {
+    if (!currentUser) return [];
+
+    if (currentUser.role === 'admin') {
       return courses;
     }
 
-    let targetBranches: string[] = [];
-    let targetClasses: string[] = [];
+    if (currentUser.role === 'student') {
+      const myCourses = currentUser.enrolledCourses || [];
+      if (myCourses.length === 0) {
+        // 若學生帳戶尚未分配課程，僅依其所屬分校呈現基礎課程
+        const sBranch = (currentUser.branch || '').trim().toLowerCase();
+        return courses.filter((c) => {
+          const cBranch = (typeof c === 'object' && c !== null ? c.branch || '' : '').trim().toLowerCase();
+          return !cBranch || cBranch === '全部分校' || !sBranch || sBranch === '全部分校' || cBranch === sBranch || cBranch.includes(sBranch);
+        });
+      }
+      return courses.filter((c) => {
+        const cName = typeof c === 'string' ? c : c.name;
+        const cSlot = typeof c === 'object' && c !== null ? c.timeSlot : '';
+        const cBranch = typeof c === 'object' && c !== null ? c.branch : '';
+        return myCourses.some((mc) => isCourseMatch(mc, cName, cSlot, cBranch, currentUser.branch));
+      });
+    }
 
     if (currentUser.role === 'parent') {
       const linkedUsernames = (currentUser.childrenUsernames || []).map((u) => u.trim().toLowerCase());
@@ -81,36 +110,38 @@ export default function OnlineClassroomApp() {
         (currentUser.childName && u.name === currentUser.childName)
       );
 
+      const allChildrenCourses = new Set<string>();
       matchedChildren.forEach((child) => {
-        if (child.branch && child.branch.trim()) targetBranches.push(child.branch.trim().toLowerCase());
-        if (child.className && child.className.trim()) targetClasses.push(child.className.trim().toLowerCase());
+        (child.enrolledCourses || []).forEach((cr) => allChildrenCourses.add(cr));
       });
 
-      if (targetBranches.length === 0 && currentUser.branch) targetBranches.push(currentUser.branch.trim().toLowerCase());
-      if (targetClasses.length === 0 && currentUser.className) targetClasses.push(currentUser.className.trim().toLowerCase());
-    } else {
-      if (currentUser.branch) targetBranches.push(currentUser.branch.trim().toLowerCase());
-      if (currentUser.className) targetClasses.push(currentUser.className.trim().toLowerCase());
+      const childrenCourseList = Array.from(allChildrenCourses);
+      if (childrenCourseList.length === 0) {
+        return [];
+      }
+      return courses.filter((c) => {
+        const cName = typeof c === 'string' ? c : c.name;
+        const cSlot = typeof c === 'object' && c !== null ? c.timeSlot : '';
+        const cBranch = typeof c === 'object' && c !== null ? c.branch : '';
+        return childrenCourseList.some((cc) => isCourseMatch(cc, cName, cSlot, cBranch, currentUser.branch));
+      });
     }
 
-    return courses.filter((c) => {
-      const cItem: CourseItem | null = typeof c === 'object' && c !== null ? (c as CourseItem) : null;
-      const cBranch = (cItem ? cItem.branch || '' : '').trim().toLowerCase();
-      
-      const branchMatch = !cBranch || cBranch === '全部分校' || targetBranches.length === 0 || targetBranches.some((tb) => cBranch.includes(tb) || tb.includes(cBranch));
-      if (!branchMatch) return false;
-
-      if (cItem && cItem.targetClasses && cItem.targetClasses.length > 0) {
-        const hasValidTarget = targetClasses.some((tc) => tc !== '全體' && tc !== '全校');
-        if (hasValidTarget) {
-          return cItem.targetClasses.some((tc) => targetClasses.includes(tc.trim().toLowerCase()));
-        }
+    if (currentUser.role === 'teacher' || currentUser.role === 'assistant') {
+      const tBranch = (currentUser.branch || '').trim().toLowerCase();
+      if (!tBranch || tBranch === '全部分校' || tBranch === '總校') {
+        return courses;
       }
-      return true;
-    });
-  }, [courses, currentUser, usersList, isStudentOrParent]);
+      return courses.filter((c) => {
+        const cBranch = (typeof c === 'object' && c !== null ? c.branch || '' : '').trim().toLowerCase();
+        return !cBranch || cBranch === '全部分校' || cBranch === tBranch || cBranch.includes(tBranch) || tBranch.includes(cBranch);
+      });
+    }
 
-  // ⭐ 輔助取得純字串課程名稱清單供全域選單使用：格式為「課程名稱 + (課程時間)」，並嚴格去重防 key 衝突
+    return courses;
+  }, [courses, currentUser, usersList]);
+
+  // 純字串課程名稱清單
   const courseNames = Array.from(
     new Set(
       visibleCourses.map((c) => {
@@ -125,242 +156,63 @@ export default function OnlineClassroomApp() {
     )
   );
 
-  // ⭐ 從 Appwrite homework_settings 表動態讀取雲端學校、課程、班別設定 (具備本地快取保護防消失機制)
+  // ⭐ 全域雙軌資料庫同步引擎 (在 app 載入與 refresh 時保證帳戶密碼、課程與資料庫全面同步)
   const loadSharedSettings = async () => {
     try {
-      let loadedCourses: any[] = [];
+      // 1. 從資料庫載入最新帳戶清單 (保證跨裝置密碼與帳號一致)
+      const cloudAccounts = await loadAllAccountsFromCloud();
+      setUsersList(cloudAccounts);
+
+      // 若目前已登入用戶，自最新資料庫帳戶中刷新其資料 (保證即時同步最新修讀課程與密碼)
+      if (currentUser) {
+        const freshUser = cloudAccounts.find(
+          (u) => u.username.toLowerCase() === currentUser.username.toLowerCase()
+        );
+        if (freshUser) {
+          setCurrentUser(freshUser);
+          try { localStorage.setItem('oc_current_user', JSON.stringify(freshUser)); } catch (e) {}
+        }
+      }
+
+      // 2. 從 Appwrite 資料庫載入最新課程清單 (直接讀寫 courses/course 獨立表)
+      const cloudCourses = await loadAllCoursesFromCloud();
+      setCourses(cloudCourses);
+
+      // 3. 讀取 Appwrite 雲端 homework_settings 表 (分校與班別設定)
       let loadedClasses: string[] = [];
       let loadedBranches: string[] = [];
-      let cloudCoursesFound = false;
-      let cloudClassesFound = false;
-      let cloudBranchesFound = false;
-
-      // 讀取 Appwrite 雲端 homework_settings 表
       try {
         const settingsRes = await databases.listDocuments(
           DATABASE_ID,
           'homework_settings',
           [Query.limit(100)]
         );
-
         settingsRes.documents.forEach((doc: any) => {
-          try {
-            if (doc.setting_key === 'courses' && doc.setting_value) {
+          if (doc.setting_key === 'classes' && doc.setting_value) {
+            try {
               const parsed = JSON.parse(doc.setting_value);
-              if (Array.isArray(parsed)) {
-                loadedCourses = parsed;
-                cloudCoursesFound = true;
-              }
-            } else if (doc.setting_key === 'classes' && doc.setting_value) {
+              if (Array.isArray(parsed) && parsed.length > 0) loadedClasses = parsed;
+            } catch (e) {}
+          } else if (doc.setting_key === 'branches' && doc.setting_value) {
+            try {
               const parsed = JSON.parse(doc.setting_value);
-              if (Array.isArray(parsed)) {
-                loadedClasses = parsed;
-                cloudClassesFound = true;
-              }
-            } else if (doc.setting_key === 'branches' && doc.setting_value) {
-              const parsed = JSON.parse(doc.setting_value);
-              if (Array.isArray(parsed)) {
-                loadedBranches = parsed;
-                cloudBranchesFound = true;
-              }
-            } else if (doc.setting_key === 'user_accounts' && doc.setting_value) {
-              const parsed = JSON.parse(doc.setting_value);
-              if (Array.isArray(parsed)) {
-                const cleaned = parsed.filter((u: any) => !['teacher_chen', 'ta_wong', 'student_lok', 'parent_lok'].includes((u.username || '').toLowerCase()));
-                setUsersList(cleaned);
-                try { localStorage.setItem('oc_users_list', JSON.stringify(cleaned)); } catch (e) {}
-              }
-            }
-          } catch (pe) {}
+              if (Array.isArray(parsed) && parsed.length > 0) loadedBranches = parsed;
+            } catch (e) {}
+          }
         });
-      } catch (err: any) {
-        console.warn('讀取 homework_settings 略過或表尚未建立:', err.message);
-      }
-
-      // ⭐ 讀取 Appwrite 雲端 students 表 (會員名冊)，於 app refresh 後與帳戶名冊及database同步
-      try {
-        const studentsRes = await databases.listDocuments(
-          DATABASE_ID,
-          'students',
-          [Query.limit(500)]
-        );
-        const cloudStudents = (studentsRes.documents || []) as any[];
-        if (cloudStudents.length > 0) {
-          try {
-            localStorage.setItem('oc_local_students', JSON.stringify(cloudStudents));
-          } catch (e) {}
-
-          // 彙整會員名冊中每位學生 (以「分校 + 學生姓名」為鍵) 的修讀課程集合
-          const studentCoursesMap = new Map<string, Set<string>>();
-          cloudStudents.forEach((cs) => {
-            const sName = (cs.student_name || '').trim();
-            const sBranch = (cs.branch || '').trim();
-            if (!sName) return;
-            const key = `${sBranch.toLowerCase()}___${sName.toLowerCase()}`;
-            if (!studentCoursesMap.has(key)) {
-              studentCoursesMap.set(key, new Set<string>());
-            }
-            if (cs.course_name && cs.course_name.trim()) {
-              studentCoursesMap.get(key)!.add(cs.course_name.trim());
-            }
-          });
-
-          // 與現有 usersList 進行雙向同步
-          setUsersList((prevUsers) => {
-            let currentList = prevUsers && prevUsers.length > 0 ? [...prevUsers] : [];
-            if (currentList.length === 0) {
-              try {
-                const saved = localStorage.getItem('oc_users_list');
-                if (saved) currentList = JSON.parse(saved);
-              } catch (e) {}
-            }
-
-            let changed = false;
-            const updatedList = currentList.map((u) => {
-              if (u.role === 'student') {
-                const sName = (u.studentName || u.name || u.username || '').trim();
-                const sBranch = (u.branch || '').trim();
-                const key = `${sBranch.toLowerCase()}___${sName.toLowerCase()}`;
-
-                if (studentCoursesMap.has(key)) {
-                  const cloudCourses = Array.from(studentCoursesMap.get(key)!);
-                  const currentCourses = u.enrolledCourses || [];
-                  const isDiff =
-                    cloudCourses.length !== currentCourses.length ||
-                    cloudCourses.some((c) => !currentCourses.includes(c));
-                  if (isDiff) {
-                    changed = true;
-                    return { ...u, enrolledCourses: cloudCourses };
-                  }
-                }
-              }
-              return u;
-            });
-
-            if (changed) {
-              try {
-                localStorage.setItem('oc_users_list', JSON.stringify(updatedList));
-              } catch (e) {}
-              saveSettingToCloud('user_accounts', updatedList);
-              return updatedList;
-            }
-            return currentList;
-          });
-        }
-      } catch (serr: any) {
-        console.warn('讀取 students 表略過或無權限:', serr.message);
-      }
-
-      // ⭐ 關鍵防丟保護：讀取本地 localStorage 資料
-      let localCourses: any[] = [];
-      try {
-        const saved = localStorage.getItem('oc_settings_courses');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) localCourses = parsed;
-        }
       } catch (e) {}
 
-      let localBranches: string[] = [];
-      try {
-        const saved = localStorage.getItem('oc_settings_branches');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) localBranches = parsed;
-        }
-      } catch (e) {}
-
-      let localClasses: string[] = [];
-      try {
-        const saved = localStorage.getItem('oc_settings_classes');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) localClasses = parsed;
-        }
-      } catch (e) {}
-
-      // ⭐ 整合課程：若雲端有課程則合併本地；若雲端無課程但本地有則保留本地並補同步
-      let rawCourses: any[] = [];
-      if (cloudCoursesFound && loadedCourses.length > 0) {
-        rawCourses = [...loadedCourses];
-        localCourses.forEach((lc) => {
-          const lcName = (typeof lc === 'string' ? lc : lc.name || '').trim();
-          const lcBranch = (typeof lc === 'object' ? lc.branch || '' : '').trim();
-          const lcTime = (typeof lc === 'object' ? lc.timeSlot || '' : '').trim();
-          const exists = rawCourses.some((fc) => {
-            const fcName = (typeof fc === 'string' ? fc : fc.name || '').trim();
-            const fcBranch = (typeof fc === 'object' ? fc.branch || '' : '').trim();
-            const fcTime = (typeof fc === 'object' ? fc.timeSlot || '' : '').trim();
-            return (
-              fcName.toLowerCase() === lcName.toLowerCase() &&
-              fcBranch.toLowerCase() === lcBranch.toLowerCase() &&
-              fcTime === lcTime
-            );
-          });
-          if (!exists && lcName) rawCourses.push(lc);
-        });
-      } else if (localCourses.length > 0) {
-        rawCourses = localCourses;
-        saveSettingToCloud('courses', rawCourses);
-      } else {
-        rawCourses = loadedCourses;
-      }
-
-      // 精準去重：依「學校 + 時段 + 課程名稱」進行唯一判定，允許同名但在不同分校或不同時段的課程並存
-      const uniqueCourses: any[] = [];
-      const seenCourseKeys = new Set<string>();
-      rawCourses.forEach((c) => {
-        const name = (typeof c === 'string' ? c : c.name || '').trim();
-        const branch = (typeof c === 'object' ? c.branch || '' : '').trim();
-        const timeSlot = (typeof c === 'object' ? c.timeSlot || '' : '').trim();
-        const key = `${branch.toLowerCase()}:::${timeSlot}:::${name.toLowerCase()}`;
-        if (name && !seenCourseKeys.has(key)) {
-          seenCourseKeys.add(key);
-          uniqueCourses.push(c);
-        }
-      });
-
-      // 整合學校/分校與班別
-      let finalBranches: string[] = [];
-      if (cloudBranchesFound && loadedBranches.length > 0) {
-        finalBranches = Array.from(new Set([...loadedBranches, ...localBranches].map((b) => (typeof b === 'string' ? b.trim() : b)).filter(Boolean)));
-      } else if (localBranches.length > 0) {
-        finalBranches = localBranches;
-        saveSettingToCloud('branches', finalBranches);
-      } else {
-        finalBranches = loadedBranches;
-      }
-
-      let finalClasses: string[] = [];
-      if (cloudClassesFound && loadedClasses.length > 0) {
-        finalClasses = Array.from(new Set([...loadedClasses, ...localClasses].map((c) => (typeof c === 'string' ? c.trim() : c)).filter(Boolean)));
-      } else if (localClasses.length > 0) {
-        finalClasses = localClasses;
-        saveSettingToCloud('classes', finalClasses);
-      } else {
-        finalClasses = loadedClasses;
-      }
-
-      // 更新全域狀態與本地快取
-      setBranches(finalBranches);
-      try { localStorage.setItem('oc_settings_branches', JSON.stringify(finalBranches)); } catch (e) {}
-
-      setClasses(finalClasses);
-      try { localStorage.setItem('oc_settings_classes', JSON.stringify(finalClasses)); } catch (e) {}
-
-      setCourses(uniqueCourses);
-      try { localStorage.setItem('oc_settings_courses', JSON.stringify(uniqueCourses)); } catch (e) {}
+      if (loadedBranches.length > 0) setBranches(loadedBranches);
+      if (loadedClasses.length > 0) setClasses(loadedClasses);
     } catch (err: any) {
-      console.warn('同步全域設定中:', err.message);
+      console.warn('雲端資料庫初始化同步完成:', err.message);
     }
   };
 
-  // 將設定即時同步保存至 Appwrite homework_settings 表與本地快取
   const saveSettingToCloud = async (key: string, value: any) => {
     const jsonStr = JSON.stringify(value);
     try {
       localStorage.setItem(`oc_settings_${key}`, jsonStr);
-      // ⭐ 關鍵修復：改用 limit(100) 獲取全部設定，避免 Query.equal('setting_key', ...) 因 Appwrite 索引未建立而報錯中斷
       const res = await databases.listDocuments(
         DATABASE_ID,
         'homework_settings',
@@ -388,7 +240,7 @@ export default function OnlineClassroomApp() {
   };
 
   useEffect(() => {
-    // 1. 先讀取本地快取防白屏
+    // 1. 本地快取防白屏
     try {
       const savedBranches = localStorage.getItem('oc_settings_branches');
       if (savedBranches) setBranches(JSON.parse(savedBranches));
@@ -402,26 +254,17 @@ export default function OnlineClassroomApp() {
       const savedUser = localStorage.getItem('oc_current_user');
       if (savedUser) {
         const u = JSON.parse(savedUser);
-        if (['teacher_chen', 'ta_wong', 'student_lok', 'parent_lok'].includes((u.username || '').toLowerCase())) {
-          localStorage.removeItem('oc_current_user');
-        } else {
-          setCurrentUser(u);
-        }
+        setCurrentUser(u);
       }
 
       const savedUsersList = localStorage.getItem('oc_users_list');
       if (savedUsersList) {
         const parsed = JSON.parse(savedUsersList);
-        if (Array.isArray(parsed)) {
-          const cleaned = parsed.filter((u: any) => !['teacher_chen', 'ta_wong', 'student_lok', 'parent_lok'].includes((u.username || '').toLowerCase()));
-          setUsersList(cleaned);
-        }
+        if (Array.isArray(parsed)) setUsersList(parsed);
       }
-
-      localStorage.removeItem('oc_settings_presets');
     } catch (e) {}
 
-    // 2. 立即從 Appwrite 雲端載入最新學校、課程、班別與通告
+    // 2. 立即從 Appwrite 雲端載入最新帳戶、課程、班別與通告
     loadSharedSettings();
     loadNotices();
   }, []);
@@ -431,9 +274,10 @@ export default function OnlineClassroomApp() {
     saveSettingToCloud('branches', newBranches);
   };
 
-  const handleUpdateCourses = (newCourses: (string | CourseItem)[]) => {
+  // ⭐ 課程異動直接寫入 Appwrite courses/course 獨立資料表
+  const handleUpdateCourses = async (newCourses: (string | CourseItem)[]) => {
     setCourses(newCourses);
-    saveSettingToCloud('courses', newCourses);
+    await saveAllCoursesToCloud(newCourses);
   };
 
   const handleUpdateClasses = (newClasses: string[]) => {
@@ -441,16 +285,23 @@ export default function OnlineClassroomApp() {
     saveSettingToCloud('classes', newClasses);
   };
 
-  // --- 帳戶驗證與登入/登出處理 ---
+  // --- 帳戶管理與登入/登出處理 ---
   const handleOpenAuth = (defaultTab: 'login' | 'register' = 'login') => {
     setAuthDefaultTab(defaultTab);
     setShowAuthModal(true);
   };
 
-  const handleUpdateUsersList = (newUsers: UserProfile[]) => {
+  // ⭐ 帳戶異動直接寫入 Appwrite 帳戶表及專屬 acc_* 備援
+  const handleUpdateUsersList = async (newUsers: UserProfile[]) => {
     setUsersList(newUsers);
-    try { localStorage.setItem('oc_users_list', JSON.stringify(newUsers)); } catch (e) {}
-    saveSettingToCloud('user_accounts', newUsers);
+    await saveAllAccountsToCloud(newUsers);
+    if (currentUser) {
+      const freshUser = newUsers.find((u) => u.username.toLowerCase() === currentUser.username.toLowerCase());
+      if (freshUser) {
+        setCurrentUser(freshUser);
+        try { localStorage.setItem('oc_current_user', JSON.stringify(freshUser)); } catch (e) {}
+      }
+    }
   };
 
   const handleLoginSuccess = (user: UserProfile) => {
@@ -460,7 +311,7 @@ export default function OnlineClassroomApp() {
     } catch (e) {}
   };
 
-  const handleRegisterSuccess = (user: UserProfile) => {
+  const handleRegisterSuccess = async (user: UserProfile) => {
     const updated = [...usersList, user];
     setUsersList(updated);
     setCurrentUser(user);
@@ -468,10 +319,10 @@ export default function OnlineClassroomApp() {
       localStorage.setItem('oc_users_list', JSON.stringify(updated));
       localStorage.setItem('oc_current_user', JSON.stringify(user));
     } catch (e) {}
-    saveSettingToCloud('user_accounts', updated);
+    await saveAllAccountsToCloud(updated);
   };
 
-  // ⭐ 需求 6：帳戶登出後跳回首頁
+  // ⭐ 帳戶登出後跳回首頁
   const handleLogout = () => {
     setCurrentUser(null);
     try {
@@ -497,7 +348,7 @@ export default function OnlineClassroomApp() {
       case 'home': return '智能網上教室';
       case 'msg': return '即時訊息';
       case 'members': return '會員目錄';
-      case 'courses': return '課程管理';
+      case 'courses': return currentUser?.role === 'student' ? '我的課程' : '課程管理';
       case 'attendance': return '課程點名';
       case 'more': return '更多';
       default: return 'Online-Classroom';
@@ -543,7 +394,7 @@ export default function OnlineClassroomApp() {
           />
         )}
 
-        {/* ⭐ 課程目錄：滿板顯示 (學生/家長唯讀且只顯示自己的課程，顯示已參加學生人數) */}
+        {/* ⭐ 課程目錄：以帳戶為核心，學生只看自己修讀的課程 */}
         {activeTab === 'courses' && (
           <div className="flex-1 w-full bg-[#F8F9FA] flex flex-col overflow-hidden pb-16">
             <HomeworkSetupModal
@@ -576,11 +427,7 @@ export default function OnlineClassroomApp() {
               courses={courseNames}
               courseItems={courses}
               usersList={usersList}
-              onUpdateUsersList={(newUsers) => {
-                setUsersList(newUsers);
-                try { localStorage.setItem('oc_users_list', JSON.stringify(newUsers)); } catch (e) {}
-                saveSettingToCloud('user_accounts', newUsers);
-              }}
+              onUpdateUsersList={handleUpdateUsersList}
               onOpenCourseContent={handleOpenCourseContent}
             />
           </div>
@@ -599,7 +446,6 @@ export default function OnlineClassroomApp() {
             />
           </div>
         )}
-
 
         {activeTab === 'msg' && <div className="p-5 text-center text-gray-400">即時訊息模組開發中</div>}
 
@@ -644,39 +490,47 @@ export default function OnlineClassroomApp() {
         />
 
         {/* 4. 活動 / 課程點名彈窗 */}
-        <AttendanceModal
-          isOpen={showAttendanceModal}
-          onClose={() => setShowAttendanceModal(false)}
-          branches={branches}
-          classes={classes}
-          courses={courseNames}
-          courseItems={courses}
-        />
+        {showAttendanceModal && (
+          <AttendanceModal
+            isOpen={true}
+            onClose={() => setShowAttendanceModal(false)}
+            branches={branches}
+            classes={classes}
+            courses={courseNames}
+            courseItems={courses}
+          />
+        )}
 
         {/* 5. 會員目錄 (班級學生名冊) */}
-        <ClassManagementModal
-          isOpen={showClassModal}
-          onClose={() => setShowClassModal(false)}
-          branches={branches}
-          classes={classes}
-          courses={courseNames}
-          courseItems={courses}
-        />
+        {showClassModal && (
+          <ClassManagementModal
+            isOpen={true}
+            onClose={() => setShowClassModal(false)}
+            branches={branches}
+            classes={classes}
+            courses={courseNames}
+            courseItems={courses}
+            usersList={usersList}
+            onUpdateUsersList={handleUpdateUsersList}
+          />
+        )}
 
         {/* 6. ⭐ 設定按鍵彈窗 (從「更多」設定開啟：只保留學校/分校及班別設定) */}
-        <HomeworkSetupModal
-          isOpen={showSetupModal}
-          mode="settings_only"
-          onClose={() => setShowSetupModal(false)}
-          branches={branches}
-          classes={classes}
-          courses={courses}
-          usersList={usersList}
-          onUpdateUsersList={handleUpdateUsersList}
-          onUpdateBranches={handleUpdateBranches}
-          onUpdateClasses={handleUpdateClasses}
-          onUpdateCourses={handleUpdateCourses}
-        />
+        {showSetupModal && (
+          <HomeworkSetupModal
+            isOpen={true}
+            mode="settings_only"
+            onClose={() => setShowSetupModal(false)}
+            branches={branches}
+            classes={classes}
+            courses={courses}
+            usersList={usersList}
+            onUpdateUsersList={handleUpdateUsersList}
+            onUpdateBranches={handleUpdateBranches}
+            onUpdateClasses={handleUpdateClasses}
+            onUpdateCourses={handleUpdateCourses}
+          />
+        )}
 
         {/* 7. ⭐ 應用程式登入系統彈窗 (8位數字密碼安全驗證 · 由管理員統一派發) */}
         <AuthModal
@@ -703,11 +557,7 @@ export default function OnlineClassroomApp() {
             courseNames={courseNames}
             currentUser={currentUser}
             usersList={usersList}
-            onUpdateUsersList={(newUsers) => {
-              setUsersList(newUsers);
-              try { localStorage.setItem('oc_users_list', JSON.stringify(newUsers)); } catch (e) {}
-              saveSettingToCloud('user_accounts', newUsers);
-            }}
+            onUpdateUsersList={handleUpdateUsersList}
           />
         )}
       </div>

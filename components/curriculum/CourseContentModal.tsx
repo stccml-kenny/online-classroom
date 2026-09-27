@@ -8,7 +8,7 @@ import { HomeworkFormModal } from '../homework/HomeworkFormModal';
 import { UnitHomeworkSelectModal } from './UnitHomeworkSelectModal';
 import { BatchEditModal } from './BatchEditModal';
 import { CourseItem, getCourseDisplayName } from '../homework/HomeworkSetupModal';
-import { databases, DATABASE_ID } from '@/lib/appwrite';
+import { databases, DATABASE_ID, saveCourseUnitToCloud, loadAllCourseUnitsFromCloud } from '@/lib/appwrite';
 import { ID, Query } from 'appwrite';
 import { getLocalFile } from '@/utils/indexedDB';
 import { UserProfile } from '@/components/auth/AuthModal';
@@ -250,14 +250,13 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
   }, [isOpen]);
 
 
-  // 讀取課程單元
+  // 讀取課程單元 (雙軌支援 course_units 及 course_unit 表)
   const fetchUnits = async () => {
     try {
-      const res = await databases.listDocuments(DATABASE_ID, 'course_units', [
-        Query.orderDesc('$createdAt'),
-        Query.limit(100),
-      ]);
-      setUnits(res.documents as unknown as CourseUnit[]);
+      const docs = await loadAllCourseUnitsFromCloud();
+      if (docs && docs.length > 0) {
+        setUnits(docs as unknown as CourseUnit[]);
+      }
     } catch (err: any) {
       try {
         const saved = localStorage.getItem('oc_local_course_units');
@@ -391,9 +390,14 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
     }
   };
 
-  // 1. 提交儲存單元 (Create / Update)
+  // 1. 提交儲存單元 (Create / Update，直接寫入 Appwrite 並獲取真實 ID)
   const handleUnitSubmit = async (data: Omit<CourseUnit, '$id'>, id?: string) => {
-    const targetId = id || 'unit_' + Date.now();
+    let cloudId = id;
+    try {
+      cloudId = await saveCourseUnitToCloud(data, id);
+    } catch (e) {}
+
+    const targetId = cloudId || id || 'unit_' + Date.now();
     const finalUnit: CourseUnit = {
       $id: targetId,
       ...data,
@@ -402,7 +406,7 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
     try {
       const saved = localStorage.getItem('oc_local_course_units') || '[]';
       const list: CourseUnit[] = JSON.parse(saved);
-      const filtered = list.filter((u) => u.$id !== finalUnit.$id);
+      const filtered = list.filter((u) => u.$id !== finalUnit.$id && u.$id !== id);
       localStorage.setItem('oc_local_course_units', JSON.stringify([finalUnit, ...filtered]));
       localStorage.setItem(
         `oc_cu_att_${finalUnit.$id}`,
@@ -411,29 +415,9 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
     } catch (e) {}
 
     setUnits((prev) => {
-      const filtered = prev.filter((u) => u.$id !== finalUnit.$id);
+      const filtered = prev.filter((u) => u.$id !== finalUnit.$id && u.$id !== id);
       return [finalUnit, ...filtered];
     });
-
-    try {
-      const payload: any = {
-        branch: data.branch,
-        course_name: data.course_name,
-        unit_title: data.unit_title,
-        description: data.description || '',
-        publish_date: data.publish_date || '',
-        unpublish_date: data.unpublish_date || '',
-        attachments: typeof data.attachments === 'string' ? data.attachments : JSON.stringify(data.attachments || []),
-      };
-
-      if (id) {
-        await databases.updateDocument(DATABASE_ID, 'course_units', id, payload);
-      } else {
-        await databases.createDocument(DATABASE_ID, 'course_units', ID.unique(), payload);
-      }
-    } catch (cloudErr: any) {
-      console.warn('雲端 course_units 寫入略過 (已由本地完整保存):', cloudErr.message);
-    }
   };
 
   // 2. 刪除單元 (單筆)
@@ -441,7 +425,11 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
     if (!window.confirm('確定要刪除此課程單元嗎？')) return;
     try {
       await databases.deleteDocument(DATABASE_ID, 'course_units', unitId);
-    } catch (e) {}
+    } catch (e) {
+      try {
+        await databases.deleteDocument(DATABASE_ID, 'course_unit', unitId);
+      } catch (e2) {}
+    }
 
     try {
       const saved = localStorage.getItem('oc_local_course_units') || '[]';
