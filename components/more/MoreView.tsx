@@ -5,6 +5,7 @@ import {
   FileCheck, LogOut, Settings, User, Users, UserPlus
 } from 'lucide-react';
 import { MenuItem } from './MenuItem';
+import { LegalModal } from './LegalModal';
 import { UserProfile, ROLE_CONFIGS } from '@/components/auth/AuthModal';
 
 interface MoreViewProps {
@@ -32,6 +33,9 @@ export const MoreView: React.FC<MoreViewProps> = ({
 }) => {
   const isStudentOrParent = currentUser?.role === 'student' || currentUser?.role === 'parent';
   const isAdmin = currentUser?.role === 'admin';
+
+  // ⭐ 法律條款彈窗狀態 (私隱政策 / 使用條款)
+  const [legalModalType, setLegalModalType] = React.useState<'privacy' | 'terms' | null>(null);
 
   return (
     <div className="flex-1 overflow-y-auto pb-20">
@@ -128,8 +132,16 @@ export const MoreView: React.FC<MoreViewProps> = ({
             alert('💡 本系統密碼統一為 8 位數字，由學校/機構系統管理人員統一派發。如需重設密碼，請聯絡管理員。');
           }}
         />
-        <MenuItem icon={<Shield className="text-gray-600" size={20} />} title="私隱政策" hasRedDot />
-        <MenuItem icon={<FileCheck className="text-gray-600" size={20} />} title="使用條款" hasRedDot />
+        <MenuItem
+          icon={<Shield className="text-gray-600" size={20} />}
+          title="私隱政策"
+          onClick={() => setLegalModalType('privacy')}
+        />
+        <MenuItem
+          icon={<FileCheck className="text-gray-600" size={20} />}
+          title="使用條款"
+          onClick={() => setLegalModalType('terms')}
+        />
         {currentUser ? (
           <MenuItem
             icon={<LogOut className="text-red-500" size={20} />}
@@ -148,6 +160,13 @@ export const MoreView: React.FC<MoreViewProps> = ({
           />
         )}
       </div>
+
+      {/* 法律與服務協議條款彈窗 */}
+      <LegalModal
+        isOpen={legalModalType !== null}
+        type={legalModalType || 'privacy'}
+        onClose={() => setLegalModalType(null)}
+      />
     </div>
   );
 };
