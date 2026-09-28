@@ -600,9 +600,9 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
   };
 
   // ⭐ 需求：按完成設定時確定儲存並更新資料庫
-  const handleSaveAndConfirmSettings = () => {
-    onUpdateBranches(localBranches);
-    onUpdateClasses(localClasses);
+  const handleSaveAndConfirmSettings = async () => {
+    await onUpdateBranches(localBranches);
+    await onUpdateClasses(localClasses);
     alert('✅ 學校與班別設定及排序已成功儲存並更新至資料庫！');
     handleCloseModal();
   };
@@ -686,7 +686,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
   };
 
   // 儲存課程 (新增或更新)
-  const handleSaveCourseForm = (e: React.FormEvent) => {
+  const handleSaveCourseForm = async (e: React.FormEvent) => {
     e.preventDefault();
     const finalName = courseFormName.trim();
     if (!finalName) {
@@ -734,9 +734,9 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
       try {
         localStorage.setItem('oc_settings_courses', JSON.stringify(updated));
       } catch (e) {}
-      onUpdateCourses(updated);
-      if (oldCourse && oldCourse.name !== finalName && onRenameCourse) {
-        onRenameCourse?.(oldCourse.name, finalName);
+      await onUpdateCourses(updated);
+      if (oldCourse && oldCourse.name.trim() !== finalName.trim() && onRenameCourse) {
+        await onRenameCourse(oldCourse.name.trim(), finalName);
       }
     } else {
       // 新增 (⭐ 只有相同學校、時段及名稱，才顯示課程已存在)
@@ -755,7 +755,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
       try {
         localStorage.setItem('oc_settings_courses', JSON.stringify(updated));
       } catch (e) {}
-      onUpdateCourses(updated);
+      await onUpdateCourses(updated);
     }
 
     handleCloseCourseForm();
@@ -765,17 +765,19 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
   const handleDeleteCourse = async (targetId: string, targetName: string) => {
     if (!window.confirm(`確定要刪除課程「${targetName}」嗎？\n\n系統將自動為所有修讀此課程之學生剔除該課程，並同步更新會員名冊、帳戶名冊與雲端資料庫。`)) return;
 
-    const targetCourse = normalizedCourses.find((c) => c.id === targetId || c.name === targetName);
-    const targetCourseName = targetCourse ? targetCourse.name : targetName;
+    const targetCourse = normalizedCourses.find((c) => c.id === targetId || (c.name || '').trim() === targetName.trim());
+    const targetCourseName = targetCourse ? targetCourse.name.trim() : targetName.trim();
     const targetTimeSlot = targetCourse?.timeSlot;
     const targetBranch = targetCourse?.branch;
 
-    // 1. 從課程清單中移除
-    const remaining = normalizedCourses.filter((c) => c.id !== targetId && c.name !== targetName);
+    // 1. 從課程清單中移除並非同步寫入雲端
+    const remaining = normalizedCourses.filter(
+      (c) => c.id !== targetId && (c.name || '').trim() !== targetCourseName
+    );
     try {
       localStorage.setItem('oc_settings_courses', JSON.stringify(remaining));
     } catch (e) {}
-    onUpdateCourses(remaining);
+    await onUpdateCourses(remaining);
 
     // 2. 帳戶名冊 (usersList) 剔除該課程並同步
     if (usersList && usersList.length > 0 && onUpdateUsersList) {
@@ -790,7 +792,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
         }
         return u;
       });
-      onUpdateUsersList(updatedUsers);
+      await onUpdateUsersList(updatedUsers);
     }
 
     // 3. 會員目錄 (oc_local_students) 剔除該課程 (⭐ 嚴格保證不刪除會員與帳戶，僅剔除課程)
@@ -799,7 +801,6 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
         const raw = localStorage.getItem('oc_local_students');
         if (raw) {
           const list: any[] = JSON.parse(raw);
-          // 統計每位學生的總記錄數
           const studentDocCounts = new Map<string, number>();
           list.forEach((s) => {
             const key = `${(s.branch || '').toLowerCase()}___${(s.student_name || '').toLowerCase()}`;
@@ -813,10 +814,8 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
               const key = `${(s.branch || '').toLowerCase()}___${(s.student_name || '').toLowerCase()}`;
               const count = studentDocCounts.get(key) || 1;
               if (count <= 1) {
-                // 若僅有此一條記錄，保留會員基本資料（姓名、分校、班別），僅清空課程名稱
                 updatedLocalStudents.push({ ...s, course_name: '' });
               } else {
-                // 若有多條其他課程記錄，僅剔除此條記錄
                 studentDocCounts.set(key, count - 1);
               }
             } else {
@@ -828,9 +827,9 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
       } catch (e) {}
     }
 
-    // 4. Appwrite 雲端資料庫 students 表同步更新 (⭐ 不刪除會員，僅剔除該課程)
+    // 4. Appwrite 雲端資料庫 students 表同步更新 (單次查詢 + 並行批次更新/刪除)
     try {
-      const res = await databases.listDocuments(DATABASE_ID, 'students', [Query.limit(500)]);
+      const res = await databases.listDocuments(DATABASE_ID, 'students', [Query.limit(1000)]);
       const docs = (res.documents || []) as any[];
 
       const studentDocCounts = new Map<string, number>();
@@ -839,27 +838,49 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
         studentDocCounts.set(key, (studentDocCounts.get(key) || 0) + 1);
       });
 
+      const promises: Promise<any>[] = [];
       for (const d of docs) {
         if (isCourseMatch(d.course_name, targetCourseName, targetTimeSlot, targetBranch, d.branch)) {
           const key = `${(d.branch || '').toLowerCase()}___${(d.student_name || '').toLowerCase()}`;
           const count = studentDocCounts.get(key) || 1;
           if (count <= 1) {
-            // 學生僅有此一條記錄：更新 course_name 為空字串，完整保留會員基本資料
-            try {
-              await databases.updateDocument(DATABASE_ID, 'students', d.$id, { course_name: '' });
-            } catch (ue) {}
+            promises.push(databases.updateDocument(DATABASE_ID, 'students', d.$id, { course_name: '' }).catch(() => {}));
           } else {
-            // 學生尚有其他課程：安全移除此一堂課之記錄
-            try {
-              await databases.deleteDocument(DATABASE_ID, 'students', d.$id);
-              studentDocCounts.set(key, count - 1);
-            } catch (de) {}
+            promises.push(databases.deleteDocument(DATABASE_ID, 'students', d.$id).catch(() => {}));
+            studentDocCounts.set(key, count - 1);
           }
         }
+      }
+      if (promises.length > 0) {
+        await Promise.allSettled(promises);
       }
     } catch (err: any) {
       console.warn('雲端更新修讀記錄略過或無權限:', err.message);
     }
+
+    // 5. 課程單元 (course_units / course_unit) 表同步清理已刪除課程之單元
+    for (const coll of ['course_units', 'course_unit']) {
+      try {
+        const resUnits = await databases.listDocuments(DATABASE_ID, coll, [Query.limit(500)]);
+        const unitsToDelete = (resUnits.documents || []).filter((u: any) =>
+          isCourseMatch(u.course_name, targetCourseName, targetTimeSlot, targetBranch, u.branch)
+        );
+        if (unitsToDelete.length > 0) {
+          await Promise.allSettled(unitsToDelete.map((u: any) => databases.deleteDocument(DATABASE_ID, coll, u.$id).catch(() => {})));
+        }
+      } catch (e) {}
+    }
+
+    // 6. 家課 (homework) 表同步清理已刪除課程之家課
+    try {
+      const resHw = await databases.listDocuments(DATABASE_ID, 'homework', [Query.limit(500)]);
+      const hwToDelete = (resHw.documents || []).filter((h: any) =>
+        isCourseMatch(h.course_name || h.courseName, targetCourseName, targetTimeSlot, targetBranch, h.branch)
+      );
+      if (hwToDelete.length > 0) {
+        await Promise.allSettled(hwToDelete.map((h: any) => databases.deleteDocument(DATABASE_ID, 'homework', h.$id).catch(() => {})));
+      }
+    } catch (e) {}
   };
 
   // 一鍵清空全部課程 (⭐ 需求：為所有會員剔除全部課程，並於會員目錄、帳戶名冊及database同步)
@@ -868,7 +889,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
     try {
       localStorage.setItem('oc_settings_courses', JSON.stringify([]));
     } catch (e) {}
-    onUpdateCourses([]);
+    await onUpdateCourses([]);
 
     if (usersList && usersList.length > 0 && onUpdateUsersList) {
       const updatedUsers = usersList.map((u) => {
@@ -877,7 +898,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
         }
         return u;
       });
-      onUpdateUsersList(updatedUsers);
+      await onUpdateUsersList(updatedUsers);
     }
 
     if (typeof window !== 'undefined') {

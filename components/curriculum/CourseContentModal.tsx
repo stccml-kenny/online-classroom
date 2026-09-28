@@ -267,9 +267,7 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
   const fetchUnits = async () => {
     try {
       const docs = await loadAllCourseUnitsFromCloud();
-      if (docs && docs.length > 0) {
-        setUnits(docs as unknown as CourseUnit[]);
-      }
+      setUnits((docs || []) as unknown as CourseUnit[]);
     } catch (err: any) {
       try {
         const saved = localStorage.getItem('oc_local_course_units');
@@ -283,9 +281,15 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
     try {
       const res = await databases.listDocuments(DATABASE_ID, 'homework', [
         Query.orderDesc('$createdAt'),
-        Query.limit(100),
+        Query.limit(500),
       ]);
-      setHomeworkList(res.documents as unknown as HomeworkItem[]);
+      const docs = (res.documents || []) as unknown as HomeworkItem[];
+      setHomeworkList(docs);
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('oc_local_homework', JSON.stringify(docs));
+        } catch (e) {}
+      }
     } catch (err: any) {
       try {
         const saved = localStorage.getItem('oc_local_homework');
@@ -470,7 +474,11 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
     for (const id of selectedUnitIds) {
       try {
         await databases.deleteDocument(DATABASE_ID, 'course_units', id);
-      } catch (e) {}
+      } catch (e) {
+        try {
+          await databases.deleteDocument(DATABASE_ID, 'course_unit', id);
+        } catch (e2) {}
+      }
     }
 
     setSelectedUnitIds([]);
@@ -544,11 +552,9 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
       localStorage.setItem('oc_local_homework', JSON.stringify(remaining));
     } catch (e) {}
 
-    for (const id of selectedHwIds) {
-      try {
-        await databases.deleteDocument(DATABASE_ID, 'homework', id);
-      } catch (e) {}
-    }
+    await Promise.allSettled(
+      selectedHwIds.map((id) => databases.deleteDocument(DATABASE_ID, 'homework', id).catch(() => {}))
+    );
 
     setSelectedHwIds([]);
     setIsHwSelectMode(false);

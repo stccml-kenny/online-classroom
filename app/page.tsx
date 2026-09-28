@@ -261,37 +261,46 @@ export default function OnlineClassroomApp() {
       const cloudCourses = await loadAllCoursesFromCloud();
       setCourses(cloudCourses);
 
-      // 3. 讀取 Appwrite 雲端 homework_settings 表 (分校與班別設定)
-      let loadedClasses: string[] = [];
-      let loadedBranches: string[] = [];
+      // 3. 讀取 Appwrite 雲端 homework_settings 表 (精確查詢分校、班別與權限設定)
+      let loadedClasses: string[] | null = null;
+      let loadedBranches: string[] | null = null;
       try {
-        const settingsRes = await databases.listDocuments(
-          DATABASE_ID,
-          'homework_settings',
-          [Query.limit(100)]
-        );
-        settingsRes.documents.forEach((doc: any) => {
-          if (doc.setting_key === 'classes' && doc.setting_value) {
-            try {
-              const parsed = JSON.parse(doc.setting_value);
-              if (Array.isArray(parsed) && parsed.length > 0) loadedClasses = parsed;
-            } catch (e) {}
-          } else if (doc.setting_key === 'branches' && doc.setting_value) {
-            try {
-              const parsed = JSON.parse(doc.setting_value);
-              if (Array.isArray(parsed) && parsed.length > 0) loadedBranches = parsed;
-            } catch (e) {}
-          } else if (doc.setting_key === 'role_chat_permissions' && doc.setting_value) {
-            try {
-              const parsed = JSON.parse(doc.setting_value);
-              if (parsed && typeof parsed === 'object') setRoleChatPermissions(parsed);
-            } catch (e) {}
-          }
-        });
+        const resBranches = await databases.listDocuments(DATABASE_ID, 'homework_settings', [
+          Query.equal('setting_key', 'branches'),
+          Query.limit(5),
+        ]);
+        if (resBranches.documents && resBranches.documents.length > 0 && resBranches.documents[0].setting_value) {
+          try {
+            const p = JSON.parse(resBranches.documents[0].setting_value);
+            if (Array.isArray(p)) loadedBranches = p;
+          } catch (e) {}
+        }
+
+        const resClasses = await databases.listDocuments(DATABASE_ID, 'homework_settings', [
+          Query.equal('setting_key', 'classes'),
+          Query.limit(5),
+        ]);
+        if (resClasses.documents && resClasses.documents.length > 0 && resClasses.documents[0].setting_value) {
+          try {
+            const p = JSON.parse(resClasses.documents[0].setting_value);
+            if (Array.isArray(p)) loadedClasses = p;
+          } catch (e) {}
+        }
+
+        const resChat = await databases.listDocuments(DATABASE_ID, 'homework_settings', [
+          Query.equal('setting_key', 'role_chat_permissions'),
+          Query.limit(5),
+        ]);
+        if (resChat.documents && resChat.documents.length > 0 && resChat.documents[0].setting_value) {
+          try {
+            const p = JSON.parse(resChat.documents[0].setting_value);
+            if (p && typeof p === 'object') setRoleChatPermissions(p);
+          } catch (e) {}
+        }
       } catch (e) {}
 
-      if (loadedBranches.length > 0) setBranches(loadedBranches);
-      if (loadedClasses.length > 0) setClasses(loadedClasses);
+      if (loadedBranches !== null) setBranches(loadedBranches);
+      if (loadedClasses !== null) setClasses(loadedClasses);
 
       // 4. 讀取 Appwrite 雲端行事曆事件 (calendar_events)
       try {
@@ -312,16 +321,19 @@ export default function OnlineClassroomApp() {
       const res = await databases.listDocuments(
         DATABASE_ID,
         'homework_settings',
-        [Query.limit(100)]
+        [Query.equal('setting_key', key), Query.limit(10)]
       );
-      const existingDoc = res.documents.find((d: any) => d.setting_key === key);
-      if (existingDoc) {
+      if (res.documents && res.documents.length > 0) {
         await databases.updateDocument(
           DATABASE_ID,
           'homework_settings',
-          existingDoc.$id,
+          res.documents[0].$id,
           { setting_value: jsonStr }
         );
+        // 清理重複的多餘文檔
+        for (let i = 1; i < res.documents.length; i++) {
+          await databases.deleteDocument(DATABASE_ID, 'homework_settings', res.documents[i].$id).catch(() => {});
+        }
       } else {
         await databases.createDocument(
           DATABASE_ID,
@@ -422,6 +434,51 @@ export default function OnlineClassroomApp() {
     setBranches(newBranches);
     await saveSettingToCloud('branches', newBranches);
     await refreshAllData();
+  };
+
+  // ⭐ 課程更名全域連動 (同步更新帳戶修讀、學生表、單元及家課)
+  const handleRenameCourse = async (oldName: string, newName: string) => {
+    if (!oldName || !newName || oldName.trim() === newName.trim()) return;
+    try {
+      // 1. 同步更新帳戶名冊中的 enrolledCourses
+      const updatedUsers = usersList.map((u) => {
+        if (u.role === 'student' && u.enrolledCourses && u.enrolledCourses.length > 0) {
+          const replaced = u.enrolledCourses.map((c) => (c.trim() === oldName.trim() ? newName.trim() : c));
+          return { ...u, enrolledCourses: replaced };
+        }
+        return u;
+      });
+      await handleUpdateUsersList(updatedUsers);
+
+      // 2. 同步更新 students 表中該課程的修讀記錄
+      const stuRes = await databases.listDocuments(DATABASE_ID, 'students', [Query.limit(1000)]);
+      const docsToRename = (stuRes.documents || []).filter((d: any) => (d.course_name || '').trim() === oldName.trim());
+      await Promise.allSettled(
+        docsToRename.map((d) => databases.updateDocument(DATABASE_ID, 'students', d.$id, { course_name: newName }))
+      );
+
+      // 3. 同步更新 course_units / course_unit 表
+      for (const coll of ['course_units', 'course_unit']) {
+        try {
+          const uRes = await databases.listDocuments(DATABASE_ID, coll, [Query.limit(500)]);
+          const unitsToRename = (uRes.documents || []).filter((d: any) => (d.course_name || '').trim() === oldName.trim());
+          await Promise.allSettled(
+            unitsToRename.map((d) => databases.updateDocument(DATABASE_ID, coll, d.$id, { course_name: newName }))
+          );
+        } catch (e) {}
+      }
+
+      // 4. 同步更新 homework 表
+      try {
+        const hwRes = await databases.listDocuments(DATABASE_ID, 'homework', [Query.limit(500)]);
+        const hwToRename = (hwRes.documents || []).filter((d: any) => (d.course_name || d.courseName || '').trim() === oldName.trim());
+        await Promise.allSettled(
+          hwToRename.map((d) => databases.updateDocument(DATABASE_ID, 'homework', d.$id, { course_name: newName, courseName: newName }))
+        );
+      } catch (e) {}
+    } catch (err: any) {
+      console.warn('課程更名同步關聯模組略過:', err.message);
+    }
   };
 
   // ⭐ 課程異動直接寫入 Appwrite courses/course 獨立資料表
@@ -685,6 +742,7 @@ export default function OnlineClassroomApp() {
               onUpdateBranches={handleUpdateBranches}
               onUpdateClasses={handleUpdateClasses}
               onUpdateCourses={handleUpdateCourses}
+              onRenameCourse={handleRenameCourse}
               onOpenCourseContent={handleOpenCourseContent}
               isReadOnly={isStudentOrParent}
               currentUser={currentUser}
@@ -839,6 +897,7 @@ export default function OnlineClassroomApp() {
             onUpdateBranches={handleUpdateBranches}
             onUpdateClasses={handleUpdateClasses}
             onUpdateCourses={handleUpdateCourses}
+            onRenameCourse={handleRenameCourse}
           />
         )}
 

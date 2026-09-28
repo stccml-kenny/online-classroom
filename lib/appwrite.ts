@@ -462,16 +462,85 @@ export async function saveAllCoursesToCloud(courses: (string | CourseItem)[]): P
   if (!courses || !Array.isArray(courses)) return;
   const normalized = courses.map(normalizeCourse);
 
-  // A. 本地快取
-  try {
-    localStorage.setItem('oc_settings_courses', JSON.stringify(normalized));
-  } catch (e) {}
+  // A. 本地快取 (立即寫入以保障秒開)
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('oc_settings_courses', JSON.stringify(normalized));
+    } catch (e) {}
+  }
 
-  // B. 寫入 Appwrite 獨立 courses 表 (或 course 表)
+  // B. 寫入 homework_settings (精確寫入 courses master 記錄，並同步清理已刪除課程之 crs_* 文件)
+  try {
+    const masterJson = JSON.stringify(normalized);
+
+    // 1. 精確查詢 courses 鍵 (避開 limit 截斷，支援直接更新)
+    const masterRes = await databases.listDocuments(DATABASE_ID, 'homework_settings', [
+      Query.equal('setting_key', 'courses'),
+      Query.limit(10),
+    ]);
+
+    if (masterRes.documents && masterRes.documents.length > 0) {
+      await databases.updateDocument(DATABASE_ID, 'homework_settings', masterRes.documents[0].$id, {
+        setting_value: masterJson,
+      });
+      // 清除重複的舊記錄 (若有)
+      for (let i = 1; i < masterRes.documents.length; i++) {
+        await databases.deleteDocument(DATABASE_ID, 'homework_settings', masterRes.documents[i].$id).catch(() => {});
+      }
+    } else {
+      await databases.createDocument(DATABASE_ID, 'homework_settings', ID.unique(), {
+        setting_key: 'courses',
+        setting_value: masterJson,
+      });
+    }
+
+    // 2. 更新個別 crs_* 記錄並清理已刪除課程
+    const settingsRes = await databases.listDocuments(DATABASE_ID, 'homework_settings', [Query.limit(1000)]);
+    const existingCrsDocs = new Map<string, string>(); // sKey_lower -> $id
+    settingsRes.documents.forEach((d: any) => {
+      if (d.setting_key && d.setting_key.startsWith('crs_')) {
+        existingCrsDocs.set(d.setting_key.trim().toLowerCase(), d.$id);
+      }
+    });
+
+    const activeCrsKeys = new Set<string>();
+
+    for (const c of normalized) {
+      const key = `crs_${encodeURIComponent(((c.branch || '').toLowerCase() + ':::' + (c.name || '').toLowerCase() + ':::' + (c.timeSlot || '').toLowerCase()))}`.toLowerCase();
+      activeCrsKeys.add(key);
+      const jsonStr = JSON.stringify(c);
+
+      if (existingCrsDocs.has(key)) {
+        await databases.updateDocument(DATABASE_ID, 'homework_settings', existingCrsDocs.get(key)!, {
+          setting_value: jsonStr,
+        }).catch(() => {});
+      } else {
+        await databases.createDocument(DATABASE_ID, 'homework_settings', ID.unique(), {
+          setting_key: key,
+          setting_value: jsonStr,
+        }).catch(() => {});
+      }
+    }
+
+    // 清除雲端已刪除或更名之舊課程 crs_* 文件
+    const deleteCrsPromises: Promise<any>[] = [];
+    for (const [sKey, docId] of existingCrsDocs.entries()) {
+      if (!activeCrsKeys.has(sKey)) {
+        deleteCrsPromises.push(databases.deleteDocument(DATABASE_ID, 'homework_settings', docId).catch(() => {}));
+      }
+    }
+    if (deleteCrsPromises.length > 0) {
+      await Promise.allSettled(deleteCrsPromises);
+    }
+  } catch (err: any) {
+    console.warn('homework_settings 課程寫入錯誤:', err.message);
+  }
+
+  // C. 寫入 Appwrite 獨立 courses 表 (或 course 表，若資料庫存在)
   const tryCollections = ['courses', 'course'];
   for (const coll of tryCollections) {
     try {
-      const existingRes = await databases.listDocuments(DATABASE_ID, coll, [Query.limit(100)]);
+      const existingRes = await databases.listDocuments(DATABASE_ID, coll, [Query.limit(500)]);
       const existingMap = new Map<string, string>(); // courseKey -> $id
       existingRes.documents.forEach((d: any) => {
         const k = `${(d.branch || '').toLowerCase()}:::${(d.time_slot || d.timeSlot || '').toLowerCase()}:::${(d.name || '').toLowerCase()}`;
@@ -518,82 +587,70 @@ export async function saveAllCoursesToCloud(courses: (string | CourseItem)[]): P
         }
       }
 
-      // 清除已刪除課程在資料庫中的記錄
+      // 清除已刪除課程在獨立表中的記錄
+      const deletePromises: Promise<any>[] = [];
       for (const [k, docId] of existingMap.entries()) {
         if (!activeKeys.has(k)) {
-          await databases.deleteDocument(DATABASE_ID, coll, docId).catch(() => {});
+          deletePromises.push(databases.deleteDocument(DATABASE_ID, coll, docId).catch(() => {}));
         }
       }
-      break; // 成功寫入獨立表
+      if (deletePromises.length > 0) {
+        await Promise.allSettled(deletePromises);
+      }
+      break; // 成功處理獨立表
     } catch (e) {
       // 該 collection 不存在時嘗試下一個
     }
   }
-
-  // C. 寫入 homework_settings (每課程一筆 crs_{id}，以及總 courses JSON)
-  try {
-    const settingsRes = await databases.listDocuments(DATABASE_ID, 'homework_settings', [Query.limit(100)]);
-    const settingsMap = new Map<string, string>();
-    settingsRes.documents.forEach((d: any) => {
-      if (d.setting_key) settingsMap.set(d.setting_key, d.$id);
-    });
-
-    const activeCrsKeys = new Set<string>();
-
-    for (const c of normalized) {
-      const key = `crs_${encodeURIComponent(c.name.toLowerCase() + ':::' + (c.branch || '').toLowerCase())}`;
-      activeCrsKeys.add(key);
-      const jsonStr = JSON.stringify(c);
-
-      if (settingsMap.has(key)) {
-        await databases.updateDocument(DATABASE_ID, 'homework_settings', settingsMap.get(key)!, {
-          setting_value: jsonStr,
-        }).catch(() => {});
-      } else {
-        await databases.createDocument(DATABASE_ID, 'homework_settings', ID.unique(), {
-          setting_key: key,
-          setting_value: jsonStr,
-        }).catch(() => {});
-      }
-    }
-
-    // 清除已刪除課程
-    for (const [sKey, docId] of settingsMap.entries()) {
-      if (sKey.startsWith('crs_') && !activeCrsKeys.has(sKey)) {
-        await databases.deleteDocument(DATABASE_ID, 'homework_settings', docId).catch(() => {});
-      }
-    }
-
-    // 更新 master courses
-    const masterJson = JSON.stringify(normalized);
-    if (masterJson.length < 50000) {
-      if (settingsMap.has('courses')) {
-        await databases.updateDocument(DATABASE_ID, 'homework_settings', settingsMap.get('courses')!, {
-          setting_value: masterJson,
-        }).catch(() => {});
-      } else {
-        await databases.createDocument(DATABASE_ID, 'homework_settings', ID.unique(), {
-          setting_key: 'courses',
-          setting_value: masterJson,
-        }).catch(() => {});
-      }
-    }
-  } catch (err: any) {
-    console.warn('homework_settings 課程備援寫入略過:', err.message);
-  }
 }
 
-// 4. 課程持久化載入 (優先讀取獨立 courses/course 表，無縫支援雙軌)
+// 4. 課程持久化載入 (優先讀取 homework_settings 之權威 courses 總名冊，徹底杜絕刪除後復活)
 export async function loadAllCoursesFromCloud(): Promise<CourseItem[]> {
   const courseList: CourseItem[] = [];
   const seenKeys = new Set<string>();
+  let cloudFetchSuccess = false;
 
-  // A. 優先嘗試讀取獨立 courses / course 表
+  // A. 優先嘗試讀取 homework_settings 中的權威 courses 總名冊
+  try {
+    const res = await databases.listDocuments(DATABASE_ID, 'homework_settings', [
+      Query.equal('setting_key', 'courses'),
+      Query.limit(5),
+    ]);
+    if (res.documents && res.documents.length > 0) {
+      cloudFetchSuccess = true;
+      const doc = res.documents[0];
+      if (doc.setting_value) {
+        try {
+          const list = JSON.parse(doc.setting_value);
+          if (Array.isArray(list)) {
+            list.forEach((raw) => {
+              const item = normalizeCourse(raw);
+              const k = `${(item.branch || '').toLowerCase()}:::${(item.timeSlot || '').toLowerCase()}:::${(item.name || '').toLowerCase()}`;
+              if (item.name && !seenKeys.has(k)) {
+                seenKeys.add(k);
+                courseList.push(item);
+              }
+            });
+            // 雲端確認成功載入 (即便清空為 0 門課，也確實同步)
+            if (typeof window !== 'undefined') {
+              try {
+                localStorage.setItem('oc_settings_courses', JSON.stringify(courseList));
+              } catch (e) {}
+            }
+            return courseList;
+          }
+        } catch (e) {}
+      }
+    }
+  } catch (e) {}
+
+  // B. 嘗試讀取獨立 courses / course 表 (若存在)
   const tryCollections = ['courses', 'course'];
   for (const coll of tryCollections) {
     try {
-      const res = await databases.listDocuments(DATABASE_ID, coll, [Query.limit(100)]);
-      if (res.documents && res.documents.length > 0) {
+      const res = await databases.listDocuments(DATABASE_ID, coll, [Query.limit(500)]);
+      if (res.documents) {
+        cloudFetchSuccess = true;
         res.documents.forEach((d: any) => {
           let sDates: string[] = [];
           try {
@@ -616,18 +673,19 @@ export async function loadAllCoursesFromCloud(): Promise<CourseItem[]> {
             courseList.push(item);
           }
         });
-        break; // 成功讀取
+        if (courseList.length > 0) break;
       }
     } catch (e) {}
   }
 
-  // B. 讀取 homework_settings 中的專屬課程記錄 (crs_* 及 courses)
+  // C. 嘗試讀取個別 crs_* 記錄
   if (courseList.length === 0) {
     try {
       const res = await databases.listDocuments(DATABASE_ID, 'homework_settings', [Query.limit(500)]);
       res.documents.forEach((d: any) => {
-        try {
-          if (d.setting_key && d.setting_key.startsWith('crs_') && d.setting_value) {
+        if (d.setting_key && d.setting_key.startsWith('crs_') && d.setting_value) {
+          cloudFetchSuccess = true;
+          try {
             const parsed = JSON.parse(d.setting_value);
             if (parsed && parsed.name) {
               const item = normalizeCourse(parsed);
@@ -637,26 +695,14 @@ export async function loadAllCoursesFromCloud(): Promise<CourseItem[]> {
                 courseList.push(item);
               }
             }
-          } else if (d.setting_key === 'courses' && d.setting_value) {
-            const list = JSON.parse(d.setting_value);
-            if (Array.isArray(list)) {
-              list.forEach((raw) => {
-                const item = normalizeCourse(raw);
-                const k = `${(item.branch || '').toLowerCase()}:::${(item.timeSlot || '').toLowerCase()}:::${(item.name || '').toLowerCase()}`;
-                if (item.name && !seenKeys.has(k)) {
-                  seenKeys.add(k);
-                  courseList.push(item);
-                }
-              });
-            }
-          }
-        } catch (pe) {}
+          } catch (e) {}
+        }
       });
     } catch (e) {}
   }
 
-  // C. 結合本地快取防白屏
-  if (typeof window !== 'undefined' && courseList.length === 0) {
+  // D. 僅在雲端完全無法連線 (離線或錯誤) 時才使用本地快取；雲端正常時絕對不自本地快取復活已刪除課程！
+  if (!cloudFetchSuccess && courseList.length === 0 && typeof window !== 'undefined') {
     try {
       const cached = localStorage.getItem('oc_settings_courses');
       if (cached) {
@@ -675,14 +721,15 @@ export async function loadAllCoursesFromCloud(): Promise<CourseItem[]> {
     } catch (e) {}
   }
 
-  try {
-    localStorage.setItem('oc_settings_courses', JSON.stringify(courseList));
-  } catch (e) {}
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('oc_settings_courses', JSON.stringify(courseList));
+    } catch (e) {}
+  }
 
   return courseList;
 }
 
-// 5. 課程單元持久化 (雙軌支援 course_units 與 course_unit，捕獲真實 Appwrite $id)
 export async function saveCourseUnitToCloud(data: any, existingId?: string): Promise<string> {
   const tryCollections = ['course_units', 'course_unit'];
   const payload: any = {
@@ -722,14 +769,20 @@ export async function loadAllCourseUnitsFromCloud(): Promise<any[]> {
     try {
       const res = await databases.listDocuments(DATABASE_ID, coll, [
         Query.orderDesc('$createdAt'),
-        Query.limit(100),
+        Query.limit(500),
       ]);
-      if (res.documents && res.documents.length > 0) {
+      if (res.documents) {
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('oc_local_course_units', JSON.stringify(res.documents));
+          } catch (e) {}
+        }
         return res.documents;
       }
     } catch (e) {}
   }
 
+  // 僅當雲端讀取失敗時，備援讀取本地
   if (typeof window !== 'undefined') {
     try {
       const cached = localStorage.getItem('oc_local_course_units');
@@ -820,9 +873,9 @@ export async function loadNewsFromCloud(): Promise<any[]> {
   for (const coll of tryCollections) {
     try {
       const res = await databases.listDocuments(DATABASE_ID, coll, [
-        Query.limit(100),
+        Query.limit(200),
       ]);
-      if (res.documents && res.documents.length > 0) {
+      if (res.documents) {
         // 在記憶體中確保置頂優先，其次按發布日期排序
         const sorted = [...res.documents].sort((a: any, b: any) => {
           if (a.is_pinned && !b.is_pinned) return -1;
@@ -844,7 +897,7 @@ export async function loadNewsFromCloud(): Promise<any[]> {
     }
   }
 
-  // 雲端讀取失敗或無資料時，讀取本機暫存
+  // 僅當雲端讀取失敗時，備援讀取本機暫存
   if (typeof window !== 'undefined') {
     try {
       const local = localStorage.getItem('oc_local_news');
