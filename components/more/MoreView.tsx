@@ -83,18 +83,18 @@ export const MoreView: React.FC<MoreViewProps> = ({
 
       {/* 第一組模組功能 */}
       <div className="bg-white">
-        {/* 👑 系統管理人員專屬：帳戶管理 (統一派發5大身分帳號) 與即時訊息控制 */}
+        {/* 👑 系統管理人員專屬：帳戶管理 與 權限管理 */}
         {isAdmin && (
           <>
             <MenuItem
               icon={<Shield className="text-purple-600" size={20} />}
-              title="帳戶管理 (統一派發5大身分帳號)"
+              title="帳戶管理"
               badge="👑 管理員"
               onClick={() => onOpenAccountMgmt?.('issue')}
             />
             <MenuItem
               icon={<MessageCircle className="text-purple-600" size={20} />}
-              title="即時訊息角色權限管理 (啟動/暫停)"
+              title="權限管理"
               badge="👑 訊息控制"
               onClick={() => onOpenAccountMgmt?.('chat_settings')}
             />
@@ -127,7 +127,7 @@ export const MoreView: React.FC<MoreViewProps> = ({
       <div className="bg-white">
         <MenuItem
           icon={<Lock className="text-gray-600" size={20} />}
-          title="密碼資訊 (統一由管理員派發 8 位數字)"
+          title="密碼管理"
           onClick={() => {
             alert('💡 本系統密碼統一為 8 位數字，由學校/機構系統管理人員統一派發。如需重設密碼，請聯絡管理員。');
           }}

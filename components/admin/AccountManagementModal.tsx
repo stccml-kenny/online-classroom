@@ -1,15 +1,15 @@
-﻿import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import {
   X, User, Lock, Phone, Mail, MapPin, Layers, Shield, GraduationCap,
   Users, Eye, EyeOff, CheckCircle2, AlertCircle,
   UserPlus, Sparkles, LogOut, Check, Search, Filter, Trash2,
   RotateCcw, Copy, Edit2, KeyRound, Download, UploadCloud,
-  FileSpreadsheet, CheckCircle, Plus, CheckSquare, Sliders, Square, MessageCircle
+  FileSpreadsheet, CheckCircle, Plus, CheckSquare, Sliders, Square, MessageCircle, Loader2
 } from 'lucide-react';
 import { UserProfile, UserRole, ROLE_CONFIGS, is8DigitNumeric, DEFAULT_DEMO_USERS } from '@/components/auth/AuthModal';
 import { parseBranchInfo, CourseItem, getCourseDisplayName } from '@/components/homework/HomeworkSetupModal';
 import { RoleChatPermissions, DEFAULT_ROLE_CHAT_PERMISSIONS } from '@/types/chat';
-import { databases, DATABASE_ID } from '@/lib/appwrite';
+import { databases, DATABASE_ID, loadAllAccountsFromCloud } from '@/lib/appwrite';
 import { ID, Query } from 'appwrite';
 
 interface AccountManagementModalProps {
@@ -161,8 +161,73 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
   // ⭐ 需求 1：讀取 database 之會員資料 (students 表) 並自動整合進帳戶名冊
   const [dbStudents, setDbStudents] = useState<any[]>([]);
 
+  // ⭐ 手機端「下拉重新整理 (Pull-to-Refresh)」狀態與觸控監聽
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const touchStartY = useRef(0);
+  const modalScrollRef = useRef<HTMLDivElement>(null);
+
+  // ⭐ 每次進入帳戶管理或主動觸發時，向雲端資料庫提取最新資料 (跨裝置即時同步，絕不殘留已刪除帳號)
+  const refreshLatestFromCloud = async () => {
+    setIsRefreshing(true);
+    try {
+      // 1. 從 Appwrite 雲端資料庫提取最新帳戶名冊 (雲端為唯一權威，絕不自本地快取復活已刪除帳號)
+      const freshAccounts = await loadAllAccountsFromCloud();
+      await onUpdateUsersList(freshAccounts);
+      try {
+        localStorage.setItem('oc_users_list', JSON.stringify(freshAccounts));
+      } catch (e) {}
+
+      // 2. 從 Appwrite 雲端資料庫提取最新 students 表全量記錄
+      const res = await databases.listDocuments(DATABASE_ID, 'students', [Query.limit(1000)]);
+      const docs = res.documents || [];
+      setDbStudents(docs);
+      try {
+        localStorage.setItem('oc_local_students', JSON.stringify(docs));
+      } catch (e) {}
+    } catch (err: any) {
+      console.warn('提取雲端資料庫最新資料略過:', err.message);
+    } finally {
+      setIsRefreshing(false);
+      setPullDistance(0);
+    }
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (isRefreshing) return;
+    const scrollTop = modalScrollRef.current?.scrollTop ?? 0;
+    if (scrollTop <= 0) {
+      touchStartY.current = e.touches[0].clientY;
+    } else {
+      touchStartY.current = 0;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartY.current <= 0 || isRefreshing) return;
+    const currentY = e.touches[0].clientY;
+    const diff = currentY - touchStartY.current;
+    if (diff > 0) {
+      // 阻尼係數：最大下拉 70px
+      const dist = Math.min(diff * 0.4, 70);
+      setPullDistance(dist);
+    }
+  };
+
+  const handleTouchEnd = async () => {
+    if (touchStartY.current <= 0) return;
+    touchStartY.current = 0;
+    if (pullDistance >= 45 && !isRefreshing) {
+      setIsRefreshing(true);
+      setPullDistance(45);
+      await refreshLatestFromCloud();
+    } else {
+      setPullDistance(0);
+    }
+  };
+
+  // 每次進入帳戶管理，優先秒開本機快取，並立即向 Appwrite 雲端資料庫提取最新資料
   useEffect(() => {
-    // 1. 優先從本地快取載入會員名冊
     try {
       const cached = localStorage.getItem('oc_local_students');
       if (cached) {
@@ -173,21 +238,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
       }
     } catch (e) {}
 
-    // 2. 雲端同步 Appwrite students 表
-    const fetchStudentsCloud = async () => {
-      try {
-        const res = await databases.listDocuments(DATABASE_ID, 'students', [Query.limit(500)]);
-        if (res.documents && res.documents.length > 0) {
-          setDbStudents(res.documents);
-          try {
-            localStorage.setItem('oc_local_students', JSON.stringify(res.documents));
-          } catch (e) {}
-        }
-      } catch (err: any) {
-        console.warn('帳戶管理讀取 students 表:', err.message);
-      }
-    };
-    fetchStudentsCloud();
+    refreshLatestFromCloud();
   }, []);
 
   // 清除舊 dummy 帳號
@@ -1498,17 +1549,27 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
               👑
             </div>
             <div>
-              <h2 className="font-black text-base sm:text-lg leading-tight">帳戶管理與派發中心</h2>
-              <p className="text-xs text-purple-200">系統管理人員專屬 · 統一派發 5 大身分帳號與管理名冊</p>
+              <h2 className="font-black text-base sm:text-lg leading-tight">帳戶管理</h2>
+              <p className="text-xs text-purple-200">系統管理人員專屬 · 帳戶管理與名冊設定</p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors text-white"
-            title="關閉"
-          >
-            <X size={20} />
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => refreshLatestFromCloud()}
+              disabled={isRefreshing}
+              className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors text-white disabled:opacity-50 cursor-pointer"
+              title="自雲端資料庫重新整理最新名冊"
+            >
+              <RotateCcw size={18} className={isRefreshing ? "animate-spin" : ""} />
+            </button>
+            <button
+              onClick={onClose}
+              className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors text-white cursor-pointer"
+              title="關閉"
+            >
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         {/* 頂部功能切換 (1. 派發新帳戶 | 2. Excel 批次匯入 | 3. 已派發帳號名冊) */}
@@ -1555,12 +1616,41 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
             }`}
           >
             <MessageCircle size={16} />
-            <span>訊息權限</span>
+            <span>權限管理</span>
           </button>
         </div>
 
-        {/* 滿板內容滑動區 */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+        {/* ⭐ 手機端下拉重新整理 (Pull-to-Refresh) 視覺回饋指示器 */}
+        {(pullDistance > 0 || isRefreshing) && (
+          <div
+            style={{ height: `${pullDistance}px` }}
+            className="w-full flex items-center justify-center overflow-hidden transition-all duration-150 bg-gradient-to-b from-purple-100 to-transparent text-purple-800 shrink-0 border-b border-purple-200"
+          >
+            <div className="flex items-center gap-2 text-xs font-bold">
+              <Loader2
+                size={16}
+                className={`text-purple-700 ${isRefreshing ? 'animate-spin' : ''}`}
+                style={{ transform: isRefreshing ? undefined : `rotate(${pullDistance * 5}deg)` }}
+              />
+              <span>
+                {isRefreshing
+                  ? '正在自雲端資料庫提取最新名冊...'
+                  : pullDistance >= 45
+                  ? '放開立即同步資料庫'
+                  : '下拉提取資料庫最新資料'}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* 滿板內容滑動區 (支援手機下拉手勢) */}
+        <div
+          ref={modalScrollRef}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4"
+        >
           
           {/* TAB 1: 單筆派發新帳戶表單 */}
           {activeTab === 'issue' && (
@@ -2674,7 +2764,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                   <MessageCircle size={20} />
                 </div>
                 <div className="space-y-1">
-                  <div className="font-extrabold text-sm text-purple-950">👑 系統管理員：即時訊息角色權限管理</div>
+                  <div className="font-extrabold text-sm text-purple-950">👑 系統管理員：權限管理</div>
                   <p className="text-gray-600 leading-relaxed text-[11px]">
                     此處可即時控制各個帳戶身分（導師、助教、學生、家長）之即時訊息功能。當某一角色設定為「暫停」時，該身分用戶將無法查閱或傳送即時訊息，其底部導航與頂部圖示將自動隱藏；管理員始終具備完整權限。設定即時儲存並同步至雲端。
                   </p>

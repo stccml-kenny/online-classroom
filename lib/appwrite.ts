@@ -414,8 +414,9 @@ export async function loadAllAccountsFromCloud(): Promise<UserProfile[]> {
     } catch (e) {}
   }
 
-  // C. 結合本地快取 (若本地儲存有更豐富自訂資訊，補充未同步項目)
-  if (typeof window !== 'undefined') {
+  // C. 僅當雲端讀取完全失敗或完全無資料時（例如離線），才以本地快取作為應急備援
+  // ⭐ 雲端連線成功時，嚴格以雲端為唯一權威，絕不自本地快取復活其他機器已刪除的帳戶！
+  if (accountMap.size === 0 && typeof window !== 'undefined') {
     try {
       const cached = localStorage.getItem('oc_users_list');
       if (cached) {
@@ -424,16 +425,7 @@ export async function loadAllAccountsFromCloud(): Promise<UserProfile[]> {
           list.forEach((u) => {
             const item = extractUserFromDoc(u);
             if (item && item.username) {
-              const uLower = item.username.toLowerCase();
-              if (!accountMap.has(uLower)) {
-                accountMap.set(uLower, item);
-              } else {
-                // 如果本地的密碼非預設密碼且與雲端不同，以本地已修改密碼為準
-                const cloudUser = accountMap.get(uLower)!;
-                if (item.password && item.password !== '12345678' && cloudUser.password === '12345678') {
-                  accountMap.set(uLower, { ...cloudUser, password: item.password });
-                }
-              }
+              accountMap.set(item.username.toLowerCase(), item);
             }
           });
         }

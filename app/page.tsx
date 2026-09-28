@@ -59,6 +59,8 @@ export default function OnlineClassroomApp() {
   const handleOpenAccountMgmt = (tab: 'issue' | 'excel' | 'list' | 'chat_settings' = 'issue') => {
     setAccountMgmtInitialTab(tab);
     setShowAccountMgmtModal(true);
+    // 每次進入帳戶管理主動向雲端提取最新資料 (保證跨裝置即時同步)
+    loadSharedSettings();
   };
 
   const handleUpdateRoleChatPermissions = (newPermissions: RoleChatPermissions) => {
@@ -855,7 +857,7 @@ export default function OnlineClassroomApp() {
           onVerifyLogin={directLoginFromCloud}
         />
 
-        {/* 8. 👑 系統管理員專屬：帳戶管理與派發中心 (統一派發5大身分帳號) */}
+        {/* 8. 👑 系統管理員專屬：帳戶管理 */}
         {showAccountMgmtModal && (
           <AccountManagementModal
             isOpen={true}
