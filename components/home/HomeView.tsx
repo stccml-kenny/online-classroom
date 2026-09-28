@@ -306,7 +306,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   </div>
                 </button>
 
-                {/* 學校與班別設定 */}
+                {/* 學校與班別 */}
                 <button
                   type="button"
                   onClick={onOpenSetup}
@@ -317,12 +317,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
                       <Settings size={18} />
                     </div>
                     <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-600 font-bold">
-                      設定
+                      管理
                     </span>
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-gray-800 group-hover:text-rose-600">系統設定</div>
-                    <div className="text-[10px] text-gray-400">學校校區與班別結構</div>
+                    <div className="text-xs font-bold text-gray-800 group-hover:text-rose-600">學校與班別</div>
+                    <div className="text-[10px] text-gray-400">學校校區與班別名冊</div>
                   </div>
                 </button>
               </>

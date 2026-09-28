@@ -15,8 +15,8 @@ export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, type })
   const isPrivacy = type === 'privacy';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg h-[90vh] max-h-[720px] flex flex-col overflow-hidden relative border border-gray-100 animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex flex-col bg-[#F8F9FA] w-screen h-screen overflow-hidden animate-in fade-in duration-200">
+      <div className="w-full flex-1 flex flex-col overflow-hidden bg-white">
         
         {/* 頂部 Header */}
         <div className={`px-5 py-4 text-white flex items-center justify-between shrink-0 shadow-sm ${
@@ -46,7 +46,7 @@ export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, type })
         </div>
 
         {/* 條款本文內容 (可垂直滾動) */}
-        <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4 text-xs text-gray-700 leading-relaxed bg-[#F8F9FA]">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-4 text-xs sm:text-sm text-gray-700 leading-relaxed bg-[#F8F9FA] max-w-4xl w-full mx-auto">
           {isPrivacy ? (
             /* 私隱政策詳細內容 */
             <div className="space-y-3.5">
@@ -193,7 +193,7 @@ export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, type })
           <button
             type="button"
             onClick={onClose}
-            className="w-full py-2.5 bg-gray-800 hover:bg-gray-700 text-white font-bold rounded-xl text-xs transition-colors shadow-xs"
+            className="w-full max-w-md mx-auto py-2.5 bg-gray-800 hover:bg-gray-700 text-white font-bold rounded-xl text-xs sm:text-sm transition-colors shadow-xs"
           >
             我已閱讀並理解
           </button>

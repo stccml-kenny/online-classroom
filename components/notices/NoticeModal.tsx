@@ -214,8 +214,8 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({
   }, [notices, selectedCategory, searchQuery, currentUser]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl h-[92vh] max-h-[760px] flex flex-col overflow-hidden relative border border-gray-100 animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex flex-col bg-[#F8F9FA] w-screen h-screen overflow-hidden animate-in fade-in duration-200">
+      <div className="w-full flex-1 flex flex-col overflow-hidden bg-white">
         
         {/* 頂部 Header */}
         <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white px-5 py-3.5 flex items-center justify-between shrink-0 shadow-sm">
@@ -310,7 +310,7 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({
         )}
 
         {/* 核心內容區 */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3 bg-[#F8F9FA]">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3 bg-[#F8F9FA] max-w-4xl w-full mx-auto">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20 text-gray-400 space-y-2">
               <Loader2 size={24} className="animate-spin text-emerald-600" />
@@ -495,11 +495,11 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({
         </div>
 
         {/* 底部按鈕 */}
-        <div className="p-3.5 bg-gray-50 border-t border-gray-200 flex justify-end shrink-0">
+        <div className="p-3.5 bg-white border-t border-gray-200 flex justify-end shrink-0 shadow-md">
           <button
             type="button"
             onClick={onClose}
-            className="w-full py-2.5 bg-gray-800 hover:bg-gray-700 text-white font-bold rounded-xl text-xs transition-colors"
+            className="w-full max-w-md mx-auto py-2.5 bg-gray-800 hover:bg-gray-700 text-white font-bold rounded-xl text-xs sm:text-sm transition-colors shadow-xs"
           >
             完成並關閉
           </button>

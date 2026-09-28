@@ -115,7 +115,7 @@ export const MoreView: React.FC<MoreViewProps> = ({
         {!isStudentOrParent && (
           <MenuItem
             icon={<Settings className="text-[#FF6B57]" size={20} />}
-            title="設定 (學校與班別)"
+            title="學校與班別"
             onClick={onOpenSetup}
           />
         )}

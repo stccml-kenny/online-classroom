@@ -1065,7 +1065,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
   };
 
   const mainContent = (
-    <div className={`bg-white w-full ${isInline ? 'flex-1 flex flex-col min-h-0' : 'max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]'}`}>
+    <div className={`bg-white w-full ${isInline ? 'flex-1 flex flex-col min-h-0' : 'flex-1 flex flex-col w-full h-full overflow-hidden'}`}>
       {/* 頂部標題 */}
       {!isInline ? (
         <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-5 py-3.5 flex justify-between items-center shrink-0">
@@ -1073,7 +1073,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
             {mode === 'settings_only' ? <Settings size={18} /> : <GraduationCap size={18} />}
             <div>
               <h4 className="font-bold text-base leading-tight">
-                {mode === 'settings_only' ? '學校與班別設定' : '課程與班別設定'}
+                {mode === 'settings_only' ? '學校與班別' : '課程與班別設定'}
               </h4>
               <p className="text-[10px] text-white/80">
                 {mode === 'settings_only' ? '管理學校/分校與班別名冊' : '管理各校課程、上課時段、每節排程、學校及班別名冊'}
@@ -2117,7 +2117,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex flex-col bg-[#F8F9FA] w-screen h-screen overflow-hidden animate-in fade-in duration-200">
       {mainContent}
     </div>
   );
