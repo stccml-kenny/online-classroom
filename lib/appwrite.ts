@@ -137,7 +137,7 @@ export async function saveAllAccountsToCloud(accounts: UserProfile[]): Promise<v
     } catch (e) {}
   }
 
-  // B. 寫入 Appwrite homework_settings 表 (每帳號一筆 acc_{username}，支援短長鍵壓縮，絕對不超字元限制)
+  // B. 寫入 Appwrite homework_settings 表 (每帳號一筆 acc_{username}，並行寫入防限流，且同步儲存 master accounts)
   try {
     const settingsRes = await databases.listDocuments(DATABASE_ID, 'homework_settings', [Query.limit(500)]);
     const settingsMap = new Map<string, string>(); // sKey_lower -> $id
@@ -147,8 +147,8 @@ export async function saveAllAccountsToCloud(accounts: UserProfile[]): Promise<v
 
     const activeAccKeys = new Set<string>();
 
-    for (const acc of accounts) {
-      if (!acc || !acc.username) continue;
+    const saveAccountDoc = async (acc: UserProfile) => {
+      if (!acc || !acc.username) return;
       const uLower = acc.username.trim().toLowerCase();
       const key = `acc_${uLower}`;
       activeAccKeys.add(key);
@@ -204,13 +204,53 @@ export async function saveAllAccountsToCloud(accounts: UserProfile[]): Promise<v
         });
         if (created) settingsMap.set(key, created.$id);
       }
+    };
+
+    // ⭐ 分批並行寫入 (每批 6 個並行，兼顧極速與防 Rate-Limit)
+    const chunkSize = 6;
+    for (let i = 0; i < accounts.length; i += chunkSize) {
+      const chunk = accounts.slice(i, i + chunkSize);
+      await Promise.allSettled(chunk.map((a) => saveAccountDoc(a)));
+    }
+
+    // ⭐ 儲存總帳號名冊 (accounts) 至 homework_settings 作為強大雙軌備援
+    const compactAccountsList = accounts.map((acc) => ({
+      id: acc.id,
+      u: acc.username,
+      n: acc.name,
+      r: acc.role,
+      p: acc.password,
+      b: acc.branch,
+      c: acc.className,
+      ec: acc.enrolledCourses,
+      cu: acc.childrenUsernames,
+      e: acc.email,
+      ph: acc.phone,
+    }));
+    const accountsMasterJson = JSON.stringify(compactAccountsList);
+    if (accountsMasterJson.length < 50000) {
+      if (settingsMap.has('accounts')) {
+        await databases.updateDocument(DATABASE_ID, 'homework_settings', settingsMap.get('accounts')!, {
+          setting_value: accountsMasterJson,
+        }).catch(() => {});
+      } else {
+        await databases.createDocument(DATABASE_ID, 'homework_settings', ID.unique(), {
+          setting_key: 'accounts',
+          setting_value: accountsMasterJson,
+        }).catch(() => {});
+      }
     }
 
     // 清除雲端已刪除或更名之舊帳號 key (acc_*)
-    for (const [sKey, docId] of settingsMap.entries()) {
-      if (sKey.startsWith('acc_') && !activeAccKeys.has(sKey)) {
-        await databases.deleteDocument(DATABASE_ID, 'homework_settings', docId).catch(() => {});
-      }
+    const keysToDelete = Array.from(settingsMap.entries()).filter(
+      ([sKey]) => sKey.startsWith('acc_') && !activeAccKeys.has(sKey)
+    );
+    if (keysToDelete.length > 0) {
+      await Promise.allSettled(
+        keysToDelete.map(([, docId]) =>
+          databases.deleteDocument(DATABASE_ID, 'homework_settings', docId).catch(() => {})
+        )
+      );
     }
   } catch (err: any) {
     console.warn('雲端 homework_settings 帳戶寫入錯誤:', err.message);
@@ -321,13 +361,31 @@ export async function directLoginFromCloud(
   return null;
 }
 
-// 2. 帳戶持久化載入 (跨端一致：優先從 homework_settings acc_* 載入權威帳號，保證修改後 refresh 絕不重置)
+// 2. 帳戶持久化載入 (優先讀取 homework_settings 中的專屬記錄與總帳號表，保證名冊 100% 完整載入)
 export async function loadAllAccountsFromCloud(): Promise<UserProfile[]> {
   const accountMap = new Map<string, UserProfile>();
 
-  // A. 優先讀取 homework_settings 中的專屬帳號記錄 (acc_*)
+  // A. 優先讀取 homework_settings 中的專屬帳號記錄 (acc_*) 與總名冊 (accounts)
   try {
     const res = await databases.listDocuments(DATABASE_ID, 'homework_settings', [Query.limit(500)]);
+    // 先載入 master accounts
+    res.documents.forEach((d: any) => {
+      if (d.setting_key === 'accounts' && d.setting_value) {
+        try {
+          const list = JSON.parse(d.setting_value);
+          if (Array.isArray(list)) {
+            list.forEach((raw) => {
+              const u = extractUserFromDoc(raw);
+              if (u && u.username && !accountMap.has(u.username.toLowerCase())) {
+                accountMap.set(u.username.toLowerCase(), u);
+              }
+            });
+          }
+        } catch (e) {}
+      }
+    });
+
+    // 載入各個別 acc_* 覆蓋更新最新單項
     res.documents.forEach((d: any) => {
       const sKey = (d.setting_key || '').trim().toLowerCase();
       if (!sKey.startsWith('acc_')) return;

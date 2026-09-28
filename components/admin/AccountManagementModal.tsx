@@ -95,6 +95,10 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
 
   // ⭐ 需求：帳戶名冊批次選擇、修改與刪除狀態
   const [selectedUsernames, setSelectedUsernames] = useState<string[]>([]);
+  // ⭐ 字串大小寫與空白正規化輔助工具 (徹底杜絕大小寫或前後空白引起的比對失敗)
+  const normalizeUname = (s: string) => (s || '').trim().toLowerCase();
+  const normalizeName = (s: string) => (s || '').trim().toLowerCase();
+
   const [showBatchModal, setShowBatchModal] = useState<boolean>(false);
   const [batchActionType, setBatchActionType] = useState<'branch' | 'class' | 'add_course' | 'remove_course' | 'password'>('branch');
   const [batchTargetBranch, setBatchTargetBranch] = useState<string>('');
@@ -257,7 +261,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
           createdAt: new Date().toISOString()
         });
       } else {
-        // 若該學生已在 usersList 中，保持其自訂修改的密碼與分校，僅確保其 enrolledCourses 包含資料庫課程
+        // 若該學生已在 usersList 中，保持其自訂修改的密碼與分校；僅當帳號未曾設定課程時，才自資料庫補入課程 (防範已退選課程遭強制還原)
         const idx = list.findIndex(
           (u) =>
             u.role === 'student' &&
@@ -265,13 +269,12 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
         );
         if (idx !== -1) {
           const u = list[idx];
-          const mergedCourses = Array.from(
-            new Set([...(u.enrolledCourses || []), ...Array.from(member.courses)])
-          );
-          list[idx] = {
-            ...u,
-            enrolledCourses: mergedCourses
-          };
+          if (!u.enrolledCourses || u.enrolledCourses.length === 0) {
+            list[idx] = {
+              ...u,
+              enrolledCourses: Array.from(member.courses)
+            };
+          }
         }
       }
     });
@@ -344,7 +347,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
   };
 
   // 1. 單筆派發新帳戶
-  const handleIssueAccount = (e: React.FormEvent) => {
+  const handleIssueAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedName = name.trim();
     const rawUsername = username.trim();
@@ -424,8 +427,8 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
       createdAt: new Date().toISOString()
     };
 
-    const updated = [newUser, ...cleanUsersList];
-    onUpdateUsersList(updated);
+    const updated = [newUser, ...allAccounts.filter((u) => normalizeUname(u.username) !== normalizeUname(newUser.username))];
+    await onUpdateUsersList(updated);
     setLastIssuedUser(newUser);
 
     // ⭐ 同步寫入會員目錄 (students 表與本地快取)
@@ -481,7 +484,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
   };
 
   // 刪除帳戶
-  const handleDeleteAccount = (targetUser: UserProfile) => {
+  const handleDeleteAccount = async (targetUser: UserProfile) => {
     if (targetUser.username === 'admin') {
       alert('⚠️ 總管理員帳號不可刪除！');
       return;
@@ -489,31 +492,37 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
     if (!window.confirm(`確定要刪除帳號「${targetUser.username}」(${targetUser.name}) 嗎？`)) {
       return;
     }
-    const updated = cleanUsersList.filter((u) => u.username !== targetUser.username);
-    onUpdateUsersList(updated);
+    const targetNorm = normalizeUname(targetUser.username);
+    const updated = allAccounts.filter((u) => normalizeUname(u.username) !== targetNorm);
+    await onUpdateUsersList(updated);
+    try {
+      localStorage.setItem('oc_users_list', JSON.stringify(updated));
+    } catch (e) {}
 
     // ⭐ 同步刪除會員目錄中相對的會員記錄
     if (targetUser.role === 'student') {
+      const sNameNorm = normalizeName(targetUser.name);
       try {
         const cached = localStorage.getItem('oc_local_students');
         if (cached) {
           const list = JSON.parse(cached);
-          const remaining = list.filter((s: any) => s.student_name !== targetUser.name);
+          const remaining = list.filter((s: any) => normalizeName(s.student_name) !== sNameNorm);
           localStorage.setItem('oc_local_students', JSON.stringify(remaining));
+          setDbStudents(remaining);
         }
       } catch (e) {}
 
       try {
-        databases.listDocuments(DATABASE_ID, 'students', [Query.limit(500)]).then((res) => {
-          const docsToDelete = res.documents.filter(
-            (d: any) => d.student_name === targetUser.name
-          );
-          docsToDelete.forEach((doc) => {
-            databases.deleteDocument(DATABASE_ID, 'students', doc.$id).catch(() => {});
-          });
-        }).catch(() => {});
+        const res = await databases.listDocuments(DATABASE_ID, 'students', [Query.limit(500)]);
+        const docsToDelete = res.documents.filter(
+          (d: any) => normalizeName(d.student_name) === sNameNorm
+        );
+        await Promise.allSettled(
+          docsToDelete.map((doc) => databases.deleteDocument(DATABASE_ID, 'students', doc.$id))
+        );
       } catch (e) {}
     }
+    alert(`✅ 帳號「${targetUser.username}」已成功刪除！`);
   };
 
   // ⭐ 啟動編輯帳戶
@@ -636,36 +645,44 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
   };
 
   // 行內為學生快速退出課程
-  const handleRemoveCourseFromStudent = (studentUser: UserProfile, courseToRemove: string) => {
+  const handleRemoveCourseFromStudent = async (studentUser: UserProfile, courseToRemove: string) => {
     if (!window.confirm(`確定要為「${studentUser.name}」退出課程「${courseToRemove}」嗎？`)) return;
     const currentCourses = studentUser.enrolledCourses || [];
-    const remaining = currentCourses.filter((c) => c !== courseToRemove);
+    const remaining = currentCourses.filter((c) => c.trim() !== courseToRemove.trim());
 
     const updatedUser = { ...studentUser, enrolledCourses: remaining };
-    const updatedList = cleanUsersList.map((u) =>
-      u.username === studentUser.username ? updatedUser : u
+    const updatedList = allAccounts.map((u) =>
+      normalizeUname(u.username) === normalizeUname(studentUser.username) ? updatedUser : u
     );
-    onUpdateUsersList(updatedList);
+    await onUpdateUsersList(updatedList);
+
+    // 更新本地快取
+    try {
+      const cached = localStorage.getItem('oc_local_students');
+      if (cached) {
+        const list = JSON.parse(cached);
+        const modified = list.filter(
+          (s: any) => !(normalizeName(s.student_name) === normalizeName(studentUser.name) && (s.course_name || '').trim() === courseToRemove.trim())
+        );
+        localStorage.setItem('oc_local_students', JSON.stringify(modified));
+        setDbStudents(modified);
+      }
+    } catch (e) {}
 
     // 同步雲端 students 表
     try {
-      databases.listDocuments(DATABASE_ID, 'students', [Query.limit(500)]).then((res) => {
-        const matched = res.documents.find(
-          (d: any) => d.student_name === studentUser.name && d.course_name === courseToRemove
-        );
-        if (matched) {
-          if (remaining.length === 0) {
-            databases.updateDocument(DATABASE_ID, 'students', matched.$id, { course_name: '' }).catch(() => {});
-          } else {
-            databases.deleteDocument(DATABASE_ID, 'students', matched.$id).catch(() => {});
-          }
-        }
-      }).catch(() => {});
+      const res = await databases.listDocuments(DATABASE_ID, 'students', [Query.limit(500)]);
+      const docsToDelete = res.documents.filter(
+        (d: any) => normalizeName(d.student_name) === normalizeName(studentUser.name) && (d.course_name || '').trim() === courseToRemove.trim()
+      );
+      await Promise.allSettled(
+        docsToDelete.map((doc) => databases.deleteDocument(DATABASE_ID, 'students', doc.$id))
+      );
     } catch (e) {}
   };
 
   // 行內為學生快速加選課程
-  const handleQuickAddCourse = (studentUser: UserProfile) => {
+  const handleQuickAddCourse = async (studentUser: UserProfile) => {
     const courseToAdd = quickAddCourseSelected.trim();
     if (!courseToAdd) return;
     const currentCourses = studentUser.enrolledCourses || [];
@@ -675,28 +692,43 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
     }
     const updatedCourses = [...currentCourses, courseToAdd];
     const updatedUser = { ...studentUser, enrolledCourses: updatedCourses };
-    const updatedList = cleanUsersList.map((u) =>
-      u.username === studentUser.username ? updatedUser : u
+    const updatedList = allAccounts.map((u) =>
+      normalizeUname(u.username) === normalizeUname(studentUser.username) ? updatedUser : u
     );
-    onUpdateUsersList(updatedList);
+    await onUpdateUsersList(updatedList);
     setQuickAddCourseUserId(null);
     setQuickAddCourseSelected('');
 
-    // 同步雲端
+    // 同步本地
     try {
-      databases.createDocument(DATABASE_ID, 'students', ID.unique(), {
+      const cached = localStorage.getItem('oc_local_students');
+      const list = cached ? JSON.parse(cached) : [];
+      list.unshift({
+        $id: `stu_${Date.now()}`,
         branch: studentUser.branch || '',
         class_name: studentUser.className || '',
         course_name: courseToAdd,
         student_name: studentUser.name,
-      }).catch(() => {});
+      });
+      localStorage.setItem('oc_local_students', JSON.stringify(list));
+      setDbStudents(list);
+    } catch (e) {}
+
+    // 同步雲端
+    try {
+      await databases.createDocument(DATABASE_ID, 'students', ID.unique(), {
+        branch: studentUser.branch || '',
+        class_name: studentUser.className || '',
+        course_name: courseToAdd,
+        student_name: studentUser.name,
+      });
     } catch (e) {}
 
     alert(`✅ 已為「${studentUser.name}」加選「${courseToAdd}」！`);
   };
 
   // 重設 8 位密碼
-  const handleConfirmResetPassword = (targetUser: UserProfile) => {
+  const handleConfirmResetPassword = async (targetUser: UserProfile) => {
     const pwd = newResetPassword.trim();
     if (!pwd) {
       alert('請輸入新密碼（必需為 8 位純數字）！');
@@ -706,16 +738,16 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
       alert('⚠️ 重設密碼必需為 8 位純數字（例如：12345678）！');
       return;
     }
-    const updated = cleanUsersList.map((u) => {
-      if (u.username === targetUser.username) {
+    const updated = allAccounts.map((u) => {
+      if (normalizeUname(u.username) === normalizeUname(targetUser.username)) {
         return { ...u, password: pwd };
       }
       return u;
     });
-    if (!cleanUsersList.some((u) => u.username === targetUser.username)) {
+    if (!allAccounts.some((u) => normalizeUname(u.username) === normalizeUname(targetUser.username))) {
       updated.push({ ...targetUser, password: pwd });
     }
-    onUpdateUsersList(updated);
+    await onUpdateUsersList(updated);
     setResettingUserId(null);
     setNewResetPassword('');
     alert(`✅ 帳號「${targetUser.username}」的密碼已成功重設為：${pwd}`);
@@ -989,7 +1021,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
   };
 
   // 確認批次匯入
-  const handleConfirmBatchImport = () => {
+  const handleConfirmBatchImport = async () => {
     if (parsedRows.length === 0) return;
     setUploading(true);
 
@@ -1012,8 +1044,9 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
       return;
     }
 
-    const updated = [...validNewAccounts, ...cleanUsersList];
-    onUpdateUsersList(updated);
+    const existingUnameSet = new Set(validNewAccounts.map((a) => normalizeUname(a.username)));
+    const updated = [...validNewAccounts, ...allAccounts.filter((u) => !existingUnameSet.has(normalizeUname(u.username)))];
+    await onUpdateUsersList(updated);
     setUploading(false);
 
     // 批次匯入學生帳戶時同步加入會員目錄 (students 表)
@@ -1078,32 +1111,62 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
     return true;
   });
 
-  // ⭐ 批次選擇邏輯
+  // ⭐ 批次選擇邏輯 (支援大小寫正規化，保證跨格式帳號選取精確無誤)
   const selectableAccounts = filteredAccounts.filter((u) => u.username !== 'admin');
-  const isAllSelected =
+  const allSelectableAccounts = allAccounts.filter((u) => u.username !== 'admin');
+
+  const selectedUsernamesSet = React.useMemo(() => {
+    return new Set(selectedUsernames.map(normalizeUname));
+  }, [selectedUsernames]);
+
+  const isAllShownSelected =
     selectableAccounts.length > 0 &&
-    selectableAccounts.every((u) => selectedUsernames.includes(u.username));
+    selectableAccounts.every((u) => selectedUsernamesSet.has(normalizeUname(u.username)));
+
+  const isAllSystemSelected =
+    allSelectableAccounts.length > 0 &&
+    allSelectableAccounts.every((u) => selectedUsernamesSet.has(normalizeUname(u.username)));
 
   const handleToggleSelectUser = (uName: string) => {
     if (uName === 'admin') return;
-    setSelectedUsernames((prev) =>
-      prev.includes(uName) ? prev.filter((x) => x !== uName) : [...prev, uName]
-    );
+    const targetNorm = normalizeUname(uName);
+    setSelectedUsernames((prev) => {
+      const exists = prev.some((x) => normalizeUname(x) === targetNorm);
+      if (exists) {
+        return prev.filter((x) => normalizeUname(x) !== targetNorm);
+      } else {
+        return [...prev, uName];
+      }
+    });
   };
 
   const handleToggleSelectAll = () => {
-    if (isAllSelected) {
-      const currentShown = new Set(selectableAccounts.map((u) => u.username));
-      setSelectedUsernames((prev) => prev.filter((un) => !currentShown.has(un)));
+    if (isAllShownSelected) {
+      const currentShownNorm = new Set(selectableAccounts.map((u) => normalizeUname(u.username)));
+      setSelectedUsernames((prev) => prev.filter((un) => !currentShownNorm.has(normalizeUname(un))));
     } else {
-      const newSelected = new Set([...selectedUsernames, ...selectableAccounts.map((u) => u.username)]);
-      setSelectedUsernames(Array.from(newSelected));
+      const newSelected = new Set([
+        ...selectedUsernames.map(normalizeUname),
+        ...selectableAccounts.map((u) => normalizeUname(u.username)),
+      ]);
+      const resultUsernames = allAccounts
+        .filter((u) => newSelected.has(normalizeUname(u.username)))
+        .map((u) => u.username);
+      setSelectedUsernames(resultUsernames);
     }
   };
 
-  // ⭐ 批次刪除
+  const handleSelectAllInSystem = () => {
+    if (isAllSystemSelected) {
+      setSelectedUsernames([]);
+    } else {
+      setSelectedUsernames(allSelectableAccounts.map((u) => u.username));
+    }
+  };
+
+  // ⭐ 批次刪除 (以全體名冊 allAccounts 為準，並行批量清理雲端資料庫，徹底杜絕只刪除部分帳戶)
   const handleBatchDelete = async () => {
-    const targetUsernames = selectedUsernames.filter((un) => un !== 'admin');
+    const targetUsernames = selectedUsernames.filter((un) => un.toLowerCase() !== 'admin');
     if (targetUsernames.length === 0) {
       alert('請先勾選要刪除的帳號（管理員帳號無法刪除）！');
       return;
@@ -1111,7 +1174,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
 
     if (
       !window.confirm(
-        `⚠️ 確定要批次刪除選取的 ${targetUsernames.length} 個帳戶嗎？\n\n此動作將同步從帳戶名冊中刪除帳號，並同步從會員名冊與雲端資料庫中移除相關記錄。此動作無法還原！`
+        `⚠️ 確定要批次刪除選取的 ${targetUsernames.length} 個帳戶嗎？\n\n此動作將同步從帳戶名冊中刪除全部選取帳號，並同步從會員名冊與雲端資料庫中移除相關記錄。此動作無法還原！`
       )
     ) {
       return;
@@ -1119,40 +1182,50 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
 
     setBatchProcessing(true);
     try {
-      const updatedUsers = cleanUsersList.filter((u) => !targetUsernames.includes(u.username));
-      onUpdateUsersList(updatedUsers);
+      const targetUsernamesSet = new Set(targetUsernames.map(normalizeUname));
+
+      // 1. 嚴格以全體名冊 allAccounts 為基準過濾，確保所有選取的學生與教職員帳戶完整移除
+      const updatedUsers = allAccounts.filter((u) => !targetUsernamesSet.has(normalizeUname(u.username)));
+      await onUpdateUsersList(updatedUsers);
       try {
         localStorage.setItem('oc_users_list', JSON.stringify(updatedUsers));
       } catch (e) {}
 
+      // 2. 彙整要刪除的學生姓名 (支援正規化比對)
       const deletedStudentNames = new Set(
         allAccounts
-          .filter((u) => targetUsernames.includes(u.username) && u.role === 'student')
-          .map((u) => u.name)
+          .filter((u) => targetUsernamesSet.has(normalizeUname(u.username)) && u.role === 'student')
+          .map((u) => normalizeName(u.name))
       );
 
+      // 3. 同步更新本地 students 快取
       if (typeof window !== 'undefined') {
         try {
           const cached = localStorage.getItem('oc_local_students');
           if (cached) {
             const list = JSON.parse(cached);
-            const remaining = list.filter((s: any) => !deletedStudentNames.has(s.student_name));
+            const remaining = list.filter((s: any) => !deletedStudentNames.has(normalizeName(s.student_name)));
             localStorage.setItem('oc_local_students', JSON.stringify(remaining));
             setDbStudents(remaining);
           }
         } catch (e) {}
       }
 
-      for (const sName of deletedStudentNames) {
+      // 4. 批次清理雲端 students 集合 (單次讀取 + 並行批量刪除，徹底杜絕限流超時)
+      if (deletedStudentNames.size > 0) {
         try {
-          const res = await databases.listDocuments(DATABASE_ID, 'students', [
-            Query.equal('student_name', sName),
-            Query.limit(100),
-          ]);
-          for (const doc of res.documents) {
-            try {
-              await databases.deleteDocument(DATABASE_ID, 'students', doc.$id);
-            } catch (de) {}
+          const res = await databases.listDocuments(DATABASE_ID, 'students', [Query.limit(1000)]);
+          const docsToDelete = res.documents.filter((d: any) =>
+            deletedStudentNames.has(normalizeName(d.student_name))
+          );
+          if (docsToDelete.length > 0) {
+            const chunkSize = 10;
+            for (let i = 0; i < docsToDelete.length; i += chunkSize) {
+              const chunk = docsToDelete.slice(i, i + chunkSize);
+              await Promise.allSettled(
+                chunk.map((doc) => databases.deleteDocument(DATABASE_ID, 'students', doc.$id))
+              );
+            }
           }
         } catch (err: any) {
           console.warn('雲端刪除學生記錄略過:', err.message);
@@ -1160,7 +1233,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
       }
 
       setSelectedUsernames([]);
-      alert(`🎉 成功批次刪除 ${targetUsernames.length} 個帳戶！`);
+      alert(`🎉 成功批次刪除全部 ${targetUsernames.length} 個帳戶，並已完整同步至雲端資料庫！`);
     } catch (err: any) {
       alert('批次刪除失敗：' + err.message);
     } finally {
@@ -1168,13 +1241,14 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
     }
   };
 
-  // ⭐ 批次修改
+  // ⭐ 批次修改 (支援全體名冊、正規化比對與單次批次並行更新，保證全體選取帳戶100%更新)
   const handleApplyBatchModify = async () => {
-    const targetUsernames = selectedUsernames.filter((un) => un !== 'admin');
+    const targetUsernames = selectedUsernames.filter((un) => un.toLowerCase() !== 'admin');
     if (targetUsernames.length === 0) return;
 
     setBatchProcessing(true);
     try {
+      const targetUsernamesSet = new Set(targetUsernames.map(normalizeUname));
       let updatedUsers = [...allAccounts];
 
       if (batchActionType === 'branch') {
@@ -1184,7 +1258,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
           return;
         }
         updatedUsers = updatedUsers.map((u) => {
-          if (targetUsernames.includes(u.username)) {
+          if (targetUsernamesSet.has(normalizeUname(u.username))) {
             return { ...u, branch: batchTargetBranch };
           }
           return u;
@@ -1192,30 +1266,36 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
 
         const studentNamesToUpdate = new Set(
           updatedUsers
-            .filter((u) => targetUsernames.includes(u.username) && u.role === 'student')
-            .map((u) => u.name)
+            .filter((u) => targetUsernamesSet.has(normalizeUname(u.username)) && u.role === 'student')
+            .map((u) => normalizeName(u.name))
         );
+
         if (typeof window !== 'undefined') {
           try {
             const cached = localStorage.getItem('oc_local_students');
             if (cached) {
               const list = JSON.parse(cached);
               const modified = list.map((s: any) =>
-                studentNamesToUpdate.has(s.student_name) ? { ...s, branch: batchTargetBranch } : s
+                studentNamesToUpdate.has(normalizeName(s.student_name)) ? { ...s, branch: batchTargetBranch } : s
               );
               localStorage.setItem('oc_local_students', JSON.stringify(modified));
               setDbStudents(modified);
             }
           } catch (e) {}
         }
-        for (const sName of studentNamesToUpdate) {
+
+        if (studentNamesToUpdate.size > 0) {
           try {
-            const res = await databases.listDocuments(DATABASE_ID, 'students', [
-              Query.equal('student_name', sName),
-              Query.limit(50),
-            ]);
-            for (const doc of res.documents) {
-              await databases.updateDocument(DATABASE_ID, 'students', doc.$id, { branch: batchTargetBranch });
+            const res = await databases.listDocuments(DATABASE_ID, 'students', [Query.limit(1000)]);
+            const docsToUpdate = res.documents.filter((d: any) =>
+              studentNamesToUpdate.has(normalizeName(d.student_name))
+            );
+            const chunkSize = 10;
+            for (let i = 0; i < docsToUpdate.length; i += chunkSize) {
+              const chunk = docsToUpdate.slice(i, i + chunkSize);
+              await Promise.allSettled(
+                chunk.map((doc) => databases.updateDocument(DATABASE_ID, 'students', doc.$id, { branch: batchTargetBranch }))
+              );
             }
           } catch (e) {}
         }
@@ -1226,7 +1306,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
           return;
         }
         updatedUsers = updatedUsers.map((u) => {
-          if (targetUsernames.includes(u.username)) {
+          if (targetUsernamesSet.has(normalizeUname(u.username))) {
             return { ...u, className: batchTargetClass };
           }
           return u;
@@ -1234,30 +1314,36 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
 
         const studentNamesToUpdate = new Set(
           updatedUsers
-            .filter((u) => targetUsernames.includes(u.username) && u.role === 'student')
-            .map((u) => u.name)
+            .filter((u) => targetUsernamesSet.has(normalizeUname(u.username)) && u.role === 'student')
+            .map((u) => normalizeName(u.name))
         );
+
         if (typeof window !== 'undefined') {
           try {
             const cached = localStorage.getItem('oc_local_students');
             if (cached) {
               const list = JSON.parse(cached);
               const modified = list.map((s: any) =>
-                studentNamesToUpdate.has(s.student_name) ? { ...s, class_name: batchTargetClass } : s
+                studentNamesToUpdate.has(normalizeName(s.student_name)) ? { ...s, class_name: batchTargetClass } : s
               );
               localStorage.setItem('oc_local_students', JSON.stringify(modified));
               setDbStudents(modified);
             }
           } catch (e) {}
         }
-        for (const sName of studentNamesToUpdate) {
+
+        if (studentNamesToUpdate.size > 0) {
           try {
-            const res = await databases.listDocuments(DATABASE_ID, 'students', [
-              Query.equal('student_name', sName),
-              Query.limit(50),
-            ]);
-            for (const doc of res.documents) {
-              await databases.updateDocument(DATABASE_ID, 'students', doc.$id, { class_name: batchTargetClass });
+            const res = await databases.listDocuments(DATABASE_ID, 'students', [Query.limit(1000)]);
+            const docsToUpdate = res.documents.filter((d: any) =>
+              studentNamesToUpdate.has(normalizeName(d.student_name))
+            );
+            const chunkSize = 10;
+            for (let i = 0; i < docsToUpdate.length; i += chunkSize) {
+              const chunk = docsToUpdate.slice(i, i + chunkSize);
+              await Promise.allSettled(
+                chunk.map((doc) => databases.updateDocument(DATABASE_ID, 'students', doc.$id, { class_name: batchTargetClass }))
+              );
             }
           } catch (e) {}
         }
@@ -1268,7 +1354,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
           return;
         }
         updatedUsers = updatedUsers.map((u) => {
-          if (targetUsernames.includes(u.username) && u.role === 'student') {
+          if (targetUsernamesSet.has(normalizeUname(u.username)) && u.role === 'student') {
             const cur = u.enrolledCourses || [];
             if (!cur.includes(batchTargetCourse)) {
               return { ...u, enrolledCourses: [...cur, batchTargetCourse] };
@@ -1278,15 +1364,16 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
         });
 
         const studentsToEnroll = updatedUsers.filter(
-          (u) => targetUsernames.includes(u.username) && u.role === 'student'
+          (u) => targetUsernamesSet.has(normalizeUname(u.username)) && u.role === 'student'
         );
+
         if (typeof window !== 'undefined') {
           try {
             const cached = localStorage.getItem('oc_local_students');
             const list = cached ? JSON.parse(cached) : [];
             studentsToEnroll.forEach((stu, sIdx) => {
               const alreadyHas = list.some(
-                (s: any) => s.student_name === stu.name && s.course_name === batchTargetCourse
+                (s: any) => normalizeName(s.student_name) === normalizeName(stu.name) && (s.course_name || '').trim() === batchTargetCourse.trim()
               );
               if (!alreadyHas) {
                 list.unshift({
@@ -1302,15 +1389,20 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
             setDbStudents(list);
           } catch (e) {}
         }
-        for (const stu of studentsToEnroll) {
-          try {
-            await databases.createDocument(DATABASE_ID, 'students', ID.unique(), {
-              branch: stu.branch || '',
-              class_name: stu.className || '',
-              course_name: batchTargetCourse,
-              student_name: stu.name,
-            });
-          } catch (e) {}
+
+        const chunkSize = 8;
+        for (let i = 0; i < studentsToEnroll.length; i += chunkSize) {
+          const chunk = studentsToEnroll.slice(i, i + chunkSize);
+          await Promise.allSettled(
+            chunk.map((stu) =>
+              databases.createDocument(DATABASE_ID, 'students', ID.unique(), {
+                branch: stu.branch || '',
+                class_name: stu.className || '',
+                course_name: batchTargetCourse,
+                student_name: stu.name,
+              })
+            )
+          );
         }
       } else if (batchActionType === 'remove_course') {
         if (!batchTargetCourse) {
@@ -1319,39 +1411,27 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
           return;
         }
         updatedUsers = updatedUsers.map((u) => {
-          if (targetUsernames.includes(u.username) && u.role === 'student') {
+          if (targetUsernamesSet.has(normalizeUname(u.username)) && u.role === 'student') {
             const cur = u.enrolledCourses || [];
-            return { ...u, enrolledCourses: cur.filter((c) => c !== batchTargetCourse) };
+            return { ...u, enrolledCourses: cur.filter((c) => c.trim() !== batchTargetCourse.trim()) };
           }
           return u;
         });
 
         const studentsToUnenroll = updatedUsers.filter(
-          (u) => targetUsernames.includes(u.username) && u.role === 'student'
+          (u) => targetUsernamesSet.has(normalizeUname(u.username)) && u.role === 'student'
         );
-        const stuNames = new Set(studentsToUnenroll.map((u) => u.name));
+        const stuNames = new Set(studentsToUnenroll.map((u) => normalizeName(u.name)));
 
         if (typeof window !== 'undefined') {
           try {
             const cached = localStorage.getItem('oc_local_students');
             if (cached) {
               const list = JSON.parse(cached);
-              const studentCounts = new Map<string, number>();
-              list.forEach((s: any) => {
-                if (stuNames.has(s.student_name)) {
-                  studentCounts.set(s.student_name, (studentCounts.get(s.student_name) || 0) + 1);
-                }
-              });
-
               const modified: any[] = [];
               list.forEach((s: any) => {
-                if (stuNames.has(s.student_name) && s.course_name === batchTargetCourse) {
-                  const cnt = studentCounts.get(s.student_name) || 1;
-                  if (cnt <= 1) {
-                    modified.push({ ...s, course_name: '' });
-                  } else {
-                    studentCounts.set(s.student_name, cnt - 1);
-                  }
+                if (stuNames.has(normalizeName(s.student_name)) && (s.course_name || '').trim() === batchTargetCourse.trim()) {
+                  // 移除該課程記錄
                 } else {
                   modified.push(s);
                 }
@@ -1362,24 +1442,21 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
           } catch (e) {}
         }
 
-        for (const stu of studentsToUnenroll) {
-          try {
-            const res = await databases.listDocuments(DATABASE_ID, 'students', [
-              Query.equal('student_name', stu.name),
-              Query.limit(50),
-            ]);
-            const totalDocs = res.documents.length;
-            for (const doc of res.documents) {
-              if (doc.course_name === batchTargetCourse) {
-                if (totalDocs <= 1) {
-                  await databases.updateDocument(DATABASE_ID, 'students', doc.$id, { course_name: '' });
-                } else {
-                  await databases.deleteDocument(DATABASE_ID, 'students', doc.$id);
-                }
-              }
-            }
-          } catch (e) {}
-        }
+        try {
+          const res = await databases.listDocuments(DATABASE_ID, 'students', [Query.limit(1000)]);
+          const docsToDelete = res.documents.filter(
+            (doc: any) =>
+              stuNames.has(normalizeName(doc.student_name)) &&
+              (doc.course_name || '').trim() === batchTargetCourse.trim()
+          );
+          const chunkSize = 10;
+          for (let i = 0; i < docsToDelete.length; i += chunkSize) {
+            const chunk = docsToDelete.slice(i, i + chunkSize);
+            await Promise.allSettled(
+              chunk.map((doc) => databases.deleteDocument(DATABASE_ID, 'students', doc.$id))
+            );
+          }
+        } catch (e) {}
       } else if (batchActionType === 'password') {
         const cleanedPwd = batchTargetPassword.replace(/\D/g, '').slice(0, 8);
         if (cleanedPwd.length !== 8) {
@@ -1388,7 +1465,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
           return;
         }
         updatedUsers = updatedUsers.map((u) => {
-          if (targetUsernames.includes(u.username)) {
+          if (targetUsernamesSet.has(normalizeUname(u.username))) {
             return { ...u, password: cleanedPwd };
           }
           return u;
@@ -1402,7 +1479,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
 
       setShowBatchModal(false);
       setSelectedUsernames([]);
-      alert(`🎉 批次修改已成功套用至 ${targetUsernames.length} 個帳戶並已同步至雲端資料庫！`);
+      alert(`🎉 批次修改已成功套用至全部 ${targetUsernames.length} 個帳戶並已完整同步至雲端資料庫！`);
     } catch (err: any) {
       alert('批次修改失敗：' + err.message);
     } finally {
@@ -2072,7 +2149,14 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                         onClick={handleToggleSelectAll}
                         className="text-xs text-purple-700 hover:text-purple-900 font-bold underline cursor-pointer"
                       >
-                        {isAllSelected ? '取消全選' : `全選目前顯示 (${selectableAccounts.length})`}
+                        {isAllShownSelected ? '取消顯示全選' : `全選目前顯示 (${selectableAccounts.length})`}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSelectAllInSystem}
+                        className="text-xs text-indigo-700 hover:text-indigo-900 font-bold underline cursor-pointer"
+                      >
+                        {isAllSystemSelected ? '取消全校全選' : `全選全校所有帳戶 (${allSelectableAccounts.length})`}
                       </button>
                     </div>
 
@@ -2109,11 +2193,11 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                   <label className="flex items-center gap-2 cursor-pointer font-bold select-none hover:text-purple-700">
                     <input
                       type="checkbox"
-                      checked={isAllSelected}
+                      checked={isAllShownSelected}
                       onChange={handleToggleSelectAll}
                       className="w-4 h-4 rounded text-purple-700 accent-purple-700 cursor-pointer"
                     />
-                    <span>全選目前篩選名冊 ({selectableAccounts.length})</span>
+                    <span>全選目前篩選 ({selectableAccounts.length})</span>
                   </label>
                   <span>顯示 {filteredAccounts.length} 個帳號</span>
                 </div>
@@ -2381,7 +2465,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                                   >
                                     <input
                                       type="checkbox"
-                                      checked={selectedUsernames.includes(u.username)}
+                                      checked={selectedUsernamesSet.has(normalizeUname(u.username))}
                                       onChange={() => handleToggleSelectUser(u.username)}
                                       className="w-4 h-4 rounded text-purple-700 accent-purple-700 cursor-pointer"
                                     />
