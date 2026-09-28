@@ -1,6 +1,6 @@
 ﻿'use client';
-import React, { useState, useEffect, useMemo } from 'react';
-import { MessageCircle } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { MessageCircle, RotateCcw, Loader2, ChevronDown } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { BottomNav, TabType } from '@/components/layout/BottomNav';
 import { MoreView } from '@/components/more/MoreView';
@@ -76,6 +76,18 @@ export default function OnlineClassroomApp() {
   const [showCalendarModal, setShowCalendarModal] = useState<boolean>(false);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
 
+  // ⭐ 全域即時資料刷新函式 (嚴格保留原有使用中的板面 activeTab 不被重置)
+  const refreshAllData = async () => {
+    try {
+      await Promise.all([
+        loadSharedSettings(),
+        loadNotices(),
+      ]);
+    } catch (e) {
+      console.warn('全域刷新數據略過:', e);
+    }
+  };
+
   const handleSaveCalendarEvent = async (eventData: CalendarEvent, existingId?: string) => {
     const savedDoc = await saveCalendarEventToCloud(eventData, existingId);
     setCalendarEvents((prev) => {
@@ -92,6 +104,7 @@ export default function OnlineClassroomApp() {
       }
       return updated;
     });
+    await refreshAllData();
   };
 
   const handleDeleteCalendarEvent = async (eventId: string) => {
@@ -103,6 +116,7 @@ export default function OnlineClassroomApp() {
       }
       return updated;
     });
+    await refreshAllData();
   };
   const [showHomeworkModal, setShowHomeworkModal] = useState(false);
   const [showCourseContentModal, setShowCourseContentModal] = useState(false);
@@ -402,20 +416,23 @@ export default function OnlineClassroomApp() {
   }, [currentUser, isCurrentUserChatEnabled, activeTab]);
 
 
-  const handleUpdateBranches = (newBranches: string[]) => {
+  const handleUpdateBranches = async (newBranches: string[]) => {
     setBranches(newBranches);
-    saveSettingToCloud('branches', newBranches);
+    await saveSettingToCloud('branches', newBranches);
+    await refreshAllData();
   };
 
   // ⭐ 課程異動直接寫入 Appwrite courses/course 獨立資料表
   const handleUpdateCourses = async (newCourses: (string | CourseItem)[]) => {
     setCourses(newCourses);
     await saveAllCoursesToCloud(newCourses);
+    await refreshAllData();
   };
 
-  const handleUpdateClasses = (newClasses: string[]) => {
+  const handleUpdateClasses = async (newClasses: string[]) => {
     setClasses(newClasses);
-    saveSettingToCloud('classes', newClasses);
+    await saveSettingToCloud('classes', newClasses);
+    await refreshAllData();
   };
 
   // --- 帳戶管理與登入/登出處理 ---
@@ -424,8 +441,8 @@ export default function OnlineClassroomApp() {
     setShowAuthModal(true);
   };
 
-  // ⭐ 帳戶異動直接寫入 Appwrite 帳戶表及專屬 acc_* 備援
-  const handleUpdateUsersList = async (newUsers: UserProfile[]) => {
+  // ⭐ 帳戶異動直接寫入 Appwrite 帳戶表及專屬 acc_* 備援 (異步完成後刷新名冊與課程，保留當前板面)
+  const handleUpdateUsersList = async (newUsers: UserProfile[]): Promise<void> => {
     setUsersList(newUsers);
     await saveAllAccountsToCloud(newUsers);
     if (currentUser) {
@@ -435,6 +452,7 @@ export default function OnlineClassroomApp() {
         try { localStorage.setItem('oc_current_user', JSON.stringify(freshUser)); } catch (e) {}
       }
     }
+    await refreshAllData();
   };
 
   const handleLoginSuccess = (user: UserProfile) => {
@@ -497,11 +515,56 @@ export default function OnlineClassroomApp() {
       }
       return [saved, ...prev];
     });
+    await refreshAllData();
   };
 
   const handleDeleteNews = async (newsId: string) => {
     await deleteNewsFromCloud(newsId);
     setNotices((prev) => prev.filter((n) => (n.$id || n.id) !== newsId));
+    await refreshAllData();
+  };
+
+  // ⭐ 手機端下拉重新整理 (Pull-to-Refresh) 狀態與觸控監聽
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const touchStartY = useRef(0);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (isRefreshing) return;
+    const scrollTop = scrollContainerRef.current?.scrollTop ?? 0;
+    if (scrollTop <= 0) {
+      touchStartY.current = e.touches[0].clientY;
+    } else {
+      touchStartY.current = 0;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartY.current <= 0 || isRefreshing) return;
+    const currentY = e.touches[0].clientY;
+    const diff = currentY - touchStartY.current;
+    if (diff > 0) {
+      // 阻尼效果：最大下拉 70px
+      const dist = Math.min(diff * 0.4, 70);
+      setPullDistance(dist);
+    }
+  };
+
+  const handleTouchEnd = async () => {
+    if (touchStartY.current <= 0) return;
+    touchStartY.current = 0;
+    if (pullDistance >= 45 && !isRefreshing) {
+      setIsRefreshing(true);
+      setPullDistance(45);
+      await refreshAllData();
+      setTimeout(() => {
+        setIsRefreshing(false);
+        setPullDistance(0);
+      }, 350);
+    } else {
+      setPullDistance(0);
+    }
   };
 
   const getHeaderTitle = () => {
@@ -519,7 +582,13 @@ export default function OnlineClassroomApp() {
 
   return (
     <div className="flex justify-center bg-gray-100 min-h-screen">
-      <div className="w-full max-w-md bg-white min-h-screen flex flex-col shadow-2xl relative pb-20">
+      <div
+        ref={scrollContainerRef}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        className="w-full max-w-md bg-white min-h-screen flex flex-col shadow-2xl relative pb-20 select-none overflow-x-hidden"
+      >
         <Header
           title={getHeaderTitle()}
           currentUser={currentUser}
@@ -527,7 +596,28 @@ export default function OnlineClassroomApp() {
           onLogout={handleLogout}
           onOpenChat={isCurrentUserChatEnabled ? () => setActiveTab('msg') : undefined}
           unreadChatCount={isCurrentUserChatEnabled ? unreadChatCount : 0}
+          onRefresh={refreshAllData}
+          isRefreshing={isRefreshing}
         />
+
+        {/* ⭐ 下拉重新整理 (Pull-to-Refresh) 視覺回饋指示器 */}
+        {(pullDistance > 0 || isRefreshing) && (
+          <div
+            style={{ height: `${pullDistance}px` }}
+            className="w-full flex items-center justify-center overflow-hidden transition-all duration-150 bg-gradient-to-b from-orange-50 to-transparent shrink-0"
+          >
+            <div className="flex items-center gap-1.5 text-xs font-bold text-[#FF6B57]">
+              <Loader2
+                size={15}
+                className={`text-[#FF6B57] ${isRefreshing ? 'animate-spin' : ''}`}
+                style={{ transform: isRefreshing ? undefined : `rotate(${pullDistance * 5}deg)` }}
+              />
+              <span>
+                {isRefreshing ? '正在更新板面數據...' : pullDistance >= 45 ? '放開立即更新數據' : '下拉更新板面數據'}
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* ⭐ 首頁視窗：登入介紹、開始使用入口、5大身分說明與快捷工作區 */}
         {activeTab === 'home' && (

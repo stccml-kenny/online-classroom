@@ -1,5 +1,5 @@
 ﻿import React from 'react';
-import { MessageCircle } from 'lucide-react';
+import { MessageCircle, RotateCcw } from 'lucide-react';
 import { UserProfile } from '@/components/auth/AuthModal';
 
 interface HeaderProps {
@@ -9,6 +9,8 @@ interface HeaderProps {
   onLogout?: () => void;
   onOpenChat?: () => void;
   unreadChatCount?: number;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -18,11 +20,24 @@ export const Header: React.FC<HeaderProps> = ({
   onLogout,
   onOpenChat,
   unreadChatCount = 0,
+  onRefresh,
+  isRefreshing = false,
 }) => {
   return (
     <div className="bg-[#FF6B57] text-white pt-4 pb-3 px-4 flex justify-between items-center sticky top-0 z-20 shadow-xs">
-      {/* 左側排版佔位 */}
-      <div className="w-8 shrink-0" />
+      {/* 左側排版：手動重新整理按鈕 */}
+      <div className="w-8 shrink-0 flex items-center justify-start">
+        {onRefresh && (
+          <button
+            type="button"
+            onClick={onRefresh}
+            className="p-1 text-white hover:text-white/80 transition-colors"
+            title="重新整理數據"
+          >
+            <RotateCcw size={17} className={isRefreshing ? "animate-spin" : ""} />
+          </button>
+        )}
+      </div>
 
       {/* 頂部標題居中顯示 */}
       <h1 className="text-base font-extrabold truncate max-w-[240px] text-center flex-1">

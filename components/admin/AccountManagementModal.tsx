@@ -197,11 +197,11 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
   const allAccounts = React.useMemo(() => {
     const list = [...cleanUsersList];
 
-    // 建立現有學生帳號索引 (以 分校 + 姓名 比對)
-    const existingStudentKeys = new Set(
+    // 建立現有學生姓名索引 (以 學生姓名 唯一比對，只要學生在名冊中，就不重複產生預設帳號)
+    const existingStudentNames = new Set(
       cleanUsersList
         .filter((u) => u.role === 'student')
-        .map((u) => `${(u.branch || '').toLowerCase()}___${(u.name || '').toLowerCase()}`)
+        .map((u) => (u.name || '').trim().toLowerCase())
     );
 
     // 彙整資料庫會員名冊 (students 表)
@@ -218,7 +218,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
       const sClass = (doc.class_name || '').trim();
       if (!sName) return;
 
-      const key = `${sBranch.toLowerCase()}___${sName.toLowerCase()}`;
+      const key = sName.toLowerCase();
       if (!groupedDbMembers.has(key)) {
         groupedDbMembers.set(key, {
           student_name: sName,
@@ -235,7 +235,8 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
     // 檢查是否有尚未在 cleanUsersList 中的資料庫會員，自動為其產生標準帳號
     let autoIndex = 101;
     groupedDbMembers.forEach((member, key) => {
-      if (!existingStudentKeys.has(key)) {
+      const sNameLow = (member.student_name || '').trim().toLowerCase();
+      if (!existingStudentNames.has(sNameLow)) {
         const code = parseBranchInfo(member.branch).code || 'ST';
         let autoUsername = `${code}_${autoIndex}`;
         while (list.some((u) => u.username.toLowerCase() === autoUsername.toLowerCase())) {
@@ -256,11 +257,11 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
           createdAt: new Date().toISOString()
         });
       } else {
-        // 若該學生已在 usersList 中，確保其 enrolledCourses 同步包含資料庫中的最新課程
+        // 若該學生已在 usersList 中，保持其自訂修改的密碼與分校，僅確保其 enrolledCourses 包含資料庫課程
         const idx = list.findIndex(
           (u) =>
             u.role === 'student' &&
-            `${(u.branch || '').toLowerCase()}___${(u.name || '').toLowerCase()}` === key
+            (u.name || '').trim().toLowerCase() === sNameLow
         );
         if (idx !== -1) {
           const u = list[idx];
@@ -269,8 +270,6 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
           );
           list[idx] = {
             ...u,
-            branch: u.branch || member.branch,
-            className: u.className || member.class_name,
             enrolledCourses: mergedCourses
           };
         }
@@ -536,8 +535,8 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
     setEditManualChildInput('');
   };
 
-  // ⭐ 儲存編輯帳戶
-  const handleSaveEditAccount = (originalUser: UserProfile) => {
+  // ⭐ 儲存編輯帳戶 (非同步持久化至雲端資料庫)
+  const handleSaveEditAccount = async (originalUser: UserProfile) => {
     const finalName = editName.trim();
     const finalUname = editUsername.trim();
     const finalPwd = editPassword.trim();
@@ -580,18 +579,20 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
       childrenUsernames: editRole === 'parent' ? editChildrenUsernames : undefined,
     };
 
-    const updatedList = cleanUsersList.map((u) =>
+    // 針對全體名冊 (allAccounts) 進行更新，確保任何自動補全或既有帳戶皆獲得更新
+    const updatedList = allAccounts.map((u) =>
       u.username.toLowerCase() === originalUser.username.toLowerCase() ? updatedUser : u
     );
 
-    if (!cleanUsersList.some((u) => u.username.toLowerCase() === originalUser.username.toLowerCase())) {
+    if (!allAccounts.some((u) => u.username.toLowerCase() === originalUser.username.toLowerCase())) {
       updatedList.push(updatedUser);
     }
 
-    onUpdateUsersList(updatedList);
+    // 異步同步至 Appwrite 雲端資料庫
+    await onUpdateUsersList(updatedList);
     setEditingAccountId(null);
 
-    // ⭐ 若為學生，同步更新會員目錄
+    // ⭐ 若為學生，同步更新雲端與本機會員目錄 (students 表)
     if (editRole === 'student') {
       const memberDocs = updatedCourses.length > 0
         ? updatedCourses.map((cName) => ({
@@ -613,25 +614,25 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
         list = list.filter((s: any) => s.student_name !== originalUser.name && s.student_name !== finalName);
         memberDocs.forEach((doc, i) => list.unshift({ ...doc, $id: `stu_${Date.now()}_${i}` }));
         localStorage.setItem('oc_local_students', JSON.stringify(list));
+        setDbStudents(list);
       } catch (e) {}
 
       // 雲端同步
       try {
-        databases.listDocuments(DATABASE_ID, 'students', [Query.limit(500)]).then((res) => {
-          const oldDocs = res.documents.filter(
-            (d: any) => d.student_name === originalUser.name
-          );
-          oldDocs.forEach((doc) => {
-            databases.deleteDocument(DATABASE_ID, 'students', doc.$id).catch(() => {});
-          });
-          memberDocs.forEach((doc) => {
-            databases.createDocument(DATABASE_ID, 'students', ID.unique(), doc).catch(() => {});
-          });
-        }).catch(() => {});
+        const res = await databases.listDocuments(DATABASE_ID, 'students', [Query.limit(500)]);
+        const oldDocs = res.documents.filter(
+          (d: any) => d.student_name === originalUser.name
+        );
+        for (const doc of oldDocs) {
+          await databases.deleteDocument(DATABASE_ID, 'students', doc.$id).catch(() => {});
+        }
+        for (const doc of memberDocs) {
+          await databases.createDocument(DATABASE_ID, 'students', ID.unique(), doc).catch(() => {});
+        }
       } catch (e) {}
     }
 
-    alert(`✅ 帳戶「${updatedUser.username}」已成功儲存更新！`);
+    alert(`✅ 帳戶「${updatedUser.username}」已成功儲存並同步至雲端資料庫！`);
   };
 
   // 行內為學生快速退出課程
@@ -1174,7 +1175,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
 
     setBatchProcessing(true);
     try {
-      let updatedUsers = [...cleanUsersList];
+      let updatedUsers = [...allAccounts];
 
       if (batchActionType === 'branch') {
         if (!batchTargetBranch) {
@@ -1394,14 +1395,14 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
         });
       }
 
-      onUpdateUsersList(updatedUsers);
+      await onUpdateUsersList(updatedUsers);
       try {
         localStorage.setItem('oc_users_list', JSON.stringify(updatedUsers));
       } catch (e) {}
 
       setShowBatchModal(false);
       setSelectedUsernames([]);
-      alert(`🎉 批次修改已成功套用至 ${targetUsernames.length} 個帳戶！`);
+      alert(`🎉 批次修改已成功套用至 ${targetUsernames.length} 個帳戶並已同步至雲端資料庫！`);
     } catch (err: any) {
       alert('批次修改失敗：' + err.message);
     } finally {
