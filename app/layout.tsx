@@ -12,12 +12,16 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: '/favicon.ico',
+    apple: '/apple-touch-icon.png',
   },
 };
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({
@@ -31,6 +35,10 @@ export default function RootLayout({
         <title>Online-Classroom</title>
         <meta name="application-name" content="Online-Classroom" />
         <meta name="apple-mobile-web-app-title" content="Online-Classroom" />
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+        />
       </head>
       <body className="antialiased bg-gray-100 min-h-screen">
         {children}
