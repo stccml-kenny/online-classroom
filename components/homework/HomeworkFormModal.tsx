@@ -449,7 +449,7 @@ export const HomeworkFormModal: React.FC<HomeworkFormModalProps> = ({
 
   return (
     /* ⭐ 全板顯示 (Full-board) */
-    <div className="fixed inset-0 z-50 flex flex-col bg-[#F8F9FA] w-screen h-screen overflow-hidden animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex flex-col bg-[#F8F9FA] w-full h-[100dvh] max-h-[100dvh] overflow-hidden animate-in fade-in duration-200">
       {/* 頂部 Header */}
       <div className="bg-gradient-to-r from-[#FF6B57] via-[#FF7A66] to-[#FF8E7D] text-white px-5 sm:px-8 py-3.5 flex justify-between items-center shrink-0 shadow-md">
         <div className="flex items-center gap-3">
@@ -467,18 +467,33 @@ export const HomeworkFormModal: React.FC<HomeworkFormModalProps> = ({
             )}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="p-1.5 rounded-full hover:bg-white/20 transition-colors text-white"
-          title="關閉"
-        >
-          <X size={22} />
-        </button>
+        {/* ⭐ 手機端頂部快速確認發布按鈕 */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={(e) => {
+              const form = (e.currentTarget.closest('.fixed') as HTMLElement)?.querySelector('form');
+              if (form) form.requestSubmit();
+            }}
+            disabled={submitting || uploadingFiles}
+            className="px-3.5 py-1.5 bg-white text-[#FF6B57] hover:bg-orange-50 font-extrabold rounded-xl text-xs sm:text-sm shadow-sm flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer active:scale-95"
+          >
+            <Save size={15} />
+            <span>{submitting ? '儲存中...' : initialData ? '確認更新' : '確認發布'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-full hover:bg-white/20 transition-colors text-white cursor-pointer"
+            title="關閉"
+          >
+            <X size={22} />
+          </button>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden">
-        <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-5 text-sm">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-5 text-sm pb-32 sm:pb-12">
           <div className="max-w-4xl w-full mx-auto space-y-5">
           {/* ⭐ 需求：如果於該課程新增家課，鎖上該頁的學校及課程選項 */}
           {isLocked ? (
@@ -1003,7 +1018,7 @@ export const HomeworkFormModal: React.FC<HomeworkFormModalProps> = ({
         </div>
 
         {/* 底部固定全板操作列 */}
-        <div className="p-4 sm:p-5 bg-white border-t border-gray-200 shrink-0 shadow-md">
+        <div className="p-3 sm:p-5 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] bg-white border-t border-gray-200 shrink-0 shadow-lg z-30 sticky bottom-0">
           <div className="max-w-4xl w-full mx-auto flex justify-end gap-3">
             <button
               type="button"

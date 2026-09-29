@@ -1167,25 +1167,43 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
         )}
 
         {/* 內容區塊 */}
-        <div className="p-4 overflow-y-auto flex-1 text-sm">
+        <div className="p-3 sm:p-4 overflow-y-auto flex-1 text-sm pb-36 sm:pb-12">
           {/* TAB 1: 課程設定 (Courses) - 完整支援時間、節數、每節日期、排程、剔除日子與狀態 */}
           {activeTab === 'courses' && (
             <div className="space-y-3">
               {/* 新增 / 編輯課程完整表單面板 */}
               {isCourseFormOpen ? (
                 <form onSubmit={handleSaveCourseForm} className="bg-indigo-50/40 border border-indigo-200 rounded-2xl p-3.5 space-y-3">
-                  <div className="flex justify-between items-center border-b border-indigo-100 pb-2">
+                  <div className="flex justify-between items-center border-b border-indigo-100 pb-2.5">
                     <span className="font-bold text-indigo-950 text-xs flex items-center gap-1.5">
-                      <GraduationCap size={15} className="text-indigo-600" />
-                      <span>{editingCourseTargetId ? '編輯課程排程與詳細設定' : '新增課程詳細排程'}</span>
+                      <GraduationCap size={16} className="text-indigo-600 shrink-0" />
+                      <span className="truncate">{editingCourseTargetId ? '編輯課程詳細排程' : '新增課程詳細排程'}</span>
                     </span>
-                    <button
-                      type="button"
-                      onClick={handleCloseCourseForm}
-                      className="text-gray-400 hover:text-gray-600 p-0.5"
-                    >
-                      <X size={15} />
-                    </button>
+                    {/* ⭐ 手機端頂部快速確認與關閉按鈕 */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={handleCloseCourseForm}
+                        className="px-2.5 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-xs font-semibold transition-colors"
+                      >
+                        取消
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-3.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-extrabold transition-all flex items-center gap-1 shadow-xs cursor-pointer active:scale-95"
+                      >
+                        <Check size={14} />
+                        <span>{editingCourseTargetId ? '儲存' : '確認'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCloseCourseForm}
+                        className="text-gray-400 hover:text-gray-600 p-1"
+                        title="關閉表單"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
                   </div>
 
                   {/* 1. 課程名稱 與 所屬學校/分校 */}
@@ -1508,20 +1526,20 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                     )}
                   </div>
 
-                  {/* 表單提交與取消按鈕 */}
-                  <div className="flex gap-2 pt-1">
+                  {/* ⭐ 表單提交與取消按鈕 (黏性底部固定，在手機端始終可見) */}
+                  <div className="sticky bottom-0 bg-white/95 backdrop-blur-md p-3 border-t border-indigo-200 rounded-b-2xl shadow-lg z-20 flex gap-2 pt-2">
                     <button
                       type="button"
                       onClick={handleCloseCourseForm}
-                      className="flex-1 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-semibold text-xs transition-colors"
+                      className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-xs transition-colors cursor-pointer"
                     >
                       取消
                     </button>
                     <button
                       type="submit"
-                      className="flex-2 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-1 shadow-sm"
+                      className="flex-2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-extrabold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm cursor-pointer active:scale-95"
                     >
-                      <Check size={14} />
+                      <Check size={15} />
                       <span>{editingCourseTargetId ? '儲存課程變更' : '確認新增課程'}</span>
                     </button>
                   </div>
@@ -2138,7 +2156,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[#F8F9FA] w-screen h-screen overflow-hidden animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex flex-col bg-[#F8F9FA] w-full h-[100dvh] max-h-[100dvh] overflow-hidden animate-in fade-in duration-200">
       {mainContent}
     </div>
   );
