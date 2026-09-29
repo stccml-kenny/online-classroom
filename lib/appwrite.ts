@@ -137,83 +137,8 @@ export async function saveAllAccountsToCloud(accounts: UserProfile[]): Promise<v
     } catch (e) {}
   }
 
-  // B. 寫入 Appwrite homework_settings 表 (每帳號一筆 acc_{username}，並行寫入防限流，且同步儲存 master accounts)
+  // B. 寫入 Appwrite homework_settings 表 (⭐ 採用精確單筆 accounts 總名冊，徹底避開 Rate Limit)
   try {
-    const settingsRes = await databases.listDocuments(DATABASE_ID, 'homework_settings', [Query.limit(500)]);
-    const settingsMap = new Map<string, string>(); // sKey_lower -> $id
-    settingsRes.documents.forEach((d: any) => {
-      if (d.setting_key) settingsMap.set(d.setting_key.trim().toLowerCase(), d.$id);
-    });
-
-    const activeAccKeys = new Set<string>();
-
-    const saveAccountDoc = async (acc: UserProfile) => {
-      if (!acc || !acc.username) return;
-      const uLower = acc.username.trim().toLowerCase();
-      const key = `acc_${uLower}`;
-      activeAccKeys.add(key);
-
-      // 構建儲存內容
-      const cleanAcc: any = {
-        id: acc.id || `user_${encodeURIComponent(uLower)}`,
-        username: acc.username.trim(),
-        name: (acc.name || acc.username).trim(),
-        role: acc.role || 'student',
-        password: (acc.password || '12345678').trim(),
-        branch: acc.branch || '',
-        className: acc.className || '',
-        enrolledCourses: Array.isArray(acc.enrolledCourses) ? acc.enrolledCourses : [],
-        childrenUsernames: Array.isArray(acc.childrenUsernames) ? acc.childrenUsernames : [],
-        email: acc.email || '',
-        phone: acc.phone || '',
-        createdAt: acc.createdAt || new Date().toISOString(),
-      };
-
-      let jsonStr = JSON.stringify(cleanAcc);
-      // 若 JSON 過長，自動轉換為緊湊鍵名，確保 Appwrite String 屬性 100% 寫入成功
-      if (jsonStr.length > 240) {
-        const compact = {
-          id: cleanAcc.id,
-          u: cleanAcc.username,
-          n: cleanAcc.name,
-          r: cleanAcc.role,
-          p: cleanAcc.password,
-          b: cleanAcc.branch,
-          c: cleanAcc.className,
-          ec: cleanAcc.enrolledCourses,
-          cu: cleanAcc.childrenUsernames,
-          e: cleanAcc.email,
-          ph: cleanAcc.phone,
-        };
-        jsonStr = JSON.stringify(compact);
-      }
-
-      if (settingsMap.has(key)) {
-        const docId = settingsMap.get(key)!;
-        await databases.updateDocument(DATABASE_ID, 'homework_settings', docId, {
-          setting_value: jsonStr,
-        }).catch((err) => {
-          console.warn(`更新帳戶 ${key} 略過:`, err.message);
-        });
-      } else {
-        const created = await databases.createDocument(DATABASE_ID, 'homework_settings', ID.unique(), {
-          setting_key: key,
-          setting_value: jsonStr,
-        }).catch((err) => {
-          console.warn(`建立帳戶 ${key} 略過:`, err.message);
-        });
-        if (created) settingsMap.set(key, created.$id);
-      }
-    };
-
-    // ⭐ 分批並行寫入 (每批 6 個並行，兼顧極速與防 Rate-Limit)
-    const chunkSize = 6;
-    for (let i = 0; i < accounts.length; i += chunkSize) {
-      const chunk = accounts.slice(i, i + chunkSize);
-      await Promise.allSettled(chunk.map((a) => saveAccountDoc(a)));
-    }
-
-    // ⭐ 儲存總帳號名冊 (accounts) 至 homework_settings 作為強大雙軌備援
     const compactAccountsList = accounts.map((acc) => ({
       id: acc.id,
       u: acc.username,
@@ -228,90 +153,35 @@ export async function saveAllAccountsToCloud(accounts: UserProfile[]): Promise<v
       ph: acc.phone,
     }));
     const accountsMasterJson = JSON.stringify(compactAccountsList);
-    if (accountsMasterJson.length < 50000) {
-      if (settingsMap.has('accounts')) {
-        await databases.updateDocument(DATABASE_ID, 'homework_settings', settingsMap.get('accounts')!, {
-          setting_value: accountsMasterJson,
-        }).catch(() => {});
-      } else {
-        await databases.createDocument(DATABASE_ID, 'homework_settings', ID.unique(), {
-          setting_key: 'accounts',
-          setting_value: accountsMasterJson,
-        }).catch(() => {});
-      }
-    }
 
-    // 清除雲端已刪除或更名之舊帳號 key (acc_*)
-    const keysToDelete = Array.from(settingsMap.entries()).filter(
-      ([sKey]) => sKey.startsWith('acc_') && !activeAccKeys.has(sKey)
-    );
-    if (keysToDelete.length > 0) {
-      await Promise.allSettled(
-        keysToDelete.map(([, docId]) =>
-          databases.deleteDocument(DATABASE_ID, 'homework_settings', docId).catch(() => {})
-        )
-      );
+    // 精確查詢 accounts 鍵 (僅需 1 次請求)
+    const res = await databases.listDocuments(DATABASE_ID, 'homework_settings', [
+      Query.equal('setting_key', 'accounts'),
+      Query.limit(5),
+    ]);
+
+    if (res.documents && res.documents.length > 0) {
+      await databases.updateDocument(DATABASE_ID, 'homework_settings', res.documents[0].$id, {
+        setting_value: accountsMasterJson,
+      });
+      // 清除重複的舊文檔
+      for (let i = 1; i < res.documents.length; i++) {
+        await databases.deleteDocument(DATABASE_ID, 'homework_settings', res.documents[i].$id).catch(() => {});
+      }
+    } else {
+      await databases.createDocument(DATABASE_ID, 'homework_settings', ID.unique(), {
+        setting_key: 'accounts',
+        setting_value: accountsMasterJson,
+      });
     }
   } catch (err: any) {
-    console.warn('雲端 homework_settings 帳戶寫入錯誤:', err.message);
-  }
-
-  // C. 嘗試同步至獨立帳號表 (若資料庫中存在)
-  const tryCollections = ['teachers', 'teacher', 'staff', 'user_accounts', 'users', 'accounts'];
-  for (const coll of tryCollections) {
-    try {
-      const existingRes = await databases.listDocuments(DATABASE_ID, coll, [Query.limit(500)]);
-      const existingMap = new Map<string, string>();
-      existingRes.documents.forEach((d: any) => {
-        if (d.username) existingMap.set(d.username.toLowerCase(), d.$id);
-      });
-
-      const targetAccounts = (coll === 'teachers' || coll === 'teacher' || coll === 'staff')
-        ? accounts.filter((a) => a.role === 'teacher' || a.role === 'assistant')
-        : accounts;
-
-      for (const acc of targetAccounts) {
-        const uLower = acc.username.toLowerCase();
-        const payload: any = {
-          username: acc.username,
-          name: acc.name,
-          role: acc.role,
-          password: acc.password,
-          email: acc.email || '',
-          phone: acc.phone || '',
-          branch: acc.branch || '',
-          class_name: acc.className || '',
-          className: acc.className || '',
-          enrolled_courses: JSON.stringify(acc.enrolledCourses || []),
-          enrolledCourses: JSON.stringify(acc.enrolledCourses || []),
-          children_usernames: JSON.stringify(acc.childrenUsernames || []),
-          childrenUsernames: JSON.stringify(acc.childrenUsernames || []),
-          created_at: acc.createdAt || new Date().toISOString(),
-        };
-
-        if (existingMap.has(uLower)) {
-          const docId = existingMap.get(uLower)!;
-          await databases.updateDocument(DATABASE_ID, coll, docId, payload).catch(async () => {
-            delete payload.className;
-            delete payload.enrolledCourses;
-            delete payload.childrenUsernames;
-            await databases.updateDocument(DATABASE_ID, coll, docId, payload).catch(() => {});
-          });
-        } else {
-          await databases.createDocument(DATABASE_ID, coll, ID.unique(), payload).catch(async () => {
-            delete payload.className;
-            delete payload.enrolledCourses;
-            delete payload.childrenUsernames;
-            await databases.createDocument(DATABASE_ID, coll, ID.unique(), payload).catch(() => {});
-          });
-        }
-      }
-      break;
-    } catch (e) {}
+    console.warn('雲端 homework_settings 帳戶寫入略過:', err.message);
   }
 }
 
-// ⭐ 雲端即時直連驗證 (跨機器登入：即時向 Appwrite 查詢帳號密碼，保證換電腦登入100%成功)
+// 避開多餘的空表請求
+
+// ⭐ 雲端即時直連驗證 (跨機器登入：精確向 accounts 總名冊查詢帳密，極速且零 Rate-Limit)
 export async function directLoginFromCloud(
   username: string,
   password: string,
@@ -327,7 +197,26 @@ export async function directLoginFromCloud(
   );
   if (localMatch) return localMatch;
 
-  // 2. homework_settings 表中精確查詢 acc_{username}
+  // 2. homework_settings 表中精確查詢 accounts 總名冊
+  try {
+    const res = await databases.listDocuments(DATABASE_ID, 'homework_settings', [
+      Query.equal('setting_key', 'accounts'),
+      Query.limit(1),
+    ]);
+    if (res.documents && res.documents.length > 0) {
+      const list = JSON.parse(res.documents[0].setting_value || '[]');
+      if (Array.isArray(list)) {
+        for (const item of list) {
+          const user = extractUserFromDoc(item);
+          if (user && user.username.toLowerCase() === uLower && (user.password || '12345678') === trimmedPwd) {
+            return user;
+          }
+        }
+      }
+    }
+  } catch (e) {}
+
+  // 3. homework_settings 表中精確查詢個別 acc_{username} (相容舊版)
   try {
     const key = `acc_${uLower}`;
     const res = await databases.listDocuments(DATABASE_ID, 'homework_settings', [
@@ -341,22 +230,6 @@ export async function directLoginFromCloud(
       }
     }
   } catch (e) {}
-
-  // 3. 獨立帳戶表即時查詢
-  const tryCollections = ['teachers', 'teacher', 'staff', 'user_accounts', 'users', 'accounts'];
-  for (const coll of tryCollections) {
-    try {
-      const res = await databases.listDocuments(DATABASE_ID, coll, [Query.limit(500)]);
-      if (res.documents && res.documents.length > 0) {
-        for (const doc of res.documents) {
-          const user = extractUserFromDoc(doc);
-          if (user && user.username.toLowerCase() === uLower && (user.password || '12345678') === trimmedPwd) {
-            return user;
-          }
-        }
-      }
-    } catch (e) {}
-  }
 
   return null;
 }

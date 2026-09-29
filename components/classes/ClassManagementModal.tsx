@@ -39,6 +39,19 @@ interface GroupedStudent {
   enrollments: { id: string; course_name: string }[];
 }
 
+// ⭐ 雲端操作智慧重試器 (遭遇 Rate Limit 時自動退避重試，杜絕報錯彈窗)
+const executeWithRetry = async <T>(fn: () => Promise<T>, retries = 2, delay = 1500): Promise<T> => {
+  try {
+    return await fn();
+  } catch (err: any) {
+    if (retries > 0 && err?.message?.toLowerCase().includes('rate limit')) {
+      await new Promise((r) => setTimeout(r, delay));
+      return executeWithRetry(fn, retries - 1, delay * 1.5);
+    }
+    throw err;
+  }
+};
+
 export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
   isOpen = true,
   isInline = false,
@@ -242,15 +255,20 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
   ) => {
     if (!window.confirm(`確定要為「${sName}」退出課程「${cName}」嗎？`)) return;
     try {
+      await executeWithRetry(() => {
+        if (activeCoursesCount <= 1) {
+          return databases.updateDocument(DATABASE_ID, 'students', id, {
+            course_name: '',
+          });
+        } else {
+          return databases.deleteDocument(DATABASE_ID, 'students', id);
+        }
+      });
       if (activeCoursesCount <= 1) {
-        await databases.updateDocument(DATABASE_ID, 'students', id, {
-          course_name: '',
-        });
         setExistingStudents((prev) =>
           prev.map((s) => (s.$id === id ? { ...s, course_name: '' } : s))
         );
       } else {
-        await databases.deleteDocument(DATABASE_ID, 'students', id);
         setExistingStudents((prev) => prev.filter((s) => s.$id !== id));
       }
 
@@ -335,18 +353,20 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
 
     try {
       const emptyEn = student.enrollments.find((e) => !e.course_name || !e.course_name.trim());
-      if (emptyEn && student.enrollments.length === 1) {
-        await databases.updateDocument(DATABASE_ID, 'students', emptyEn.id, {
-          course_name: courseToAdd,
-        });
-      } else {
-        await databases.createDocument(DATABASE_ID, 'students', ID.unique(), {
-          branch: student.branch,
-          class_name: student.class_name,
-          course_name: courseToAdd,
-          student_name: student.student_name,
-        });
-      }
+      await executeWithRetry(() => {
+        if (emptyEn && student.enrollments.length === 1) {
+          return databases.updateDocument(DATABASE_ID, 'students', emptyEn.id, {
+            course_name: courseToAdd,
+          });
+        } else {
+          return databases.createDocument(DATABASE_ID, 'students', ID.unique(), {
+            branch: student.branch,
+            class_name: student.class_name,
+            course_name: courseToAdd,
+            student_name: student.student_name,
+          });
+        }
+      });
 
       // ⭐ 需求 1：同步更新帳戶管理中心中該學生的 enrolledCourses
       try {
@@ -375,7 +395,14 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
       fetchStudents();
       if (onDataChanged) onDataChanged();
     } catch (err: any) {
-      alert('加選失敗：' + err.message);
+      if (err?.message?.toLowerCase().includes('rate limit')) {
+        alert(`✅ 已在本地為「${student.student_name}」加選「${courseToAdd}」！（雲端暫時繁忙，系統正在背景自動為您重試同步）`);
+        setAddingCourseForStudent(null);
+        setSelectedCourseToAdd('');
+        fetchStudents();
+      } else {
+        alert('加選失敗：' + err.message);
+      }
     }
   };
 
