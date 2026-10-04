@@ -1,6 +1,7 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { X, Plus, BookOpen, Settings } from 'lucide-react';
 import { HomeworkCard, HomeworkItem } from './HomeworkCard';
+import { UserProfile } from '@/types/chat';
 import { HomeworkFormModal } from './HomeworkFormModal';
 import { CourseItem } from './HomeworkSetupModal';
 import { databases, DATABASE_ID } from '@/lib/appwrite';
@@ -14,6 +15,8 @@ interface HomeworkModalProps {
   courseItems?: (string | CourseItem)[]; // ⭐ 支援課程物件結構
   onDataChanged?: () => void;
   onOpenSetup?: () => void;
+  currentUser?: UserProfile | null;
+  isReadOnly?: boolean;
 }
 
 export const HomeworkModal: React.FC<HomeworkModalProps> = ({
@@ -24,6 +27,8 @@ export const HomeworkModal: React.FC<HomeworkModalProps> = ({
   courseItems = [],
   onDataChanged,
   onOpenSetup,
+  currentUser,
+  isReadOnly,
 }) => {
   const [homeworkList, setHomeworkList] = useState<HomeworkItem[]>([]);
   const [selectedBranch, setSelectedBranch] = useState<string>('全部分校');
@@ -370,6 +375,8 @@ export const HomeworkModal: React.FC<HomeworkModalProps> = ({
                 item={item}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
+                currentUser={currentUser}
+                isReadOnly={isReadOnly}
               />
             ))
           )}

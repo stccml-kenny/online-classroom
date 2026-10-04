@@ -1173,7 +1173,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
             <div className="space-y-3">
               {/* 新增 / 編輯課程完整表單面板 */}
               {isCourseFormOpen ? (
-                <form onSubmit={handleSaveCourseForm} className="bg-indigo-50/40 border border-indigo-200 rounded-2xl p-3.5 space-y-3">
+                <form onSubmit={handleSaveCourseForm} onTouchStart={(e) => e.stopPropagation()} onTouchMove={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()} className="bg-indigo-50/40 border border-indigo-200 rounded-2xl p-3.5 space-y-3">
                   <div className="flex justify-between items-center border-b border-indigo-100 pb-2.5">
                     <span className="font-bold text-indigo-950 text-xs flex items-center gap-1.5">
                       <GraduationCap size={16} className="text-indigo-600 shrink-0" />

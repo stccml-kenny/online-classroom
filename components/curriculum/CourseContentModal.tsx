@@ -217,6 +217,19 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
   const [resolvedBlobUrls, setResolvedBlobUrls] = useState<Record<string, string>>({});
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
 
+  // ⭐ 學生與家長帳戶唯讀識別 (只供線上閱讀檔案，不顯示外連與下載)
+  const isStudentOrParent = isReadOnly || currentUser?.role === 'student' || currentUser?.role === 'parent';
+  const [readingFile, setReadingFile] = useState<{
+    id?: string;
+    name?: string;
+    url?: string;
+    type?: string;
+    isImage?: boolean;
+    isVideo?: boolean;
+    isAudio?: boolean;
+    isGoogle?: boolean;
+  } | null>(null);
+
   const handleResetAndClose = () => {
     setSelectedBranch('全部分校');
     setSelectedCourse('全部課程');
@@ -235,6 +248,7 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
     setHwSelectModalOpen(false);
     setTargetUnitForHwSelect(null);
     setPlayingAudioId(null);
+    setReadingFile(null);
     onClose();
   };
 
@@ -751,7 +765,7 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
   });
 
   return (
-    <div className="fixed inset-0 bg-[#F8F9FA] z-40 flex flex-col w-full h-full overflow-hidden animate-in fade-in duration-200">
+    <div onTouchStart={(e) => e.stopPropagation()} onTouchMove={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()} className="fixed inset-0 bg-[#F8F9FA] z-40 flex flex-col w-full h-full h-[100dvh] max-h-[100dvh] overflow-hidden animate-in fade-in duration-200">
       <div className="w-full flex-1 flex flex-col overflow-hidden max-w-3xl mx-auto bg-white shadow-sm relative">
         {/* 頂部導航列 (⭐ 需求 3：已移除設定齒輪，純粹專注課程單元與進度) */}
         <div className="bg-white px-5 py-3.5 rounded-t-2xl border-b border-gray-100 flex justify-between items-center">
@@ -1149,15 +1163,17 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
                                       <YoutubeIcon size={14} />
                                       <span>示範影片 #{i + 1}</span>
                                     </span>
-                                    <a
-                                      href={ytUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-[10px] text-red-500 hover:text-red-700 font-semibold flex items-center gap-0.5"
-                                    >
-                                      <span>在 YouTube 觀看</span>
-                                      <ExternalLink size={10} />
-                                    </a>
+                                    {!isStudentOrParent && (
+                                      <a
+                                        href={ytUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-[10px] text-red-500 hover:text-red-700 font-semibold flex items-center gap-0.5"
+                                      >
+                                        <span>在 YouTube 觀看</span>
+                                        <ExternalLink size={10} />
+                                      </a>
+                                    )}
                                   </div>
                                   {ytId ? (
                                     <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-black shadow-inner">
@@ -1186,6 +1202,44 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
                             </div>
                             {ggList.map((ggUrl, i) => {
                               const meta = getGoogleLinkMeta(ggUrl);
+                              if (isStudentOrParent) {
+                                return (
+                                  <div
+                                    key={i}
+                                    className="flex items-center justify-between p-2.5 bg-blue-50/60 border border-blue-200 rounded-xl"
+                                  >
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                      <div className={`w-7 h-7 rounded-lg ${meta.iconColor} text-white font-black text-xs flex items-center justify-center shrink-0`}>
+                                        G
+                                      </div>
+                                      <div className="min-w-0">
+                                        <p className="text-xs font-bold text-blue-950 truncate">{meta.title}</p>
+                                        <span className="text-[9px] bg-white text-blue-700 px-1.5 py-0.5 rounded border border-blue-200 font-semibold shrink-0">
+                                          {meta.tag} · 線上教材
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        let embed = ggUrl;
+                                        if (embed.includes('/edit')) embed = embed.replace(/\/edit.*$/, '/preview');
+                                        else if (!embed.includes('/preview')) embed = embed + (embed.includes('?') ? '&' : '?') + 'embedded=true';
+                                        setReadingFile({
+                                          id: `gg_${i}`,
+                                          name: meta.title,
+                                          url: embed,
+                                          isGoogle: true,
+                                        });
+                                      }}
+                                      className="text-[10px] text-blue-600 font-bold flex items-center gap-1 bg-white hover:bg-blue-50 px-2.5 py-1.5 rounded-lg border border-blue-200 cursor-pointer shadow-2xs shrink-0"
+                                    >
+                                      <Eye size={12} />
+                                      <span>線上閱讀</span>
+                                    </button>
+                                  </div>
+                                );
+                              }
                               return (
                                 <a
                                   key={i}
@@ -1277,15 +1331,58 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
                                       </div>
                                     </div>
 
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDownload(att)}
-                                      className="flex items-center gap-1 px-2 py-1 bg-white hover:bg-gray-100 text-gray-700 text-xs font-semibold rounded-lg border border-gray-200 shadow-2xs transition-colors shrink-0"
-                                      title="下載檔案"
-                                    >
-                                      <Download size={11} />
-                                      <span>下載</span>
-                                    </button>
+                                    {isStudentOrParent ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setReadingFile({
+                                            id: att.id,
+                                            name: att.name,
+                                            url: fileUrl,
+                                            type: att.type,
+                                            isVideo,
+                                            isAudio,
+                                            isImage,
+                                          });
+                                        }}
+                                        className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-bold rounded-lg border border-emerald-200 shadow-2xs transition-colors shrink-0 cursor-pointer"
+                                        title="線上閱讀教材"
+                                      >
+                                        <Eye size={12} />
+                                        <span>線上閱讀</span>
+                                      </button>
+                                    ) : (
+                                      <div className="flex items-center gap-1.5 shrink-0">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setReadingFile({
+                                              id: att.id,
+                                              name: att.name,
+                                              url: fileUrl,
+                                              type: att.type,
+                                              isVideo,
+                                              isAudio,
+                                              isImage,
+                                            });
+                                          }}
+                                          className="flex items-center gap-1 px-2 py-1 bg-white hover:bg-gray-100 text-gray-700 text-xs font-semibold rounded-lg border border-gray-200 shadow-2xs transition-colors cursor-pointer"
+                                          title="預覽"
+                                        >
+                                          <Eye size={11} />
+                                          <span>預覽</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDownload(att)}
+                                          className="flex items-center gap-1 px-2 py-1 bg-white hover:bg-gray-100 text-gray-700 text-xs font-semibold rounded-lg border border-gray-200 shadow-2xs transition-colors cursor-pointer"
+                                          title="下載檔案"
+                                        >
+                                          <Download size={11} />
+                                          <span>下載</span>
+                                        </button>
+                                      </div>
+                                    )}
                                   </div>
 
                                   {/* 內嵌視訊播放 */}
@@ -1295,6 +1392,7 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
                                         src={fileUrl}
                                         controls
                                         playsInline
+                                        controlsList="nodownload"
                                         preload="metadata"
                                         className="w-full max-h-52 object-contain"
                                       >
@@ -1580,6 +1678,72 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
         courses={courses}
         onApplyBatchEdit={handleApplyBatchEdit}
       />
+
+      {/* ⭐ 學生與家長專屬：線上安全閱讀檢視器 (僅供閱讀，絕不顯示外連與下載) */}
+      {readingFile && (
+        <div
+          onTouchStart={(e) => e.stopPropagation()}
+          className="fixed inset-0 z-60 bg-black/75 backdrop-blur-xs flex flex-col items-center justify-center p-2 sm:p-4 animate-in fade-in duration-150"
+        >
+          <div className="bg-white w-full max-w-2xl h-[85vh] rounded-2xl flex flex-col overflow-hidden shadow-2xl border border-gray-200">
+            <div className="flex justify-between items-center px-4 py-3 bg-gray-900 text-white shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <BookOpen size={18} className="text-emerald-400 shrink-0" />
+                <span className="font-bold text-xs sm:text-sm truncate">
+                  {readingFile.name || '線上教材閱讀'}
+                </span>
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-1.5 py-0.5 rounded shrink-0">
+                  線上閱讀模式
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReadingFile(null)}
+                className="p-1 rounded-full hover:bg-white/20 text-white transition-colors cursor-pointer"
+                title="關閉"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 bg-gray-100 p-2 overflow-auto flex items-center justify-center">
+              {readingFile.isImage ? (
+                <img
+                  src={readingFile.url}
+                  alt={readingFile.name}
+                  className="max-w-full max-h-full object-contain rounded shadow-sm select-none"
+                  onContextMenu={(e) => e.preventDefault()}
+                />
+              ) : readingFile.isVideo ? (
+                <video
+                  src={readingFile.url}
+                  controls
+                  playsInline
+                  controlsList="nodownload"
+                  className="w-full max-h-full rounded bg-black"
+                />
+              ) : readingFile.isAudio ? (
+                <div className="bg-white p-6 rounded-2xl shadow-sm flex flex-col items-center gap-4 text-center max-w-md w-full">
+                  <Music size={40} className="text-amber-500" />
+                  <p className="font-bold text-sm text-gray-800">{readingFile.name}</p>
+                  <audio src={readingFile.url} controls controlsList="nodownload" className="w-full" />
+                </div>
+              ) : (
+                <iframe
+                  src={readingFile.url}
+                  title={readingFile.name || '線上教材閱讀'}
+                  className="w-full h-full border-0 rounded bg-white"
+                />
+              )}
+            </div>
+
+            <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 text-center text-[11px] text-gray-500 font-medium shrink-0">
+              💡 學生與家長專用線上教材，僅供線上閱讀學習
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

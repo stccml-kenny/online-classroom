@@ -391,7 +391,7 @@ export const CourseUnitFormModal: React.FC<CourseUnitFormModalProps> = ({
 
   return (
     /* ⭐ 全板顯示 (Full-board) */
-    <div className="fixed inset-0 z-50 flex flex-col bg-[#F8F9FA] w-full h-[100dvh] max-h-[100dvh] overflow-hidden animate-in fade-in duration-200">
+    <div onTouchStart={(e) => e.stopPropagation()} onTouchMove={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()} className="fixed inset-0 z-50 flex flex-col bg-[#F8F9FA] w-full h-[100dvh] max-h-[100dvh] overflow-hidden animate-in fade-in duration-200">
       {/* 頂部 Header */}
       <div className="bg-gradient-to-r from-indigo-700 via-indigo-600 to-indigo-500 text-white px-5 sm:px-8 py-3.5 flex justify-between items-center shrink-0 shadow-md">
         <div className="flex items-center gap-3">

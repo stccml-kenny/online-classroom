@@ -194,7 +194,19 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (isRefreshing) return;
+    // ⭐ 當處於新增帳號 (issue)、Excel 批次匯入 (excel) 或編輯帳號 (editingAccountId / showBatchModal 等) 時，完全禁用下拉更新，防範未儲存資料丟失
+    if (
+      isRefreshing ||
+      activeTab === 'issue' ||
+      activeTab === 'excel' ||
+      editingAccountId !== null ||
+      showBatchModal ||
+      resettingUserId !== null ||
+      quickAddCourseUserId !== null
+    ) {
+      touchStartY.current = 0;
+      return;
+    }
     const scrollTop = modalScrollRef.current?.scrollTop ?? 0;
     if (scrollTop <= 0) {
       touchStartY.current = e.touches[0].clientY;
@@ -204,7 +216,19 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (touchStartY.current <= 0 || isRefreshing) return;
+    if (
+      touchStartY.current <= 0 ||
+      isRefreshing ||
+      activeTab === 'issue' ||
+      activeTab === 'excel' ||
+      editingAccountId !== null ||
+      showBatchModal ||
+      resettingUserId !== null ||
+      quickAddCourseUserId !== null
+    ) {
+      setPullDistance(0);
+      return;
+    }
     const currentY = e.touches[0].clientY;
     const diff = currentY - touchStartY.current;
     if (diff > 0) {
@@ -215,7 +239,19 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
   };
 
   const handleTouchEnd = async () => {
-    if (touchStartY.current <= 0) return;
+    if (
+      touchStartY.current <= 0 ||
+      activeTab === 'issue' ||
+      activeTab === 'excel' ||
+      editingAccountId !== null ||
+      showBatchModal ||
+      resettingUserId !== null ||
+      quickAddCourseUserId !== null
+    ) {
+      touchStartY.current = 0;
+      setPullDistance(0);
+      return;
+    }
     touchStartY.current = 0;
     if (pullDistance >= 45 && !isRefreshing) {
       setIsRefreshing(true);
@@ -1621,7 +1657,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
         </div>
 
         {/* ⭐ 手機端下拉重新整理 (Pull-to-Refresh) 視覺回饋指示器 */}
-        {(pullDistance > 0 || isRefreshing) && (
+        {(pullDistance > 0 || isRefreshing) && activeTab === 'list' && editingAccountId === null && !showBatchModal && (
           <div
             style={{ height: `${pullDistance}px` }}
             className="w-full flex items-center justify-center overflow-hidden transition-all duration-150 bg-gradient-to-b from-purple-100 to-transparent text-purple-800 shrink-0 border-b border-purple-200"

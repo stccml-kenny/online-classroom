@@ -590,7 +590,23 @@ export default function OnlineClassroomApp() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (isRefreshing) return;
+    // ⭐ 當任何彈窗 (課程單元/家課/帳戶/點名/行事曆等) 開啟時，完全禁用主頁下拉更新，防範未儲存資料丟失
+    if (
+      isRefreshing ||
+      showCourseContentModal ||
+      showHomeworkModal ||
+      showAccountMgmtModal ||
+      showSetupModal ||
+      showClassModal ||
+      showAttendanceModal ||
+      showNoticeModal ||
+      showCalendarModal ||
+      showAuthModal ||
+      showChatModal
+    ) {
+      touchStartY.current = 0;
+      return;
+    }
     const scrollTop = scrollContainerRef.current?.scrollTop ?? 0;
     if (scrollTop <= 0) {
       touchStartY.current = e.touches[0].clientY;
@@ -855,6 +871,8 @@ export default function OnlineClassroomApp() {
           onClose={() => setShowHomeworkModal(false)}
           branches={branches}
           courses={courseNames}
+          currentUser={currentUser}
+          isReadOnly={currentUser?.role === 'student' || currentUser?.role === 'parent'}
         />
 
         {/* 4. 活動 / 課程點名彈窗 */}
