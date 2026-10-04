@@ -256,7 +256,6 @@ export const HomeworkCard: React.FC<HomeworkCardProps> = ({
 
   // ⭐ 學生在線交功課與導師批閱狀態
   const hwId = item.$id || item.title;
-  const isStudentOrParent = currentUser?.role === 'student' || currentUser?.role === 'parent';
   const currentStudentKey = currentUser ? currentUser.username : 'guest';
 
   // 讀取本機全部提交記錄
