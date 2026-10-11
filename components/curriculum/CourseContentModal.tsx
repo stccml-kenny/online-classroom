@@ -1194,14 +1194,129 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
                           </div>
                         )}
 
-                        {/* 🔵 2. Google 雲端文件 / 講義區塊 */}
+                        {/* 🔵 2. Google 雲端資源區塊 (⭐ 支援 Video / Photo 於 App 內直接打開播放與檢視) */}
                         {ggList.length > 0 && (
-                          <div className="space-y-1.5">
+                          <div className="space-y-2">
                             <div className="text-[11px] font-bold text-blue-700">
-                              Google 雲端講義與文件連結 ({ggList.length} 個)：
+                              Google 雲端資源連結 ({ggList.length} 個)：
                             </div>
                             {ggList.map((ggUrl, i) => {
                               const meta = getGoogleLinkMeta(ggUrl);
+                              const isVid = meta.mediaType === 'video';
+                              const isPho = meta.mediaType === 'photo';
+
+                              if (isVid) {
+                                return (
+                                  <div key={i} className="bg-red-50/40 border border-red-200 rounded-xl p-2.5 space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        <div className="w-7 h-7 rounded-lg bg-red-600 text-white flex items-center justify-center shrink-0 shadow-2xs font-bold text-xs">
+                                          <Video size={15} />
+                                        </div>
+                                        <div className="min-w-0">
+                                          <div className="flex items-center gap-1.5">
+                                            <p className="text-xs font-bold text-gray-900 truncate">{meta.title}</p>
+                                            <span className="text-[9px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold shrink-0">
+                                              Google 視訊
+                                            </span>
+                                          </div>
+                                          <p className="text-[10px] text-gray-400">可於 App 內直接播放</p>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setReadingFile({
+                                              id: `gg_v_${i}`,
+                                              name: meta.title,
+                                              url: meta.embedUrl,
+                                              isVideo: true,
+                                              isGoogle: true,
+                                            });
+                                          }}
+                                          className="flex items-center gap-1 text-xs font-bold text-white bg-red-600 hover:bg-red-700 px-2.5 py-1.5 rounded-lg shadow-2xs cursor-pointer transition-colors"
+                                        >
+                                          <Play size={11} className="ml-0.5" />
+                                          <span>App 內播放</span>
+                                        </button>
+                                        {!isStudentOrParent && (
+                                          <a
+                                            href={ggUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="p-1 text-gray-400 hover:text-gray-600"
+                                            title="另開新分頁"
+                                          >
+                                            <ExternalLink size={12} />
+                                          </a>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div className="relative w-full aspect-video rounded-lg overflow-hidden shadow-inner bg-black">
+                                      <iframe
+                                        src={meta.embedUrl}
+                                        title={meta.title}
+                                        className="w-full h-full border-0"
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                        allowFullScreen
+                                      />
+                                    </div>
+                                  </div>
+                                );
+                              }
+
+                              if (isPho) {
+                                return (
+                                  <div key={i} className="bg-amber-50/50 border border-amber-200 rounded-xl p-2.5 flex items-center justify-between">
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                      <div className="w-7 h-7 rounded-lg bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-2xs font-bold text-xs">
+                                        <Eye size={15} />
+                                      </div>
+                                      <div className="min-w-0">
+                                        <div className="flex items-center gap-1.5">
+                                          <p className="text-xs font-bold text-gray-900 truncate">{meta.title}</p>
+                                          <span className="text-[9px] bg-white text-amber-700 px-1.5 py-0.5 rounded border border-amber-200 font-bold shrink-0">
+                                            Google 相片
+                                          </span>
+                                        </div>
+                                        <p className="text-[10px] text-amber-700 font-medium">可於 App 內直接查看</p>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setReadingFile({
+                                            id: `gg_p_${i}`,
+                                            name: meta.title,
+                                            url: meta.directImageUrl || meta.embedUrl,
+                                            isImage: true,
+                                            isGoogle: true,
+                                          });
+                                        }}
+                                        className="flex items-center gap-1 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 px-2.5 py-1.5 rounded-lg shadow-2xs cursor-pointer transition-colors"
+                                      >
+                                        <Eye size={12} />
+                                        <span>App 內查看</span>
+                                      </button>
+                                      {!isStudentOrParent && (
+                                        <a
+                                          href={ggUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="p-1 text-gray-400 hover:text-gray-600"
+                                          title="另開新分頁"
+                                        >
+                                          <ExternalLink size={12} />
+                                        </a>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              }
+
+                              // 其它 Google 文件 / 試算表 / 簡報 / 雲端硬碟檔案
                               if (isStudentOrParent) {
                                 return (
                                   <div
@@ -1222,31 +1337,26 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
                                     <button
                                       type="button"
                                       onClick={() => {
-                                        let embed = ggUrl;
-                                        if (embed.includes('/edit')) embed = embed.replace(/\/edit.*$/, '/preview');
-                                        else if (!embed.includes('/preview')) embed = embed + (embed.includes('?') ? '&' : '?') + 'embedded=true';
                                         setReadingFile({
                                           id: `gg_${i}`,
                                           name: meta.title,
-                                          url: embed,
+                                          url: meta.embedUrl,
                                           isGoogle: true,
                                         });
                                       }}
                                       className="text-[10px] text-blue-600 font-bold flex items-center gap-1 bg-white hover:bg-blue-50 px-2.5 py-1.5 rounded-lg border border-blue-200 cursor-pointer shadow-2xs shrink-0"
                                     >
                                       <Eye size={12} />
-                                      <span>線上閱讀</span>
+                                      <span>App 內閱讀</span>
                                     </button>
                                   </div>
                                 );
                               }
+
                               return (
-                                <a
+                                <div
                                   key={i}
-                                  href={ggUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex items-center justify-between p-2.5 bg-blue-50/60 hover:bg-blue-100 border border-blue-200 rounded-xl transition-all group"
+                                  className="flex items-center justify-between p-2.5 bg-blue-50/60 border border-blue-200 rounded-xl transition-all group"
                                 >
                                   <div className="flex items-center gap-2.5 min-w-0">
                                     <div className={`w-7 h-7 rounded-lg ${meta.iconColor} text-white font-black text-xs flex items-center justify-center shrink-0`}>
@@ -1255,18 +1365,40 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
                                     <div className="min-w-0">
                                       <div className="flex items-center gap-1.5">
                                         <p className="text-xs font-bold text-blue-950 truncate">{meta.title}</p>
-                                        <span className="text-[9px] bg-white text-blue-700 px-1.5 py-0.2 rounded border border-blue-200 font-semibold shrink-0">
+                                        <span className="text-[9px] bg-white text-blue-700 px-1.5 py-0.5 rounded border border-blue-200 font-semibold shrink-0">
                                           {meta.tag}
                                         </span>
                                       </div>
                                       <p className="text-[10px] text-blue-500 truncate max-w-[200px]">{ggUrl}</p>
                                     </div>
                                   </div>
-                                  <span className="text-[10px] text-blue-600 font-bold flex items-center gap-0.5 bg-white px-2 py-1 rounded-lg border border-blue-200">
-                                    <span>開啟</span>
-                                    <ExternalLink size={10} />
-                                  </span>
-                                </a>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setReadingFile({
+                                          id: `gg_${i}`,
+                                          name: meta.title,
+                                          url: meta.embedUrl,
+                                          isGoogle: true,
+                                        });
+                                      }}
+                                      className="text-[10px] text-blue-600 font-bold flex items-center gap-0.5 bg-white hover:bg-blue-50 px-2 py-1 rounded-lg border border-blue-200 cursor-pointer shadow-2xs"
+                                    >
+                                      <Eye size={11} />
+                                      <span>App 內閱讀</span>
+                                    </button>
+                                    <a
+                                      href={ggUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="p-1 text-gray-400 hover:text-blue-600"
+                                      title="另開新分頁"
+                                    >
+                                      <ExternalLink size={12} />
+                                    </a>
+                                  </div>
+                                </div>
                               );
                             })}
                           </div>

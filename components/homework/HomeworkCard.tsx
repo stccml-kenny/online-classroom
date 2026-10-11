@@ -87,28 +87,198 @@ export const extractYoutubeId = (url: string): string | null => {
   return match ? match[1] : null;
 };
 
-export const getGoogleLinkMeta = (url: string) => {
-  if (!url) return { title: 'Google 雲端連結', tag: 'Google', iconColor: 'bg-blue-600', textColor: 'text-blue-700' };
-  const lower = url.toLowerCase();
+export interface GoogleLinkMeta {
+  title: string;
+  tag: string;
+  iconColor: string;
+  textColor: string;
+  mediaType: 'video' | 'photo' | 'doc' | 'sheet' | 'slide' | 'form' | 'meet' | 'drive' | 'general';
+  embedUrl: string;
+  isMedia: boolean;
+  directImageUrl?: string;
+}
+
+export const getGoogleLinkMeta = (url: string): GoogleLinkMeta => {
+  if (!url) {
+    return {
+      title: 'Google 雲端連結',
+      tag: 'Google',
+      iconColor: 'bg-blue-600',
+      textColor: 'text-blue-700',
+      mediaType: 'general',
+      embedUrl: '',
+      isMedia: false,
+    };
+  }
+
+  const trimmed = url.trim();
+  const lower = trimmed.toLowerCase();
+
+  // 1. 擷取 Google Drive / Docs 檔案 ID
+  let fileId = '';
+  const m1 = trimmed.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (m1) fileId = m1[1];
+  if (!fileId) {
+    const m2 = trimmed.match(/drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/);
+    if (m2) fileId = m2[1];
+  }
+  if (!fileId) {
+    const m3 = trimmed.match(/drive\.google\.com\/uc\?.*id=([a-zA-Z0-9_-]+)/);
+    if (m3) fileId = m3[1];
+  }
+  if (!fileId) {
+    const m4 = trimmed.match(/docs\.google\.com\/(?:document|spreadsheets|presentation)\/d\/([a-zA-Z0-9_-]+)/);
+    if (m4) fileId = m4[1];
+  }
+
+  // 2. 判斷是否為 Video 或 Photo / 圖片
+  const isVideoExt =
+    lower.includes('.mp4') ||
+    lower.includes('.mov') ||
+    lower.includes('.webm') ||
+    lower.includes('.avi') ||
+    lower.includes('.mkv') ||
+    lower.includes('.m4v') ||
+    lower.includes('video');
+
+  const isPhotoExt =
+    lower.includes('.jpg') ||
+    lower.includes('.jpeg') ||
+    lower.includes('.png') ||
+    lower.includes('.gif') ||
+    lower.includes('.webp') ||
+    lower.includes('.bmp') ||
+    lower.includes('.svg') ||
+    lower.includes('photos.google.com') ||
+    lower.includes('photos.app.goo.gl') ||
+    lower.includes('image') ||
+    lower.includes('photo');
+
+  // 計算可直接於 App 內預覽嵌入的 URL
+  let embedUrl = trimmed;
+  let directImageUrl: string | undefined = undefined;
+
+  if (fileId) {
+    if (lower.includes('docs.google.com/document')) {
+      embedUrl = `https://docs.google.com/document/d/${fileId}/preview`;
+    } else if (lower.includes('docs.google.com/spreadsheets')) {
+      embedUrl = `https://docs.google.com/spreadsheets/d/${fileId}/preview`;
+    } else if (lower.includes('docs.google.com/presentation')) {
+      embedUrl = `https://docs.google.com/presentation/d/${fileId}/preview`;
+    } else if (lower.includes('drive.google.com')) {
+      embedUrl = `https://drive.google.com/file/d/${fileId}/preview`;
+      directImageUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
+    }
+  } else if (lower.includes('docs.google.com/forms') || lower.includes('forms.gle')) {
+    embedUrl = trimmed.includes('?') ? `${trimmed}&embedded=true` : `${trimmed}?embedded=true`;
+  }
+
+  if (isVideoExt) {
+    return {
+      title: 'Google 雲端視訊影片 (Video)',
+      tag: '視訊影片',
+      iconColor: 'bg-red-600',
+      textColor: 'text-red-700',
+      mediaType: 'video',
+      embedUrl,
+      isMedia: true,
+    };
+  }
+
+  if (isPhotoExt) {
+    return {
+      title: lower.includes('photos.google') ? 'Google 相簿 / 相片 (Photos)' : 'Google 雲端圖片/相片 (Photo)',
+      tag: '圖片相片',
+      iconColor: 'bg-amber-600',
+      textColor: 'text-amber-700',
+      mediaType: 'photo',
+      embedUrl,
+      isMedia: true,
+      directImageUrl: directImageUrl || (fileId ? `https://drive.google.com/uc?export=view&id=${fileId}` : (isPhotoExt && trimmed.startsWith('http') ? trimmed : undefined)),
+    };
+  }
+
   if (lower.includes('drive.google.com')) {
-    return { title: 'Google 雲端硬碟 (Drive)', tag: 'Google Drive', iconColor: 'bg-emerald-600', textColor: 'text-emerald-700' };
+    return {
+      title: 'Google 雲端硬碟檔案 (Drive)',
+      tag: '雲端硬碟',
+      iconColor: 'bg-emerald-600',
+      textColor: 'text-emerald-700',
+      mediaType: 'drive',
+      embedUrl,
+      isMedia: true, // Google Drive 檔案均支援在 App 內以 preview 模式直接打開播放或查看
+    };
   }
+
   if (lower.includes('docs.google.com/document')) {
-    return { title: 'Google 文件 (Docs)', tag: 'Google Docs', iconColor: 'bg-blue-600', textColor: 'text-blue-700' };
+    return {
+      title: 'Google 文件 (Docs)',
+      tag: 'Google Docs',
+      iconColor: 'bg-blue-600',
+      textColor: 'text-blue-700',
+      mediaType: 'doc',
+      embedUrl,
+      isMedia: false,
+    };
   }
+
   if (lower.includes('docs.google.com/spreadsheets')) {
-    return { title: 'Google 試算表 (Sheets)', tag: 'Google Sheets', iconColor: 'bg-green-600', textColor: 'text-green-700' };
+    return {
+      title: 'Google 試算表 (Sheets)',
+      tag: 'Google Sheets',
+      iconColor: 'bg-green-600',
+      textColor: 'text-green-700',
+      mediaType: 'sheet',
+      embedUrl,
+      isMedia: false,
+    };
   }
+
   if (lower.includes('docs.google.com/presentation')) {
-    return { title: 'Google 簡報 (Slides)', tag: 'Google Slides', iconColor: 'bg-amber-600', textColor: 'text-amber-700' };
+    return {
+      title: 'Google 簡報 (Slides)',
+      tag: 'Google Slides',
+      iconColor: 'bg-amber-600',
+      textColor: 'text-amber-700',
+      mediaType: 'slide',
+      embedUrl,
+      isMedia: false,
+    };
   }
+
   if (lower.includes('docs.google.com/forms') || lower.includes('forms.gle')) {
-    return { title: 'Google 表單問卷 (Forms)', tag: 'Google Forms', iconColor: 'bg-purple-600', textColor: 'text-purple-700' };
+    return {
+      title: 'Google 表單問卷 (Forms)',
+      tag: 'Google Forms',
+      iconColor: 'bg-purple-600',
+      textColor: 'text-purple-700',
+      mediaType: 'form',
+      embedUrl,
+      isMedia: false,
+    };
   }
+
   if (lower.includes('meet.google.com')) {
-    return { title: 'Google Meet 視訊會議', tag: 'Google Meet', iconColor: 'bg-teal-600', textColor: 'text-teal-700' };
+    return {
+      title: 'Google Meet 視訊會議',
+      tag: 'Google Meet',
+      iconColor: 'bg-teal-600',
+      textColor: 'text-teal-700',
+      mediaType: 'meet',
+      embedUrl: trimmed,
+      isMedia: false,
+    };
   }
-  return { title: 'Google 雲端資源連結', tag: 'Google 資源', iconColor: 'bg-blue-600', textColor: 'text-blue-700' };
+
+  return {
+    title: 'Google 雲端資源連結',
+    tag: 'Google 資源',
+    iconColor: 'bg-blue-600',
+    textColor: 'text-blue-700',
+    mediaType: 'general',
+    embedUrl,
+    isMedia: false,
+  };
 };
 
 // 輔助函式：判斷家課上架狀態 (支援「有待安排」)
@@ -686,14 +856,131 @@ export const HomeworkCard: React.FC<HomeworkCardProps> = ({
             </div>
           )}
 
-          {/* 🔵 2. Google 雲端 / 文件連結區塊 */}
+          {/* 🔵 2. Google 雲端資源區塊 (⭐ 支援 Video / Photo 於 App 內直接打開播放與檢視) */}
           {allGoogleUrls.length > 0 && (
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <div className="text-[11px] font-bold text-blue-700">
-                Google 雲端與文件連結 ({allGoogleUrls.length} 個)：
+                Google 雲端資源連結 ({allGoogleUrls.length} 個)：
               </div>
               {allGoogleUrls.map((ggUrl, idx) => {
                 const googleInfo = getGoogleLinkMeta(ggUrl);
+                const isVid = googleInfo.mediaType === 'video';
+                const isPho = googleInfo.mediaType === 'photo';
+
+                if (isVid) {
+                  return (
+                    <div key={idx} className="bg-red-50/50 border border-red-200 rounded-xl p-2.5 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-8 h-8 rounded-lg bg-red-600 text-white flex items-center justify-center shrink-0 shadow-xs font-black text-xs">
+                            <Video size={16} />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-xs font-bold text-gray-900 truncate">{googleInfo.title}</p>
+                              <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded border border-red-200 font-bold shrink-0">
+                                Google 視訊
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-gray-400">可於 App 內直接播放觀看</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReadingFile({
+                                id: `gg_v_${idx}`,
+                                name: googleInfo.title,
+                                url: googleInfo.embedUrl,
+                                isVideo: true,
+                                isGoogle: true,
+                              });
+                            }}
+                            className="flex items-center gap-1 text-xs font-bold text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg shadow-xs cursor-pointer transition-colors"
+                          >
+                            <Play size={12} className="ml-0.5" />
+                            <span>App 內播放</span>
+                          </button>
+                          {!isStudentOrParent && (
+                            <a
+                              href={ggUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 text-gray-400 hover:text-gray-600"
+                              title="另開新分頁"
+                            >
+                              <ExternalLink size={12} />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 內嵌視訊播放預覽 */}
+                      <div className="relative w-full aspect-video rounded-lg overflow-hidden shadow-inner bg-black">
+                        <iframe
+                          src={googleInfo.embedUrl}
+                          title={googleInfo.title}
+                          className="w-full h-full border-0"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                          allowFullScreen
+                        />
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (isPho) {
+                  return (
+                    <div key={idx} className="bg-amber-50/50 border border-amber-200 rounded-xl p-2.5 flex items-center justify-between">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-lg bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-xs font-bold text-xs">
+                          <Eye size={16} />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-xs font-bold text-gray-900 truncate">{googleInfo.title}</p>
+                            <span className="text-[10px] bg-white text-amber-700 px-1.5 py-0.5 rounded border border-amber-200 font-bold shrink-0">
+                              Google 相片
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-amber-700 font-medium">可於 App 內直接查看</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReadingFile({
+                              id: `gg_p_${idx}`,
+                              name: googleInfo.title,
+                              url: googleInfo.directImageUrl || googleInfo.embedUrl,
+                              isImage: true,
+                              isGoogle: true,
+                            });
+                          }}
+                          className="flex items-center gap-1 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 px-3 py-1.5 rounded-lg shadow-xs cursor-pointer transition-colors"
+                        >
+                          <Eye size={12} />
+                          <span>App 內查看</span>
+                        </button>
+                        {!isStudentOrParent && (
+                          <a
+                            href={ggUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1.5 text-gray-400 hover:text-gray-600"
+                            title="另開新分頁"
+                          >
+                            <ExternalLink size={12} />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+
+                // 其它 Google 文件 / 試算表 / 簡報 / 雲端硬碟檔案
                 if (isStudentOrParent) {
                   return (
                     <div
@@ -714,31 +1001,26 @@ export const HomeworkCard: React.FC<HomeworkCardProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          let embed = ggUrl;
-                          if (embed.includes('/edit')) embed = embed.replace(/\/edit.*$/, '/preview');
-                          else if (!embed.includes('/preview')) embed = embed + (embed.includes('?') ? '&' : '?') + 'embedded=true';
                           setReadingFile({
                             id: `gg_hw_${idx}`,
                             name: googleInfo.title,
-                            url: embed,
+                            url: googleInfo.embedUrl,
                             isGoogle: true,
                           });
                         }}
                         className="shrink-0 flex items-center gap-1 text-xs font-semibold text-blue-600 bg-white hover:bg-blue-50 px-2.5 py-1.5 rounded-lg border border-blue-200 shadow-2xs cursor-pointer"
                       >
                         <Eye size={12} />
-                        <span>線上閱讀</span>
+                        <span>App 內閱讀</span>
                       </button>
                     </div>
                   );
                 }
+
                 return (
-                  <a
+                  <div
                     key={idx}
-                    href={ggUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-between p-2.5 bg-blue-50/60 hover:bg-blue-100/80 border border-blue-200 rounded-xl transition-all group"
+                    className="flex items-center justify-between p-2.5 bg-blue-50/60 border border-blue-200 rounded-xl transition-all group"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className={`w-8 h-8 rounded-lg ${googleInfo.iconColor} text-white flex items-center justify-center shrink-0 shadow-xs font-black text-xs`}>
@@ -754,11 +1036,33 @@ export const HomeworkCard: React.FC<HomeworkCardProps> = ({
                         <p className="text-[10px] text-blue-500 truncate max-w-[220px]">{ggUrl}</p>
                       </div>
                     </div>
-                    <span className="shrink-0 flex items-center gap-1 text-xs font-semibold text-blue-600 group-hover:text-blue-700 bg-white px-2.5 py-1 rounded-lg border border-blue-200 shadow-2xs">
-                      <span>開啟</span>
-                      <ExternalLink size={11} />
-                    </span>
-                  </a>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReadingFile({
+                            id: `gg_hw_${idx}`,
+                            name: googleInfo.title,
+                            url: googleInfo.embedUrl,
+                            isGoogle: true,
+                          });
+                        }}
+                        className="shrink-0 flex items-center gap-1 text-xs font-semibold text-blue-600 bg-white hover:bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200 shadow-2xs cursor-pointer"
+                      >
+                        <Eye size={11} />
+                        <span>App 內閱讀</span>
+                      </button>
+                      <a
+                        href={ggUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-1.5 text-gray-400 hover:text-blue-600"
+                        title="另開新分頁"
+                      >
+                        <ExternalLink size={12} />
+                      </a>
+                    </div>
+                  </div>
                 );
               })}
             </div>
