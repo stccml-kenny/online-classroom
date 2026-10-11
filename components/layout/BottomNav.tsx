@@ -21,7 +21,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 }) => {
   const isStudentOrParent = userRole === 'student' || userRole === 'parent';
 
-  // 🟢 學生 / 家長端：精準符合截圖 3 大底部選單 (首頁 / 日曆 / 訊息)，主色採用 #147D6F 墨綠
+  // 🟢 學生 / 家長端：精準符合截圖 3 大底部選單 (首頁 / 日曆 / 訊息)，主色採用 #FF6B57 墨綠
   if (isStudentOrParent) {
     return (
       <div className="fixed bottom-0 w-full max-w-md bg-white border-t border-gray-200 flex justify-around py-2 z-20 shadow-xs">
@@ -29,14 +29,14 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           icon={<Home size={22} />}
           label="首頁"
           active={activeTab === 'home'}
-          activeColor="text-[#147D6F]"
+          activeColor="text-[#FF6B57]"
           onClick={() => onTabChange('home')}
         />
         <TabButton
           icon={<CalendarIcon size={22} />}
           label="日曆"
           active={activeTab === 'calendar'}
-          activeColor="text-[#147D6F]"
+          activeColor="text-[#FF6B57]"
           onClick={() => onTabChange('calendar')}
         />
         {isChatEnabled && (
@@ -44,7 +44,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             icon={<MessageCircle size={22} />}
             label="訊息"
             active={activeTab === 'msg'}
-            activeColor="text-[#147D6F]"
+            activeColor="text-[#FF6B57]"
             badge={unreadChatCount}
             onClick={() => onTabChange('msg')}
           />

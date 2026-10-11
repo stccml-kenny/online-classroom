@@ -139,8 +139,9 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
 
     // 1. 從 courses 提取排定的課節日期 (sessionDates)
     courses.forEach((c) => {
-      if (typeof c === 'object' && c !== null) {
-        const cBranch = (c.branch || '').trim();
+      const cObj = typeof c === 'string' ? { name: c, branch: '', timeSlot: '', sessionDates: [], targetClasses: [] } : c;
+      if (cObj && cObj.name) {
+        const cBranch = (cObj.branch || '').trim();
 
         // 學生與家長身分：只納入該學校的課程
         if (isStudentOrParent && studentSchool && studentSchool !== '全部分校') {
@@ -149,21 +150,21 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
 
         // 學生與家長身分：只納入自己有修讀的課程
         if (isStudentOrParent && enrolledCoursesList.length > 0) {
-          const matched = enrolledCoursesList.some((ec) => isCourseMatch(ec, c.name));
+          const matched = enrolledCoursesList.some((ec) => isCourseMatch(ec, cObj.name, cObj.timeSlot, cObj.branch));
           if (!matched) return;
         }
 
-        const dates = Array.isArray(c.sessionDates) ? c.sessionDates : [];
-        const courseTitle = c.name;
-        const branchName = c.branch || '全部分校';
-        const slot = c.timeSlot || '';
-        const classesList = (c.targetClasses || []).join(', ');
+        const dates = Array.isArray(cObj.sessionDates) ? cObj.sessionDates : [];
+        const courseTitle = cObj.name;
+        const branchName = cObj.branch || '全部分校';
+        const slot = cObj.timeSlot || '';
+        const classesList = (cObj.targetClasses || []).join(', ');
 
         dates.forEach((dateStr, idx) => {
           if (!dateStr || !dateStr.trim()) return;
           const cleanDate = dateStr.trim();
           events.push({
-            id: `crs_${c.id || c.name}_${cleanDate}_${idx}`,
+            id: `crs_${(cObj as any).id || cObj.name}_${cleanDate}_${idx}`,
             title: `${courseTitle} (第 ${idx + 1} 節)`,
             description: `【${courseTitle}】第 ${idx + 1} 節上課${slot ? ` · 時間：${slot}` : ''}${branchName ? ` · 學校：${branchName}` : ''}${classesList ? ` · 班別：${classesList}` : ''}`,
             eventType: 'course',
@@ -206,9 +207,18 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
         if (!isStudentOrParent && filterBranch !== 'all') {
           if (evt.branch && evt.branch !== '全部分校' && evt.branch !== filterBranch) return false;
         }
-        // 課程過濾
+        // 課程過濾 (智慧比對全名、簡稱、含時段或純名稱)
         if (filterCourse !== 'all') {
-          if (evt.courseName && evt.courseName !== '全部課程' && evt.courseName !== filterCourse) return false;
+          const isMatch =
+            evt.courseName === '全部課程' ||
+            evt.courseName === filterCourse ||
+            isCourseMatch(filterCourse, evt.courseName || '', evt.timeSlot, evt.branch) ||
+            isCourseMatch(evt.courseName || '', filterCourse, evt.timeSlot, evt.branch) ||
+            (evt.title && isCourseMatch(filterCourse, evt.title, evt.timeSlot, evt.branch)) ||
+            (evt.title && evt.title.includes(filterCourse)) ||
+            (evt.courseName && filterCourse.includes(evt.courseName)) ||
+            (evt.courseName && evt.courseName.includes(filterCourse));
+          if (!isMatch) return false;
         }
         // 關鍵字搜尋
         if (searchQuery.trim()) {
@@ -269,9 +279,18 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
         if (!isStudentOrParent && filterBranch !== 'all') {
           if (evt.branch && evt.branch !== '全部分校' && evt.branch !== filterBranch) return false;
         }
-        // 課程過濾
+        // 課程過濾 (智慧比對全名、簡稱、含時段或純名稱)
         if (filterCourse !== 'all') {
-          if (evt.courseName && evt.courseName !== '全部課程' && evt.courseName !== filterCourse) return false;
+          const isMatch =
+            evt.courseName === '全部課程' ||
+            evt.courseName === filterCourse ||
+            isCourseMatch(filterCourse, evt.courseName || '', evt.timeSlot, evt.branch) ||
+            isCourseMatch(evt.courseName || '', filterCourse, evt.timeSlot, evt.branch) ||
+            (evt.title && isCourseMatch(filterCourse, evt.title, evt.timeSlot, evt.branch)) ||
+            (evt.title && evt.title.includes(filterCourse)) ||
+            (evt.courseName && filterCourse.includes(evt.courseName)) ||
+            (evt.courseName && evt.courseName.includes(filterCourse));
+          if (!isMatch) return false;
         }
         // 關鍵字搜尋
         if (searchQuery.trim()) {
@@ -286,13 +305,24 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
       .sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''));
   }, [allHomeworkEvents, filterBranch, filterCourse, searchQuery, isStudentOrParent]);
 
-  // 可供下拉選單篩選的課程名稱清單
+  // 可供下拉選單篩選的課程名稱清單 (整合真實課程、字串清單與已修讀課程)
   const availableCourseNames = useMemo(() => {
+    const set = new Set<string>();
+    courses.forEach((c) => {
+      const name = typeof c === 'string' ? c.trim() : (c.name ? c.name.trim() : '');
+      if (name) set.add(name);
+    });
+    courseNames.forEach((cn) => {
+      if (cn && cn.trim()) set.add(cn.trim());
+    });
     if (isStudentOrParent && enrolledCoursesList.length > 0) {
-      return enrolledCoursesList;
+      enrolledCoursesList.forEach((ec) => {
+        if (ec && ec.trim()) set.add(ec.trim());
+      });
     }
-    return courseNames.length > 0 ? courseNames : ['小學英語常規班', '中學數學專修班'];
-  }, [isStudentOrParent, enrolledCoursesList, courseNames]);
+    const arr = Array.from(set);
+    return arr.length > 0 ? arr : (courseNames.length > 0 ? courseNames : ['常規課程']);
+  }, [courses, courseNames, isStudentOrParent, enrolledCoursesList]);
 
   // 處理開啟表單
   const handleOpenCreateForm = () => {

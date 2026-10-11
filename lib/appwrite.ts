@@ -905,3 +905,79 @@ export async function deleteNewsFromCloud(newsId: string): Promise<boolean> {
 
   return true;
 }
+
+// ==============================================================================
+// ⭐ 學員成長學習報告評核 (Student Evaluations) 雲端儲存與讀取
+// ==============================================================================
+export interface StudentEvaluation {
+  id: string;
+  studentName: string;
+  studentUsername?: string;
+  courseName: string;
+  teacherName: string;
+  date: string;
+  stageLevel: string;
+  focusScore: number;
+  skillScore: number;
+  rhythmScore: number;
+  comment: string;
+  updatedAt: string;
+}
+
+export async function loadStudentEvaluationsFromCloud(): Promise<StudentEvaluation[]> {
+  let list: StudentEvaluation[] = [];
+  if (typeof window !== 'undefined') {
+    try {
+      const local = localStorage.getItem('oc_student_evaluations');
+      if (local) list = JSON.parse(local);
+    } catch (e) {}
+  }
+  try {
+    const res = await databases.listDocuments(DATABASE_ID, 'homework_settings', [
+      Query.equal('setting_key', 'student_evaluations'),
+      Query.limit(1),
+    ]);
+    if (res.documents && res.documents.length > 0) {
+      const cloudList = JSON.parse(res.documents[0].setting_value || '[]');
+      if (Array.isArray(cloudList)) {
+        list = cloudList;
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('oc_student_evaluations', JSON.stringify(list));
+        }
+      }
+    }
+  } catch (err) {}
+  return list;
+}
+
+export async function saveStudentEvaluationToCloud(evalData: StudentEvaluation): Promise<void> {
+  let list: StudentEvaluation[] = await loadStudentEvaluationsFromCloud();
+  const idx = list.findIndex(e => e.studentName === evalData.studentName && e.courseName === evalData.courseName);
+  if (idx !== -1) {
+    list[idx] = { ...list[idx], ...evalData, updatedAt: new Date().toISOString() };
+  } else {
+    list.unshift({ ...evalData, updatedAt: new Date().toISOString() });
+  }
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('oc_student_evaluations', JSON.stringify(list));
+    } catch (e) {}
+  }
+  try {
+    const jsonStr = JSON.stringify(list);
+    const res = await databases.listDocuments(DATABASE_ID, 'homework_settings', [
+      Query.equal('setting_key', 'student_evaluations'),
+      Query.limit(1),
+    ]);
+    if (res.documents && res.documents.length > 0) {
+      await databases.updateDocument(DATABASE_ID, 'homework_settings', res.documents[0].$id, {
+        setting_value: jsonStr,
+      });
+    } else {
+      await databases.createDocument(DATABASE_ID, 'homework_settings', ID.unique(), {
+        setting_key: 'student_evaluations',
+        setting_value: jsonStr,
+      });
+    }
+  } catch (err) {}
+}

@@ -1,4 +1,4 @@
-﻿import React from 'react';
+﻿import React, { useState } from 'react';
 import {
   Radio, Calendar, FileText,
   Lock, Shield, MessageCircle,
@@ -36,6 +36,7 @@ export const MoreView: React.FC<MoreViewProps> = ({
 
   // ⭐ 法律條款彈窗狀態 (私隱政策 / 使用條款)
   const [legalModalType, setLegalModalType] = React.useState<'privacy' | 'terms' | null>(null);
+  const [showPasswordInfoModal, setShowPasswordInfoModal] = useState<boolean>(false);
 
   return (
     <div className="flex-1 overflow-y-auto pb-20">
@@ -128,9 +129,7 @@ export const MoreView: React.FC<MoreViewProps> = ({
         <MenuItem
           icon={<Lock className="text-gray-600" size={20} />}
           title="密碼管理"
-          onClick={() => {
-            alert('💡 本系統密碼統一為 8 位數字，由學校/機構系統管理人員統一派發。如需重設密碼，請聯絡管理員。');
-          }}
+          onClick={() => setShowPasswordInfoModal(true)}
         />
         <MenuItem
           icon={<Shield className="text-gray-600" size={20} />}
@@ -167,6 +166,33 @@ export const MoreView: React.FC<MoreViewProps> = ({
         type={legalModalType || 'privacy'}
         onClose={() => setLegalModalType(null)}
       />
-    </div>
+    
+      {/* 🔑 密碼管理提示彈窗 */}
+      {showPasswordInfoModal && (
+        <div className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl border border-gray-150 space-y-4 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-orange-50 border border-orange-200 text-[#FF6B57] flex items-center justify-center mx-auto shadow-xs">
+              <Lock size={24} />
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="text-base font-black text-gray-900">密碼管理</h3>
+              <p className="text-xs text-gray-600 leading-relaxed font-medium">
+                本系統帳號密碼由學校系統管理人員統一派發及管理。
+              </p>
+              <div className="bg-orange-50/70 border border-orange-200 rounded-2xl p-3 text-xs text-[#FF6B57] font-bold leading-relaxed">
+                如有需要查詢、修改或重設密碼，請聯絡學校管理人員進行辦理。
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowPasswordInfoModal(false)}
+              className="w-full py-2.5 bg-[#FF6B57] hover:bg-[#FF5138] text-white font-bold rounded-xl text-xs shadow-md transition-all cursor-pointer"
+            >
+              我知道了
+            </button>
+          </div>
+        </div>
+      )}
+</div>
   );
 };

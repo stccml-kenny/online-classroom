@@ -2,8 +2,13 @@
 import {
   X, Users, Trash2, Download,
   CheckCircle, GraduationCap, Check, Edit2, RotateCcw, User,
-  MapPin, Plus
+  MapPin, Plus, TrendingUp, Award, Smile
 } from 'lucide-react';
+import {
+  StudentEvaluation,
+  loadStudentEvaluationsFromCloud,
+  saveStudentEvaluationToCloud
+} from '@/lib/appwrite';
 import { CourseItem, getCourseDisplayName } from '../homework/HomeworkSetupModal';
 import { databases, DATABASE_ID } from '@/lib/appwrite';
 import { ID, Query } from 'appwrite';
@@ -18,6 +23,7 @@ interface ClassManagementModalProps {
   courses: string[];
   courseItems?: (string | CourseItem)[];
   usersList?: UserProfile[];
+  currentUser?: UserProfile | null;
   onUpdateUsersList?: (newUsers: UserProfile[]) => void;
   onDataChanged?: () => void;
   onOpenCourseContent?: (courseName: string, branch?: string, isLocked?: boolean) => void;
@@ -58,6 +64,7 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
   onClose,
   branches,
   classes,
+  currentUser,
   courses,
   courseItems = [],
   usersList = [],
@@ -82,6 +89,75 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
   const [editStudentClass, setEditStudentClass] = useState('');
   const [editStudentBranch, setEditStudentBranch] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
+
+  // ⭐ 導師成長報告評核表單狀態
+  const [evaluatingStudent, setEvaluatingStudent] = useState<GroupedStudent | null>(null);
+  const [evalCourse, setEvalCourse] = useState<string>('');
+  const [evalStageLevel, setEvalStageLevel] = useState<string>('初階基礎階段');
+  const [evalFocusScore, setEvalFocusScore] = useState<number>(90);
+  const [evalSkillScore, setEvalSkillScore] = useState<number>(85);
+  const [evalRhythmScore, setEvalRhythmScore] = useState<number>(88);
+  const [evalComment, setEvalComment] = useState<string>('');
+  const [isSavingEval, setIsSavingEval] = useState<boolean>(false);
+  const [evalToast, setEvalToast] = useState<string | null>(null);
+
+  const handleOpenEvaluation = async (s: GroupedStudent) => {
+    setEvaluatingStudent(s);
+    const available = s.enrollments.map((e) => e.course_name).filter(Boolean);
+    const targetCourse = available[0] || courses[0] || '音樂課程';
+    setEvalCourse(targetCourse);
+
+    // 載入該學生已有評核記錄 (若有)
+    try {
+      const allEvals = await loadStudentEvaluationsFromCloud();
+      const existing = allEvals.find(
+        (ev) => ev.studentName === s.student_name && (!ev.courseName || ev.courseName === targetCourse)
+      );
+      if (existing) {
+        setEvalStageLevel(existing.stageLevel || '初階基礎階段');
+        setEvalFocusScore(existing.focusScore ?? 90);
+        setEvalSkillScore(existing.skillScore ?? 85);
+        setEvalRhythmScore(existing.rhythmScore ?? 88);
+        setEvalComment(existing.comment || '');
+      } else {
+        setEvalStageLevel('初階基礎階段');
+        setEvalFocusScore(90);
+        setEvalSkillScore(85);
+        setEvalRhythmScore(88);
+        setEvalComment('上課認真專注，基本動作與技巧掌握良好，學習態度積極主動！');
+      }
+    } catch {
+      setEvalComment('上課認真專注，基本動作與技巧掌握良好，學習態度積極主動！');
+    }
+  };
+
+  const handleSaveEvaluation = async () => {
+    if (!evaluatingStudent) return;
+    setIsSavingEval(true);
+    try {
+      const evalData: StudentEvaluation = {
+        id: `eval_${evaluatingStudent.student_name}_${evalCourse}`,
+        studentName: evaluatingStudent.student_name,
+        courseName: evalCourse,
+        teacherName: currentUser?.name || '授課導師',
+        date: new Date().toISOString().split('T')[0],
+        stageLevel: evalStageLevel,
+        focusScore: Number(evalFocusScore),
+        skillScore: Number(evalSkillScore),
+        rhythmScore: Number(evalRhythmScore),
+        comment: evalComment.trim(),
+        updatedAt: new Date().toISOString(),
+      };
+      await saveStudentEvaluationToCloud(evalData);
+      setEvalToast(`已成功為【${evaluatingStudent.student_name}】儲存成長報告評核！`);
+      setTimeout(() => setEvalToast(null), 3500);
+      setEvaluatingStudent(null);
+    } catch (e: any) {
+      alert('儲存評核失敗：' + (e?.message || '未知錯誤'));
+    } finally {
+      setIsSavingEval(false);
+    }
+  };
 
   const handleResetAllStates = () => {
     setEditingStudent(null);
@@ -625,6 +701,15 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
                           <div className="flex items-center gap-1">
                             <button
                               type="button"
+                              onClick={() => handleOpenEvaluation(s)}
+                              className="text-xs text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-0.5 rounded font-bold flex items-center gap-1 shadow-2xs"
+                              title="為此學生填寫成長報告評核"
+                            >
+                              <TrendingUp size={11} />
+                              <span>成長評核</span>
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => handleStartEditStudent(s)}
                               className="text-gray-400 hover:text-blue-600 p-1"
                               title="編輯會員資料"
@@ -769,7 +854,170 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
             </button>
           </div>
         )}
-      </div>
+      
+        {/* 浮動成功提示 */}
+        {evalToast && (
+          <div className="fixed top-14 left-1/2 -translate-x-1/2 z-60 bg-emerald-600 text-white px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-bold animate-in fade-in slide-in-from-top-3 max-w-[90%] text-center">
+            <CheckCircle size={16} className="shrink-0" />
+            <span>{evalToast}</span>
+          </div>
+        )}
+
+        {/* ⭐ 導師專屬：學員成長學習報告評核彈窗 */}
+        {evaluatingStudent && (
+          <div className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+            <div className="bg-white w-full max-w-md rounded-3xl p-5 shadow-2xl border border-gray-150 space-y-4 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold">
+                    <TrendingUp size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-gray-900">學員成長報告評核</h3>
+                    <p className="text-[11px] text-gray-400">學生評核結果將即時同步至學生/家長端首頁</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEvaluatingStudent(null)}
+                  className="p-1 rounded-full text-gray-400 hover:text-gray-600 cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* 學員基本資訊 */}
+              <div className="bg-[#FFF5F3] border border-orange-200 rounded-2xl p-3 flex justify-between items-center text-xs">
+                <div>
+                  <div className="font-black text-gray-900 text-sm">{evaluatingStudent.student_name}</div>
+                  <div className="text-gray-500">{evaluatingStudent.class_name} 班 · {evaluatingStudent.branch || '全部分校'}</div>
+                </div>
+                <span className="px-2 py-0.5 bg-orange-100 text-[#FF6B57] font-bold rounded-full text-[10px]">
+                  學員評核
+                </span>
+              </div>
+
+              {/* 評核課程選擇 */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-700">評核課程項目</label>
+                <select
+                  value={evalCourse}
+                  onChange={(e) => setEvalCourse(e.target.value)}
+                  className="w-full p-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 outline-none focus:border-[#FF6B57]"
+                >
+                  {evaluatingStudent.enrollments.map((en) => (
+                    <option key={en.id} value={en.course_name}>{en.course_name}</option>
+                  ))}
+                  {evaluatingStudent.enrollments.length === 0 && (
+                    <option value="常規課程">常規課程</option>
+                  )}
+                </select>
+              </div>
+
+              {/* 學習階段 */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-700">目前學習進度 / 階段</label>
+                <select
+                  value={evalStageLevel}
+                  onChange={(e) => setEvalStageLevel(e.target.value)}
+                  className="w-full p-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 outline-none focus:border-[#FF6B57]"
+                >
+                  <option value="初階基礎階段">初階基礎階段</option>
+                  <option value="技巧進步階段">技巧進步階段</option>
+                  <option value="進階演奏階段">進階演奏階段</option>
+                  <option value="考級準備階段">考級準備階段</option>
+                  <option value="專業強化階段">專業強化階段</option>
+                </select>
+              </div>
+
+              {/* 三大指標評分 */}
+              <div className="space-y-3 bg-gray-50 p-3.5 rounded-2xl border border-gray-150">
+                <div className="text-xs font-extrabold text-gray-800">各項表現評分 (0 - 100 分)</div>
+
+                {/* 1. 課堂專注度與學習態度 */}
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs font-bold text-gray-700">
+                    <span>課堂專注度與學習態度</span>
+                    <span className="text-[#FF6B57]">{evalFocusScore}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="50"
+                    max="100"
+                    value={evalFocusScore}
+                    onChange={(e) => setEvalFocusScore(Number(e.target.value))}
+                    className="w-full accent-[#FF6B57]"
+                  />
+                </div>
+
+                {/* 2. 音樂技巧與演奏掌握 */}
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs font-bold text-gray-700">
+                    <span>音樂技巧與演奏掌握</span>
+                    <span className="text-[#FF6B57]">{evalSkillScore}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="50"
+                    max="100"
+                    value={evalSkillScore}
+                    onChange={(e) => setEvalSkillScore(Number(e.target.value))}
+                    className="w-full accent-[#FF6B57]"
+                  />
+                </div>
+
+                {/* 3. 節奏掌握與樂理理解 */}
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs font-bold text-gray-700">
+                    <span>節奏掌握與樂理理解</span>
+                    <span className="text-[#FF6B57]">{evalRhythmScore}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="50"
+                    max="100"
+                    value={evalRhythmScore}
+                    onChange={(e) => setEvalRhythmScore(Number(e.target.value))}
+                    className="w-full accent-[#FF6B57]"
+                  />
+                </div>
+              </div>
+
+              {/* 導師評語 */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-700">導師專業評語與建議</label>
+                <textarea
+                  value={evalComment}
+                  onChange={(e) => setEvalComment(e.target.value)}
+                  placeholder="請輸入針對此學員之學習表現總結、優點及改進建議..."
+                  rows={3}
+                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 outline-none focus:border-[#FF6B57] leading-relaxed"
+                />
+              </div>
+
+              {/* 評核按鈕 */}
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEvaluatingStudent(null)}
+                  className="flex-1 py-2.5 text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors cursor-pointer"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEvaluation}
+                  disabled={isSavingEval}
+                  className="flex-1 py-2.5 text-xs font-bold text-white bg-[#FF6B57] hover:bg-[#FF5138] rounded-xl shadow-md transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Check size={14} />
+                  <span>{isSavingEval ? '儲存中...' : '確認儲存評核報告'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+</div>
     </div>
   );
 };

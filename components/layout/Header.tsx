@@ -51,7 +51,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* 中間偏左：SNJMUSIC 品牌標誌與身分 / 學員姓名 */}
         <div className="flex items-center gap-2 flex-1 pl-1">
           {/* 菱形皇冠 Logo */}
-          <div className="w-7 h-7 rounded-lg bg-[#EBF7F5] border border-[#CDEAE4] text-[#147D6F] flex items-center justify-center font-bold shrink-0 shadow-2xs">
+          <div className="w-7 h-7 rounded-lg bg-[bg-orange-50] border border-[border-orange-200] text-[#FF6B57] flex items-center justify-center font-bold shrink-0 shadow-2xs">
             <Crown size={15} />
           </div>
           <div className="min-w-0">
@@ -74,7 +74,7 @@ export const Header: React.FC<HeaderProps> = ({
               className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
               title="重新整理"
             >
-              <RotateCcw size={16} className={isRefreshing ? "animate-spin text-[#147D6F]" : ""} />
+              <RotateCcw size={16} className={isRefreshing ? "animate-spin text-[#FF6B57]" : ""} />
             </button>
           )}
 

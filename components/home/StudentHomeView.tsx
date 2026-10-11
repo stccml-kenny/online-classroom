@@ -23,6 +23,7 @@ import { UserProfile } from '@/components/auth/AuthModal';
 import { TabType } from '@/components/layout/BottomNav';
 import { CalendarEvent } from '@/types/calendar';
 import { CourseItem } from '@/components/homework/HomeworkSetupModal';
+import { StudentEvaluation, loadStudentEvaluationsFromCloud } from '@/lib/appwrite';
 
 interface StudentHomeViewProps {
   currentUser: UserProfile | null;
@@ -223,6 +224,26 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
 
   const [showMakeupModal, setShowMakeupModal] = useState(false);
   const [showGrowthReportModal, setShowGrowthReportModal] = useState(false);
+  const [realEvaluation, setRealEvaluation] = useState<StudentEvaluation | null>(null);
+  const [loadingEvaluation, setLoadingEvaluation] = useState(false);
+
+  const handleOpenGrowthReport = async () => {
+    setShowGrowthReportModal(true);
+    setLoadingEvaluation(true);
+    try {
+      const allEvals = await loadStudentEvaluationsFromCloud();
+      const myEval = allEvals.find(
+        (ev) =>
+          ev.studentName === studentName ||
+          (studentId && ev.studentUsername && ev.studentUsername.toUpperCase() === studentId)
+      );
+      setRealEvaluation(myEval || null);
+    } catch {
+      setRealEvaluation(null);
+    } finally {
+      setLoadingEvaluation(false);
+    }
+  };
   const [leaveSuccessToast, setLeaveSuccessToast] = useState<string | null>(null);
 
   // 請假表單狀態
@@ -268,8 +289,8 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
     <div className="flex-1 overflow-y-auto bg-[#F8F9FA] pb-24 px-4 pt-3.5 space-y-4">
       {/* 浮動成功提示 */}
       {leaveSuccessToast && (
-        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 bg-[#147D6F] text-white px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-bold animate-in fade-in slide-in-from-top-3 max-w-[90%] text-center">
-          <CheckCircle2 size={16} className="shrink-0 text-emerald-200" />
+        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 bg-[#FF6B57] text-white px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-bold animate-in fade-in slide-in-from-top-3 max-w-[90%] text-center">
+          <CheckCircle2 size={16} className="shrink-0 text-orange-200" />
           <span>{leaveSuccessToast}</span>
         </div>
       )}
@@ -281,7 +302,7 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
           <button
             type="button"
             onClick={handleGoCalendar}
-            className="text-xs font-semibold text-[#147D6F] hover:text-[#0E5B50] flex items-center gap-0.5 transition-colors cursor-pointer"
+            className="text-xs font-semibold text-[#FF6B57] hover:text-[#E05340] flex items-center gap-0.5 transition-colors cursor-pointer"
           >
             <span>日曆</span>
             <ChevronRight size={14} />
@@ -289,12 +310,12 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
         </div>
 
         {nextSession ? (
-          <div className="bg-[#EBF7F5] border border-[#D3ECE6] rounded-2xl overflow-hidden shadow-2xs">
+          <div className="bg-[#FFF5F3] border border-[#FED7D2] rounded-2xl overflow-hidden shadow-2xs">
             {/* 上半部：課堂詳情與日曆大數字標籤 */}
             <div className="p-3.5 flex items-center gap-3">
               {/* 白色日曆徽章 */}
-              <div className="w-14 h-16 bg-white rounded-xl shadow-2xs border border-[#CDEAE4] flex flex-col items-center justify-center shrink-0">
-                <span className="text-[11px] font-semibold text-[#147D6F] leading-none">
+              <div className="w-14 h-16 bg-white rounded-xl shadow-2xs border border-[#FED7D2] flex flex-col items-center justify-center shrink-0">
+                <span className="text-[11px] font-semibold text-[#FF6B57] leading-none">
                   {getWeekdayName(nextSession.date)}
                 </span>
                 <span className="text-xl font-black text-gray-900 leading-tight my-0.5">
@@ -320,7 +341,7 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
             </div>
 
             {/* 下半部：操作按鈕欄 (白色底背景 + 細線分隔) */}
-            <div className="bg-white/80 border-t border-[#D3ECE6] flex items-center divide-x divide-[#D3ECE6]">
+            <div className="bg-white/80 border-t border-[#FED7D2] flex items-center divide-x divide-[#FED7D2]">
               <button
                 type="button"
                 onClick={() => handleOpenLeave({
@@ -329,21 +350,21 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
                   branch: nextSession.branch,
                   coach: nextSession.coach,
                 })}
-                className="flex-1 py-2.5 text-center text-xs font-bold text-[#147D6F] hover:bg-[#EBF7F5] transition-colors cursor-pointer"
+                className="flex-1 py-2.5 text-center text-xs font-bold text-[#FF6B57] hover:bg-[#FFF5F3] transition-colors cursor-pointer"
               >
                 請假
               </button>
               <button
                 type="button"
                 onClick={handleAskCoach}
-                className="flex-1 py-2.5 text-center text-xs font-bold text-[#147D6F] hover:bg-[#EBF7F5] transition-colors cursor-pointer"
+                className="flex-1 py-2.5 text-center text-xs font-bold text-[#FF6B57] hover:bg-[#FFF5F3] transition-colors cursor-pointer"
               >
                 問教練 / 職員
               </button>
             </div>
           </div>
         ) : (
-          <div className="bg-[#EBF7F5] border border-[#D3ECE6] rounded-2xl p-4 text-center">
+          <div className="bg-[#FFF5F3] border border-[#FED7D2] rounded-2xl p-4 text-center">
             <p className="text-xs font-bold text-gray-700">近期暫無已安排之課堂</p>
             <p className="text-[11px] text-gray-400 mt-0.5">點擊右上角「日曆」可查閱學校完整行事曆</p>
           </div>
@@ -356,12 +377,12 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
         <button
           type="button"
           onClick={() => setShowMakeupModal(true)}
-          className="bg-white border border-gray-150 rounded-2xl p-3.5 shadow-2xs hover:border-[#147D6F] hover:shadow-xs transition-all flex flex-col items-center justify-center gap-2 group cursor-pointer"
+          className="bg-white border border-gray-150 rounded-2xl p-3.5 shadow-2xs hover:border-[#FF6B57] hover:shadow-xs transition-all flex flex-col items-center justify-center gap-2 group cursor-pointer"
         >
-          <div className="w-10 h-10 rounded-full bg-[#EBF7F5] text-[#147D6F] flex items-center justify-center group-hover:scale-105 transition-transform">
+          <div className="w-10 h-10 rounded-full bg-[#FFF5F3] text-[#FF6B57] flex items-center justify-center group-hover:scale-105 transition-transform">
             <RotateCcw size={20} />
           </div>
-          <span className="text-xs font-bold text-gray-800 group-hover:text-[#147D6F]">
+          <span className="text-xs font-bold text-gray-800 group-hover:text-[#FF6B57]">
             請假補堂
           </span>
         </button>
@@ -369,13 +390,13 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
         {/* 成長報告 */}
         <button
           type="button"
-          onClick={() => setShowGrowthReportModal(true)}
-          className="bg-white border border-gray-150 rounded-2xl p-3.5 shadow-2xs hover:border-[#147D6F] hover:shadow-xs transition-all flex flex-col items-center justify-center gap-2 group cursor-pointer"
+          onClick={handleOpenGrowthReport}
+          className="bg-white border border-gray-150 rounded-2xl p-3.5 shadow-2xs hover:border-[#FF6B57] hover:shadow-xs transition-all flex flex-col items-center justify-center gap-2 group cursor-pointer"
         >
-          <div className="w-10 h-10 rounded-full bg-[#EBF7F5] text-[#147D6F] flex items-center justify-center group-hover:scale-105 transition-transform">
+          <div className="w-10 h-10 rounded-full bg-[#FFF5F3] text-[#FF6B57] flex items-center justify-center group-hover:scale-105 transition-transform">
             <TrendingUp size={20} />
           </div>
-          <span className="text-xs font-bold text-gray-800 group-hover:text-[#147D6F]">
+          <span className="text-xs font-bold text-gray-800 group-hover:text-[#FF6B57]">
             成長報告
           </span>
         </button>
@@ -399,7 +420,7 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
             <div
               key={idx}
               onClick={onOpenStudentHomework}
-              className="bg-white border border-gray-150 rounded-2xl p-4 shadow-2xs flex items-center justify-between hover:border-[#147D6F] transition-all cursor-pointer"
+              className="bg-white border border-gray-150 rounded-2xl p-4 shadow-2xs flex items-center justify-between hover:border-[#FF6B57] transition-all cursor-pointer"
             >
               <div className="min-w-0 pr-2">
                 <h3 className="text-sm font-bold text-gray-900 truncate">
@@ -411,7 +432,7 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
               </div>
               <div className="text-right shrink-0">
                 <div className="flex items-baseline justify-end gap-1">
-                  <span className="text-xl font-black text-[#147D6F]">
+                  <span className="text-xl font-black text-[#FF6B57]">
                     {c.completedSessions}
                   </span>
                   <span className="text-xs text-gray-400 font-bold">
@@ -465,7 +486,7 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
                 <button
                   type="button"
                   onClick={handleAskCoach}
-                  className="text-xs font-semibold text-[#147D6F] hover:underline pt-0.5 flex items-center gap-1 cursor-pointer"
+                  className="text-xs font-semibold text-[#FF6B57] hover:underline pt-0.5 flex items-center gap-1 cursor-pointer"
                 >
                   問教練 / 職員
                 </button>
@@ -488,7 +509,7 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
           <div className="bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl border border-gray-150 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-teal-50 text-[#147D6F] flex items-center justify-center">
+                <div className="w-8 h-8 rounded-xl bg-orange-50 text-[#FF6B57] flex items-center justify-center">
                   <Clock size={18} />
                 </div>
                 <h3 className="text-base font-bold text-gray-900">課堂請假申請</h3>
@@ -502,12 +523,12 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
             </div>
 
             {/* 課堂資訊 */}
-            <div className="bg-[#EBF7F5] border border-[#D3ECE6] rounded-2xl p-3 space-y-1 text-xs">
+            <div className="bg-[#FFF5F3] border border-[#FED7D2] rounded-2xl p-3 space-y-1 text-xs">
               <div className="font-bold text-gray-900">{selectedSessionForLeave.course}</div>
               <div className="text-gray-600">課堂日期：{selectedSessionForLeave.date}</div>
               <div className="text-gray-600">上課分校：{selectedSessionForLeave.branch}</div>
               <div className="text-gray-600">導師/教練：{selectedSessionForLeave.coach}</div>
-              <div className="text-[#147D6F] font-semibold pt-1">學員：{studentName} {studentId ? `(${studentId})` : ''}</div>
+              <div className="text-[#FF6B57] font-semibold pt-1">學員：{studentName} {studentId ? `(${studentId})` : ''}</div>
             </div>
 
             {/* 請假原因 */}
@@ -521,7 +542,7 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
                     onClick={() => setLeaveReason(r)}
                     className={`py-2 text-xs font-bold rounded-xl border transition-all ${
                       leaveReason === r
-                        ? 'bg-[#147D6F] text-white border-[#147D6F] shadow-xs'
+                        ? 'bg-[#FF6B57] text-white border-[#FF6B57] shadow-xs'
                         : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
                     }`}
                   >
@@ -539,7 +560,7 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
                 onChange={(e) => setLeaveRemarks(e.target.value)}
                 placeholder="例如：發燒請假、外出旅行等..."
                 rows={2}
-                className="w-full text-xs p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-[#147D6F]"
+                className="w-full text-xs p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-[#FF6B57]"
               />
             </div>
 
@@ -561,7 +582,7 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
                 type="button"
                 onClick={handleSubmitLeave}
                 disabled={isSubmittingLeave}
-                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#147D6F] hover:bg-[#0E5B50] rounded-xl shadow-md transition-all disabled:opacity-50"
+                className="flex-1 py-2.5 text-xs font-bold text-white bg-[#FF6B57] hover:bg-[#E05340] rounded-xl shadow-md transition-all disabled:opacity-50"
               >
                 {isSubmittingLeave ? '提交中...' : '確認申請請假'}
               </button>
@@ -578,7 +599,7 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
           <div className="bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl border border-gray-150 space-y-4 max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-teal-50 text-[#147D6F] flex items-center justify-center">
+                <div className="w-8 h-8 rounded-xl bg-orange-50 text-[#FF6B57] flex items-center justify-center">
                   <RotateCcw size={18} />
                 </div>
                 <h3 className="text-base font-bold text-gray-900">請假補堂管理</h3>
@@ -592,10 +613,10 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
             </div>
 
             {/* 補堂配額卡片 */}
-            <div className="bg-[#EBF7F5] border border-[#D3ECE6] rounded-2xl p-3.5 space-y-2">
+            <div className="bg-[#FFF5F3] border border-[#FED7D2] rounded-2xl p-3.5 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-gray-800">已報讀課程</span>
-                <span className="text-xs font-black text-[#147D6F]">共 {realCourseCards.length} 個課程</span>
+                <span className="text-xs font-black text-[#FF6B57]">共 {realCourseCards.length} 個課程</span>
               </div>
               <div className="text-[11px] text-gray-600 space-y-1">
                 {realCourseCards.length > 0 ? (
@@ -628,7 +649,7 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
                   setShowMakeupModal(false);
                   handleAskCoach();
                 }}
-                className="w-full py-2.5 text-xs font-bold text-white bg-[#147D6F] hover:bg-[#0E5B50] rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5"
+                className="w-full py-2.5 text-xs font-bold text-white bg-[#FF6B57] hover:bg-[#E05340] rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5"
               >
                 <MessageCircle size={15} />
                 <span>聯繫導師/職員預約補堂</span>
@@ -646,7 +667,7 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
           <div className="bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl border border-gray-150 space-y-4 max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-teal-50 text-[#147D6F] flex items-center justify-center">
+                <div className="w-8 h-8 rounded-xl bg-orange-50 text-[#FF6B57] flex items-center justify-center">
                   <TrendingUp size={18} />
                 </div>
                 <h3 className="text-base font-bold text-gray-900">學員成長學習報告</h3>
@@ -660,65 +681,86 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
             </div>
 
             {/* 學員資訊 */}
-            <div className="bg-gradient-to-br from-[#EBF7F5] to-teal-50 border border-[#D3ECE6] rounded-2xl p-3.5 flex items-center justify-between">
+            <div className="bg-gradient-to-br from-[#FFF5F3] to-orange-50 border border-[#FED7D2] rounded-2xl p-3.5 flex items-center justify-between">
               <div>
                 <h4 className="text-sm font-black text-gray-900">{studentName}</h4>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  {realCourseCards[0]?.name || '音樂課程'}
+                  {realEvaluation?.courseName || realCourseCards[0]?.name || '常規課程'}
                 </p>
                 <p className="text-[10px] text-gray-400">{branchName}</p>
               </div>
               <div className="text-right">
-                <span className="text-xl font-black text-[#147D6F]">100%</span>
-                <p className="text-[10px] text-gray-500 font-semibold">課堂出席率</p>
+                <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-orange-100 text-[#FF6B57] border border-orange-200">
+                  {realEvaluation?.stageLevel || '評核中'}
+                </span>
+                {realEvaluation?.date && (
+                  <p className="text-[10px] text-gray-400 mt-1">評核日期：{realEvaluation.date}</p>
+                )}
               </div>
             </div>
 
-            {/* 學習指標掌握進度 */}
-            <div className="space-y-2.5">
-              <h4 className="text-xs font-bold text-gray-800">各項技能掌握評估</h4>
-              
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs font-semibold">
-                  <span className="text-gray-700">課堂專注度與學習態度</span>
-                  <span className="text-[#147D6F]">95% (優異)</span>
-                </div>
-                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-[#147D6F] rounded-full" style={{ width: '95%' }}></div>
-                </div>
-              </div>
+            {/* ⭐ 真實評核資料展示 (絕無 DUMMY 假資料) */}
+            {loadingEvaluation ? (
+              <div className="py-8 text-center text-xs text-gray-400">載入導師評核報告中...</div>
+            ) : realEvaluation ? (
+              <div className="space-y-3">
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-gray-800">各項技能掌握評核</h4>
+                    <span className="text-[10px] text-gray-500">評核導師：{realEvaluation.teacherName}</span>
+                  </div>
+                  
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs font-semibold">
+                      <span className="text-gray-700">課堂專注度與學習態度</span>
+                      <span className="text-[#FF6B57] font-bold">{realEvaluation.focusScore}%</span>
+                    </div>
+                    <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-[#FF6B57] rounded-full transition-all" style={{ width: `${realEvaluation.focusScore}%` }}></div>
+                    </div>
+                  </div>
 
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs font-semibold">
-                  <span className="text-gray-700">音樂技巧與節奏掌握</span>
-                  <span className="text-[#147D6F]">90% (良好)</span>
-                </div>
-                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-[#147D6F] rounded-full" style={{ width: '90%' }}></div>
-                </div>
-              </div>
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs font-semibold">
+                      <span className="text-gray-700">音樂技巧與演奏掌握</span>
+                      <span className="text-[#FF6B57] font-bold">{realEvaluation.skillScore}%</span>
+                    </div>
+                    <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-[#FF6B57] rounded-full transition-all" style={{ width: `${realEvaluation.skillScore}%` }}></div>
+                    </div>
+                  </div>
 
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs font-semibold">
-                  <span className="text-gray-700">樂譜理解與實踐能力</span>
-                  <span className="text-[#147D6F]">92% (優異)</span>
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs font-semibold">
+                      <span className="text-gray-700">節奏掌握與樂理理解</span>
+                      <span className="text-[#FF6B57] font-bold">{realEvaluation.rhythmScore}%</span>
+                    </div>
+                    <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-[#FF6B57] rounded-full transition-all" style={{ width: `${realEvaluation.rhythmScore}%` }}></div>
+                    </div>
+                  </div>
                 </div>
-                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-[#147D6F] rounded-full" style={{ width: '92%' }}></div>
-                </div>
-              </div>
-            </div>
 
-            {/* 導師評語 */}
-            <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-3 space-y-1">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-amber-800">
-                <Smile size={14} />
-                <span>授課導師評語</span>
+                {/* 導師真實評語 */}
+                <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-3 space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-amber-800">
+                    <Smile size={14} />
+                    <span>{realEvaluation.teacherName} 導師評語</span>
+                  </div>
+                  <p className="text-xs text-amber-900 leading-relaxed whitespace-pre-wrap">
+                    {realEvaluation.comment || '導師未留下備註。'}
+                  </p>
+                </div>
               </div>
-              <p className="text-xs text-amber-900/90 leading-relaxed">
-                學員近期課堂表現認真積極，能良好理解並演練導師示範之教學要點，期望繼續保持良好學習進度！
-              </p>
-            </div>
+            ) : (
+              <div className="p-6 bg-gray-50 border border-gray-200 rounded-2xl text-center space-y-2">
+                <Award size={32} className="mx-auto text-gray-300" />
+                <p className="text-xs font-bold text-gray-700">導師尚未為此學員填寫本期評核報告</p>
+                <p className="text-[11px] text-gray-400 leading-relaxed">
+                  導師將於「會員名冊」中為學員完成學習表現評核，評核完成後此處將自動呈現最新報告。
+                </p>
+              </div>
+            )}
 
             <button
               type="button"

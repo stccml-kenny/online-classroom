@@ -1,6 +1,6 @@
 ﻿'use client';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { MessageCircle, RotateCcw, Loader2, ChevronDown, LogOut, X } from 'lucide-react';
+import { MessageCircle, RotateCcw, Loader2, ChevronDown, LogOut, X, Lock } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { BottomNav, TabType } from '@/components/layout/BottomNav';
 import { MoreView } from '@/components/more/MoreView';
@@ -76,6 +76,7 @@ export default function OnlineClassroomApp() {
 
   const [showNoticeModal, setShowNoticeModal] = useState(false);
   const [showStudentSideMenu, setShowStudentSideMenu] = useState(false);
+  const [showPasswordInfoModal, setShowPasswordInfoModal] = useState(false);
   const [showCalendarModal, setShowCalendarModal] = useState<boolean>(false);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
 
@@ -783,6 +784,7 @@ export default function OnlineClassroomApp() {
               courses={courseNames}
               courseItems={courses}
               usersList={usersList}
+              currentUser={currentUser}
               onUpdateUsersList={handleUpdateUsersList}
               onOpenCourseContent={handleOpenCourseContent}
             />
@@ -903,6 +905,7 @@ export default function OnlineClassroomApp() {
             courses={courseNames}
             courseItems={courses}
             usersList={usersList}
+            currentUser={currentUser}
             onUpdateUsersList={handleUpdateUsersList}
           />
         )}
@@ -983,7 +986,7 @@ export default function OnlineClassroomApp() {
                 {/* 頂部標題與關閉按鈕 */}
                 <div className="flex items-center justify-between pb-3 border-b border-gray-100">
                   <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-xl bg-[#EBF7F5] border border-[#CDEAE4] text-[#147D6F] flex items-center justify-center font-black">
+                    <div className="w-8 h-8 rounded-xl bg-orange-50 border border-orange-200 text-[#FF6B57] flex items-center justify-center font-black">
                       K
                     </div>
                     <div>
@@ -1010,7 +1013,7 @@ export default function OnlineClassroomApp() {
                   <div className="text-[11px] text-gray-500">
                     學號：{currentUser?.username?.toUpperCase() || ''}
                   </div>
-                  <div className="text-[11px] text-[#147D6F] font-semibold">
+                  <div className="text-[11px] text-[#FF6B57] font-semibold">
                     分校：{currentUser?.branch || '北角和富店'}
                   </div>
                 </div>
@@ -1023,7 +1026,7 @@ export default function OnlineClassroomApp() {
                       setActiveTab('home');
                       setShowStudentSideMenu(false);
                     }}
-                    className="w-full text-left p-2.5 rounded-xl hover:bg-[#EBF7F5] hover:text-[#147D6F] transition-colors flex items-center gap-2.5 cursor-pointer"
+                    className="w-full text-left p-2.5 rounded-xl hover:bg-orange-50 hover:text-[#FF6B57] transition-colors flex items-center gap-2.5 cursor-pointer"
                   >
                     <span>🏠</span>
                     <span>首頁儀表板</span>
@@ -1035,7 +1038,7 @@ export default function OnlineClassroomApp() {
                       setActiveTab('calendar');
                       setShowStudentSideMenu(false);
                     }}
-                    className="w-full text-left p-2.5 rounded-xl hover:bg-[#EBF7F5] hover:text-[#147D6F] transition-colors flex items-center gap-2.5 cursor-pointer"
+                    className="w-full text-left p-2.5 rounded-xl hover:bg-orange-50 hover:text-[#FF6B57] transition-colors flex items-center gap-2.5 cursor-pointer"
                   >
                     <span>📅</span>
                     <span>課程行事曆</span>
@@ -1047,7 +1050,7 @@ export default function OnlineClassroomApp() {
                       setActiveTab('msg');
                       setShowStudentSideMenu(false);
                     }}
-                    className="w-full text-left p-2.5 rounded-xl hover:bg-[#EBF7F5] hover:text-[#147D6F] transition-colors flex items-center gap-2.5 cursor-pointer"
+                    className="w-full text-left p-2.5 rounded-xl hover:bg-orange-50 hover:text-[#FF6B57] transition-colors flex items-center gap-2.5 cursor-pointer"
                   >
                     <span>💬</span>
                     <span>即時訊息聯絡</span>
@@ -1059,7 +1062,7 @@ export default function OnlineClassroomApp() {
                       handleOpenStudentHomework();
                       setShowStudentSideMenu(false);
                     }}
-                    className="w-full text-left p-2.5 rounded-xl hover:bg-[#EBF7F5] hover:text-[#147D6F] transition-colors flex items-center gap-2.5 cursor-pointer"
+                    className="w-full text-left p-2.5 rounded-xl hover:bg-orange-50 hover:text-[#FF6B57] transition-colors flex items-center gap-2.5 cursor-pointer"
                   >
                     <span>📝</span>
                     <span>在線交功課</span>
@@ -1071,7 +1074,7 @@ export default function OnlineClassroomApp() {
                       setShowNoticeModal(true);
                       setShowStudentSideMenu(false);
                     }}
-                    className="w-full text-left p-2.5 rounded-xl hover:bg-[#EBF7F5] hover:text-[#147D6F] transition-colors flex items-center gap-2.5 cursor-pointer"
+                    className="w-full text-left p-2.5 rounded-xl hover:bg-orange-50 hover:text-[#FF6B57] transition-colors flex items-center gap-2.5 cursor-pointer"
                   >
                     <span>🔔</span>
                     <span>最新消息與通告</span>
@@ -1080,10 +1083,10 @@ export default function OnlineClassroomApp() {
                   <button
                     type="button"
                     onClick={() => {
-                      handleOpenAuth('password');
                       setShowStudentSideMenu(false);
+                      setShowPasswordInfoModal(true);
                     }}
-                    className="w-full text-left p-2.5 rounded-xl hover:bg-gray-100 transition-colors flex items-center gap-2.5 cursor-pointer"
+                    className="w-full text-left p-2.5 rounded-xl hover:bg-orange-50 hover:text-[#FF6B57] transition-colors flex items-center gap-2.5 cursor-pointer"
                   >
                     <span>🔑</span>
                     <span>密碼管理</span>
@@ -1109,6 +1112,48 @@ export default function OnlineClassroomApp() {
           </div>
         )}
       </div>
-    </div>
+    
+        {/* 🔑 密碼管理提示彈窗 (聯絡管理人員) */}
+        {showPasswordInfoModal && (
+          <div className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+            <div className="bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl border border-gray-150 space-y-4 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-orange-50 border border-orange-200 text-[#FF6B57] flex items-center justify-center mx-auto shadow-xs">
+                <Lock size={24} />
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="text-base font-black text-gray-900">密碼管理</h3>
+                <p className="text-xs text-gray-600 leading-relaxed font-medium">
+                  本系統帳號密碼由學校系統管理人員統一派發及管理。
+                </p>
+                <div className="bg-orange-50/70 border border-orange-200 rounded-2xl p-3 text-xs text-[#FF6B57] font-bold leading-relaxed">
+                  如有需要查詢、修改或重設密碼，請聯絡學校管理人員進行辦理。
+                </div>
+              </div>
+              <div className="space-y-2 pt-1">
+                {isCurrentUserChatEnabled && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowPasswordInfoModal(false);
+                      setActiveTab('msg');
+                    }}
+                    className="w-full py-2.5 bg-[#FF6B57] hover:bg-[#FF5138] text-white font-bold rounded-xl text-xs shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <MessageCircle size={15} />
+                    <span>即時聯絡管理員</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowPasswordInfoModal(false)}
+                  className="w-full py-2 text-xs font-bold text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors cursor-pointer"
+                >
+                  關閉
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+</div>
   );
 }
