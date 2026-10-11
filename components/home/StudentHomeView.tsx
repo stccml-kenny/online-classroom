@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Calendar as CalendarIcon,
   ChevronRight,
@@ -45,10 +45,172 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
   calendarEvents = [],
   noticeCount = 0,
 }) => {
-  // 學員姓名與學號 (優先取當前帳戶，預設優雅兼容截圖)
-  const studentName = currentUser?.name || currentUser?.studentName || currentUser?.childName || 'Heinz Chin Chun Hang';
-  const studentId = currentUser?.username ? currentUser.username.toUpperCase() : 'KDS10343';
-  const branchName = currentUser?.branch || '北角和富店';
+  // 學員真實姓名與學號 (由當前登入帳戶提供)
+  const studentName = currentUser?.name || currentUser?.studentName || currentUser?.childName || '學員';
+  const studentId = currentUser?.username ? currentUser.username.toUpperCase() : '';
+  const branchName = currentUser?.branch || '總校';
+
+  // 今天與 14 天後之日期字串 (YYYY-MM-DD)
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const todayPlus14Str = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 14);
+    return d.toISOString().split('T')[0];
+  }, []);
+
+  // 星期轉換輔助函數
+  const getWeekdayName = (dateStr: string) => {
+    try {
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        return ['日', '一', '二', '三', '四', '五', '六'][d.getDay()] || '日';
+      }
+    } catch {}
+    return '日';
+  };
+
+  const getDayAndMonth = (dateStr: string) => {
+    try {
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        return {
+          day: parseInt(parts[2]).toString(),
+          month: `${parseInt(parts[1])} 月`,
+        };
+      }
+    } catch {}
+    return { day: '1', month: '1 月' };
+  };
+
+  const formatDateDisplay = (dateStr: string) => {
+    try {
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      }
+    } catch {}
+    return dateStr;
+  };
+
+  // ⭐ 1. 解析學員真實所屬的全部課堂節次 (由真實 courses 與 calendarEvents 動態產出)
+  const allStudentSessions = useMemo(() => {
+    const list: {
+      date: string;
+      time: string;
+      course: string;
+      branch: string;
+      coach: string;
+    }[] = [];
+
+    // 來源 A：從學員真實 enrolledCourses / visibleCourses 中的 sessionDates 提取
+    courses.forEach((c) => {
+      const cObj = typeof c === 'string' ? null : c;
+      const cName = typeof c === 'string' ? c : c.name;
+      const cBranch = (cObj && cObj.branch) ? cObj.branch : branchName;
+      const cTime = (cObj && cObj.timeSlot) ? cObj.timeSlot : '15:00';
+      const cCoach = (cObj && (cObj as any).teacher) ? (cObj as any).teacher : '導師';
+
+      if (cObj && Array.isArray(cObj.sessionDates)) {
+        cObj.sessionDates.forEach((d) => {
+          if (d && typeof d === 'string') {
+            const cleanD = d.trim();
+            if (cleanD) {
+              list.push({
+                date: cleanD,
+                time: cTime,
+                course: cName,
+                branch: cBranch,
+                coach: cCoach,
+              });
+            }
+          }
+        });
+      }
+    });
+
+    // 來源 B：從真實 calendarEvents 提取學員所屬的課堂事件
+    calendarEvents.forEach((e) => {
+      if (e.eventType === 'homework') return;
+      const eDate = e.startDate ? e.startDate.split('T')[0] : '';
+      if (!eDate) return;
+
+      const eCourse = e.courseName || e.title || '';
+      // 檢查是否符合學員課程或分校
+      const isMatch = courses.length === 0 || courses.some((c) => {
+        const cName = typeof c === 'string' ? c : c.name;
+        return eCourse.includes(cName) || cName.includes(eCourse);
+      });
+
+      if (isMatch) {
+        const eTime = e.timeSlot || (e.startDate.includes('T') ? e.startDate.split('T')[1].slice(0, 5) : '15:00');
+        const already = list.some((item) => item.date === eDate && item.course === eCourse);
+        if (!already) {
+          list.push({
+            date: eDate,
+            time: eTime,
+            course: eCourse,
+            branch: e.branch || branchName,
+            coach: e.creatorName || '導師',
+          });
+        }
+      }
+    });
+
+    // 依日期與時間排序 (由近至遠)
+    list.sort((a, b) => {
+      const cmp = a.date.localeCompare(b.date);
+      if (cmp !== 0) return cmp;
+      return a.time.localeCompare(b.time);
+    });
+
+    return list;
+  }, [courses, calendarEvents, branchName]);
+
+  // ⭐ 下一堂：從真實節次中找出大於等於今天的第一節課
+  const nextSession = useMemo(() => {
+    return allStudentSessions.find((s) => s.date >= todayStr) || null;
+  }, [allStudentSessions, todayStr]);
+
+  // ⭐ 未來 14 日課堂：大於等於今天且在 14 天內的節次
+  const upcoming14Sessions = useMemo(() => {
+    return allStudentSessions.filter((s) => s.date >= todayStr && s.date <= todayPlus14Str);
+  }, [allStudentSessions, todayStr, todayPlus14Str]);
+
+  // ⭐ 2. 解析學員真實報讀課程卡片 (不使用任何寫死樣板)
+  const realCourseCards = useMemo(() => {
+    return courses.map((c) => {
+      const cObj = typeof c === 'string' ? null : c;
+      const cName = typeof c === 'string' ? c : c.name;
+      const cBranch = (cObj && cObj.branch) ? cObj.branch : branchName;
+      const sessionDates = (cObj && Array.isArray(cObj.sessionDates)) ? cObj.sessionDates : [];
+
+      // 總堂數：取 totalSessions 或 sessionDates.length，預設 1
+      const totalSessions = (cObj && cObj.totalSessions && cObj.totalSessions > 0)
+        ? cObj.totalSessions
+        : (sessionDates.length > 0 ? sessionDates.length : 1);
+
+      // 已上/已過期堂數：sessionDates 中小於等於今天的堂數
+      const completedSessions = sessionDates.filter((d) => d <= todayStr).length;
+
+      // 有效期至：若有 sessionDates 則取最後一節課；或 scheduleRule.endDate
+      let endDateStr = '';
+      if (sessionDates.length > 0) {
+        const sorted = [...sessionDates].sort();
+        endDateStr = formatDateDisplay(sorted[sorted.length - 1]);
+      } else if (cObj?.scheduleRule?.endDate) {
+        endDateStr = formatDateDisplay(cObj.scheduleRule.endDate);
+      }
+
+      return {
+        name: cName,
+        branch: cBranch,
+        totalSessions,
+        completedSessions,
+        endDate: endDateStr,
+      };
+    });
+  }, [courses, branchName, todayStr]);
 
   // 彈窗狀態
   const [showLeaveModal, setShowLeaveModal] = useState(false);
@@ -83,9 +245,9 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
     setTimeout(() => {
       setIsSubmittingLeave(false);
       setShowLeaveModal(false);
-      setLeaveSuccessToast(`已成功為【${selectedSessionForLeave.date}】提交請假申請，系統將安排相應補堂！`);
+      setLeaveSuccessToast(`已成功為【${selectedSessionForLeave.date}】提交請假申請，學校職員將跟進補堂！`);
       setTimeout(() => setLeaveSuccessToast(null), 4000);
-    }, 600);
+    }, 500);
   };
 
   // 點擊「問教練 / 職員」
@@ -112,7 +274,7 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
         </div>
       )}
 
-      {/* 🟢 1. 下一堂 (Next Class) 卡片 */}
+      {/* 🟢 1. 下一堂 (Next Class) 卡片 (真實排程) */}
       <section className="space-y-2">
         <div className="flex items-center justify-between px-0.5">
           <h2 className="text-sm font-bold text-gray-800 tracking-tight">下一堂</h2>
@@ -126,54 +288,66 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
           </button>
         </div>
 
-        {/* 下一堂 主體卡片 (薄荷綠優雅質感) */}
-        <div className="bg-[#EBF7F5] border border-[#D3ECE6] rounded-2xl overflow-hidden shadow-2xs">
-          {/* 上半部：課堂詳情與日曆大數字標籤 */}
-          <div className="p-3.5 flex items-center gap-3">
-            {/* 白色日曆徽章 */}
-            <div className="w-14 h-16 bg-white rounded-xl shadow-2xs border border-[#CDEAE4] flex flex-col items-center justify-center shrink-0">
-              <span className="text-[11px] font-semibold text-[#147D6F] leading-none">六</span>
-              <span className="text-xl font-black text-gray-900 leading-tight my-0.5">17</span>
-              <span className="text-[9px] font-medium text-gray-400 leading-none">10 月</span>
+        {nextSession ? (
+          <div className="bg-[#EBF7F5] border border-[#D3ECE6] rounded-2xl overflow-hidden shadow-2xs">
+            {/* 上半部：課堂詳情與日曆大數字標籤 */}
+            <div className="p-3.5 flex items-center gap-3">
+              {/* 白色日曆徽章 */}
+              <div className="w-14 h-16 bg-white rounded-xl shadow-2xs border border-[#CDEAE4] flex flex-col items-center justify-center shrink-0">
+                <span className="text-[11px] font-semibold text-[#147D6F] leading-none">
+                  {getWeekdayName(nextSession.date)}
+                </span>
+                <span className="text-xl font-black text-gray-900 leading-tight my-0.5">
+                  {getDayAndMonth(nextSession.date).day}
+                </span>
+                <span className="text-[9px] font-medium text-gray-400 leading-none">
+                  {getDayAndMonth(nextSession.date).month}
+                </span>
+              </div>
+
+              {/* 課堂詳細文字 */}
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-bold text-gray-900 truncate">
+                  {nextSession.course}
+                </h3>
+                <p className="text-xs text-gray-500 font-medium mt-0.5 truncate">
+                  {nextSession.time} · {nextSession.branch}
+                </p>
+                <p className="text-xs text-gray-500 font-medium mt-0.5 truncate">
+                  {studentName} · {nextSession.coach}
+                </p>
+              </div>
             </div>
 
-            {/* 課堂詳細文字 */}
-            <div className="min-w-0 flex-1">
-              <h3 className="text-sm font-bold text-gray-900 truncate">
-                初階班 · NP-B6-5
-              </h3>
-              <p className="text-xs text-gray-500 font-medium mt-0.5 truncate">
-                15:00 · 北角和富店
-              </p>
-              <p className="text-xs text-gray-500 font-medium mt-0.5 truncate">
-                {studentName} · Coach Kayan
-              </p>
+            {/* 下半部：操作按鈕欄 (白色底背景 + 細線分隔) */}
+            <div className="bg-white/80 border-t border-[#D3ECE6] flex items-center divide-x divide-[#D3ECE6]">
+              <button
+                type="button"
+                onClick={() => handleOpenLeave({
+                  date: `${formatDateDisplay(nextSession.date)}（${getWeekdayName(nextSession.date)}） ${nextSession.time}`,
+                  course: nextSession.course,
+                  branch: nextSession.branch,
+                  coach: nextSession.coach,
+                })}
+                className="flex-1 py-2.5 text-center text-xs font-bold text-[#147D6F] hover:bg-[#EBF7F5] transition-colors cursor-pointer"
+              >
+                請假
+              </button>
+              <button
+                type="button"
+                onClick={handleAskCoach}
+                className="flex-1 py-2.5 text-center text-xs font-bold text-[#147D6F] hover:bg-[#EBF7F5] transition-colors cursor-pointer"
+              >
+                問教練 / 職員
+              </button>
             </div>
           </div>
-
-          {/* 下半部：操作按鈕欄 (白色底背景 + 細線分隔) */}
-          <div className="bg-white/80 border-t border-[#D3ECE6] flex items-center divide-x divide-[#D3ECE6]">
-            <button
-              type="button"
-              onClick={() => handleOpenLeave({
-                date: '17/10/2026（六） 15:00',
-                course: '初階班 · NP-B6-5',
-                branch: '北角和富店',
-                coach: 'Coach Kayan'
-              })}
-              className="flex-1 py-2.5 text-center text-xs font-bold text-[#147D6F] hover:bg-[#EBF7F5] transition-colors cursor-pointer"
-            >
-              請假
-            </button>
-            <button
-              type="button"
-              onClick={handleAskCoach}
-              className="flex-1 py-2.5 text-center text-xs font-bold text-[#147D6F] hover:bg-[#EBF7F5] transition-colors cursor-pointer"
-            >
-              問教練 / 職員
-            </button>
+        ) : (
+          <div className="bg-[#EBF7F5] border border-[#D3ECE6] rounded-2xl p-4 text-center">
+            <p className="text-xs font-bold text-gray-700">近期暫無已安排之課堂</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">點擊右上角「日曆」可查閱學校完整行事曆</p>
           </div>
-        </div>
+        )}
       </section>
 
       {/* 🟢 2. 快捷操作按鈕區 (暫時不需報新班及付款 -> 保留「請假補堂」與「成長報告」) */}
@@ -207,129 +381,103 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
         </button>
       </section>
 
-      {/* 🟢 3. 學員姓名與所參加課程 (課堂堂數進度) */}
+      {/* 🟢 3. 學員真實報讀課程清單 (套用學生真實課程) */}
       <section className="space-y-2.5">
         <div className="flex items-baseline gap-2 px-0.5">
           <h2 className="text-base font-black text-gray-900 tracking-tight">
             {studentName}
           </h2>
-          <span className="text-xs font-medium text-gray-400">
-            {studentId}
-          </span>
+          {studentId && (
+            <span className="text-xs font-medium text-gray-400">
+              {studentId}
+            </span>
+          )}
         </div>
 
-        {/* 課程卡片 1 */}
-        <div className="bg-white border border-gray-150 rounded-2xl p-4 shadow-2xs flex items-center justify-between">
-          <div className="min-w-0 pr-2">
-            <h3 className="text-sm font-bold text-gray-900 truncate">
-              初階班 · NP-B6-6
-            </h3>
-            <p className="text-xs text-gray-400 mt-0.5 truncate">
-              北角和富 · 有效期至 19/9/2026
-            </p>
-          </div>
-          <div className="text-right shrink-0">
-            <div className="flex items-baseline justify-end gap-1">
-              <span className="text-xl font-black text-[#147D6F]">0</span>
-              <span className="text-xs text-gray-400 font-bold">/1 堂</span>
+        {realCourseCards.length > 0 ? (
+          realCourseCards.map((c, idx) => (
+            <div
+              key={idx}
+              onClick={onOpenStudentHomework}
+              className="bg-white border border-gray-150 rounded-2xl p-4 shadow-2xs flex items-center justify-between hover:border-[#147D6F] transition-all cursor-pointer"
+            >
+              <div className="min-w-0 pr-2">
+                <h3 className="text-sm font-bold text-gray-900 truncate">
+                  {c.name}
+                </h3>
+                <p className="text-xs text-gray-400 mt-0.5 truncate">
+                  {c.branch} {c.endDate ? `· 有效期至 ${c.endDate}` : ''}
+                </p>
+              </div>
+              <div className="text-right shrink-0">
+                <div className="flex items-baseline justify-end gap-1">
+                  <span className="text-xl font-black text-[#147D6F]">
+                    {c.completedSessions}
+                  </span>
+                  <span className="text-xs text-gray-400 font-bold">
+                    /{c.totalSessions} 堂
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  補堂 0/0
+                </p>
+              </div>
             </div>
-            <p className="text-[11px] text-gray-400 mt-0.5">
-              補堂 0/1
-            </p>
+          ))
+        ) : (
+          <div className="bg-white border border-gray-150 rounded-2xl p-4 text-center">
+            <p className="text-xs font-bold text-gray-600">目前尚未報讀課程</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">如需報讀或分配課程，請向學校職員查詢</p>
           </div>
-        </div>
-
-        {/* 課程卡片 2 */}
-        <div className="bg-white border border-gray-150 rounded-2xl p-4 shadow-2xs flex items-center justify-between">
-          <div className="min-w-0 pr-2">
-            <h3 className="text-sm font-bold text-gray-900 truncate">
-              初階班 · NP-B6-5
-            </h3>
-            <p className="text-xs text-gray-400 mt-0.5 truncate">
-              北角和富 · 有效期至 12/12/2026
-            </p>
-          </div>
-          <div className="text-right shrink-0">
-            <div className="flex items-baseline justify-end gap-1">
-              <span className="text-xl font-black text-[#147D6F]">7</span>
-              <span className="text-xs text-gray-400 font-bold">/12 堂</span>
-            </div>
-            <p className="text-[11px] text-gray-400 mt-0.5">
-              補堂 0/3
-            </p>
-          </div>
-        </div>
+        )}
       </section>
 
-      {/* 🟢 4. 未來 14 日課堂 (Upcoming 14 Days Classes) */}
+      {/* 🟢 4. 未來 14 日課堂 (真實排程) */}
       <section className="space-y-2">
         <h2 className="text-xs font-bold text-gray-500 px-0.5">
           未來 14 日課堂
         </h2>
 
-        <div className="bg-white border border-gray-150 rounded-2xl shadow-2xs divide-y divide-gray-100 overflow-hidden">
-          {/* 第 1 節課 */}
-          <div className="p-3.5 space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-bold text-gray-900">
-                17/10/2026（六） 15:00
-              </span>
-              <button
-                type="button"
-                onClick={() => handleOpenLeave({
-                  date: '17/10/2026（六） 15:00',
-                  course: '初階班 · NP-B6-5',
-                  branch: '北角和富店',
-                  coach: 'Coach Kayan'
-                })}
-                className="px-3.5 py-1 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 shadow-2xs transition-colors cursor-pointer"
-              >
-                請假
-              </button>
-            </div>
-            <p className="text-xs text-gray-500 font-medium">
-              初階班 · NP-B6-5 · 北角和富店 · Coach Kayan
-            </p>
-            <button
-              type="button"
-              onClick={handleAskCoach}
-              className="text-xs font-semibold text-[#147D6F] hover:underline pt-0.5 flex items-center gap-1 cursor-pointer"
-            >
-              問教練 / 職員
-            </button>
+        {upcoming14Sessions.length > 0 ? (
+          <div className="bg-white border border-gray-150 rounded-2xl shadow-2xs divide-y divide-gray-100 overflow-hidden">
+            {upcoming14Sessions.map((session, sIdx) => (
+              <div key={sIdx} className="p-3.5 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-bold text-gray-900">
+                    {formatDateDisplay(session.date)}（{getWeekdayName(session.date)}） {session.time}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenLeave({
+                      date: `${formatDateDisplay(session.date)}（${getWeekdayName(session.date)}） ${session.time}`,
+                      course: session.course,
+                      branch: session.branch,
+                      coach: session.coach,
+                    })}
+                    className="px-3.5 py-1 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 shadow-2xs transition-colors cursor-pointer"
+                  >
+                    請假
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 font-medium truncate">
+                  {session.course} · {session.branch} · {session.coach}
+                </p>
+                <button
+                  type="button"
+                  onClick={handleAskCoach}
+                  className="text-xs font-semibold text-[#147D6F] hover:underline pt-0.5 flex items-center gap-1 cursor-pointer"
+                >
+                  問教練 / 職員
+                </button>
+              </div>
+            ))}
           </div>
-
-          {/* 第 2 節課 */}
-          <div className="p-3.5 space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-bold text-gray-900">
-                24/10/2026（六） 15:00
-              </span>
-              <button
-                type="button"
-                onClick={() => handleOpenLeave({
-                  date: '24/10/2026（六） 15:00',
-                  course: '初階班 · NP-B6-5',
-                  branch: '北角和富店',
-                  coach: 'Coach Kayan'
-                })}
-                className="px-3.5 py-1 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 shadow-2xs transition-colors cursor-pointer"
-              >
-                請假
-              </button>
-            </div>
-            <p className="text-xs text-gray-500 font-medium">
-              初階班 · NP-B6-5 · 北角和富店 · Coach Kayan
-            </p>
-            <button
-              type="button"
-              onClick={handleAskCoach}
-              className="text-xs font-semibold text-[#147D6F] hover:underline pt-0.5 flex items-center gap-1 cursor-pointer"
-            >
-              問教練 / 職員
-            </button>
+        ) : (
+          <div className="bg-white border border-gray-150 rounded-2xl p-4 text-center shadow-2xs">
+            <p className="text-xs font-bold text-gray-600">未來 14 日內暫無課堂安排</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">點擊上方「日曆」可查閱學校完整月份行事曆</p>
           </div>
-        </div>
+        )}
       </section>
 
       {/* ═══════════════════════════════════════════════
@@ -358,8 +506,8 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
               <div className="font-bold text-gray-900">{selectedSessionForLeave.course}</div>
               <div className="text-gray-600">課堂日期：{selectedSessionForLeave.date}</div>
               <div className="text-gray-600">上課分校：{selectedSessionForLeave.branch}</div>
-              <div className="text-gray-600">授課教練：{selectedSessionForLeave.coach}</div>
-              <div className="text-[#147D6F] font-semibold pt-1">學員：{studentName} ({studentId})</div>
+              <div className="text-gray-600">導師/教練：{selectedSessionForLeave.coach}</div>
+              <div className="text-[#147D6F] font-semibold pt-1">學員：{studentName} {studentId ? `(${studentId})` : ''}</div>
             </div>
 
             {/* 請假原因 */}
@@ -389,7 +537,7 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
               <textarea
                 value={leaveRemarks}
                 onChange={(e) => setLeaveRemarks(e.target.value)}
-                placeholder="例如：發燒請假、家庭旅行等..."
+                placeholder="例如：發燒請假、外出旅行等..."
                 rows={2}
                 className="w-full text-xs p-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-[#147D6F]"
               />
@@ -397,7 +545,7 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
 
             {/* 補堂提示 */}
             <p className="text-[11px] text-gray-400 leading-relaxed">
-              💡 提早請假將自動為您保留補堂名額，可於「請假補堂」頁面申請相應堂數之補堂。
+              💡 提早請假將記錄於系統，職員會於審核後為您安排補堂。
             </p>
 
             {/* 提交按鈕 */}
@@ -446,18 +594,20 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
             {/* 補堂配額卡片 */}
             <div className="bg-[#EBF7F5] border border-[#D3ECE6] rounded-2xl p-3.5 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-gray-800">可用補堂配額</span>
-                <span className="text-xs font-black text-[#147D6F]">共 0 堂待預約</span>
+                <span className="text-xs font-bold text-gray-800">已報讀課程</span>
+                <span className="text-xs font-black text-[#147D6F]">共 {realCourseCards.length} 個課程</span>
               </div>
               <div className="text-[11px] text-gray-600 space-y-1">
-                <div className="flex justify-between">
-                  <span>初階班 · NP-B6-6</span>
-                  <span className="font-semibold text-gray-800">補堂配額 0/1</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>初階班 · NP-B6-5</span>
-                  <span className="font-semibold text-gray-800">補堂配額 0/3</span>
-                </div>
+                {realCourseCards.length > 0 ? (
+                  realCourseCards.map((rc, i) => (
+                    <div key={i} className="flex justify-between">
+                      <span className="truncate max-w-[180px]">{rc.name}</span>
+                      <span className="font-semibold text-gray-800">堂數 {rc.completedSessions}/{rc.totalSessions}</span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-gray-400">目前尚無課程記錄</p>
+                )}
               </div>
             </div>
 
@@ -465,9 +615,9 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
             <div className="space-y-2">
               <h4 className="text-xs font-bold text-gray-800">補堂須知</h4>
               <ul className="text-[11px] text-gray-500 space-y-1 list-disc list-inside leading-relaxed">
-                <li>請假須於上課前至少 2 小時提出。</li>
-                <li>補堂請於課程有效期內完成預約。</li>
-                <li>如需指定教練或調動分校，請點擊「問教練 / 職員」聯繫處理。</li>
+                <li>請假須於上課前儘早提出，以利安排調堂或補堂。</li>
+                <li>補堂請於課程有效期內與導師或職員預約。</li>
+                <li>如有任何查詢，請隨時點擊「問教練 / 職員」聯繫。</li>
               </ul>
             </div>
 
@@ -481,7 +631,7 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
                 className="w-full py-2.5 text-xs font-bold text-white bg-[#147D6F] hover:bg-[#0E5B50] rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5"
               >
                 <MessageCircle size={15} />
-                <span>聯繫教練/職員預約補堂</span>
+                <span>聯繫導師/職員預約補堂</span>
               </button>
             </div>
           </div>
@@ -513,7 +663,9 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
             <div className="bg-gradient-to-br from-[#EBF7F5] to-teal-50 border border-[#D3ECE6] rounded-2xl p-3.5 flex items-center justify-between">
               <div>
                 <h4 className="text-sm font-black text-gray-900">{studentName}</h4>
-                <p className="text-xs text-gray-500 mt-0.5">初階班 · NP-B6-5</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {realCourseCards[0]?.name || '音樂課程'}
+                </p>
                 <p className="text-[10px] text-gray-400">{branchName}</p>
               </div>
               <div className="text-right">
@@ -528,7 +680,7 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
               
               <div className="space-y-1">
                 <div className="flex justify-between text-xs font-semibold">
-                  <span className="text-gray-700">課堂專注度與紀律</span>
+                  <span className="text-gray-700">課堂專注度與學習態度</span>
                   <span className="text-[#147D6F]">95% (優異)</span>
                 </div>
                 <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -538,7 +690,7 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
 
               <div className="space-y-1">
                 <div className="flex justify-between text-xs font-semibold">
-                  <span className="text-gray-700">基本動作與技巧協調</span>
+                  <span className="text-gray-700">音樂技巧與節奏掌握</span>
                   <span className="text-[#147D6F]">90% (良好)</span>
                 </div>
                 <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -548,7 +700,7 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
 
               <div className="space-y-1">
                 <div className="flex justify-between text-xs font-semibold">
-                  <span className="text-gray-700">團隊合作與互動表現</span>
+                  <span className="text-gray-700">樂譜理解與實踐能力</span>
                   <span className="text-[#147D6F]">92% (優異)</span>
                 </div>
                 <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -557,14 +709,14 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
               </div>
             </div>
 
-            {/* 教練評語 */}
+            {/* 導師評語 */}
             <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-3 space-y-1">
               <div className="flex items-center gap-1.5 text-xs font-bold text-amber-800">
                 <Smile size={14} />
-                <span>Coach Kayan 導師評語</span>
+                <span>授課導師評語</span>
               </div>
               <p className="text-xs text-amber-900/90 leading-relaxed">
-                Chin Chun Hang 在近期課堂中表現積極主動，能迅速掌握教練示範之動作要點，與同儕互動融洽，期望繼續保持良好學習態度！
+                學員近期課堂表現認真積極，能良好理解並演練導師示範之教學要點，期望繼續保持良好學習進度！
               </p>
             </div>
 

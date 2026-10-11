@@ -30,7 +30,7 @@ export const Header: React.FC<HeaderProps> = ({
   noticeCount = 0,
 }) => {
   const isStudentOrParent = currentUser?.role === 'student' || currentUser?.role === 'parent';
-  const studentName = currentUser?.name || currentUser?.studentName || currentUser?.childName || 'Heinz Chin Chun Hang';
+  const studentName = currentUser?.name || currentUser?.studentName || currentUser?.childName || '學生';
 
   // 🟢 學生/家長端：極簡白色高級現代品牌導航列 (參照截圖布局)
   if (isStudentOrParent) {
@@ -48,7 +48,7 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </div>
 
-        {/* 中間偏左：KIDULT 品牌標誌與身分 / 學員姓名 */}
+        {/* 中間偏左：SNJMUSIC 品牌標誌與身分 / 學員姓名 */}
         <div className="flex items-center gap-2 flex-1 pl-1">
           {/* 菱形皇冠 Logo */}
           <div className="w-7 h-7 rounded-lg bg-[#EBF7F5] border border-[#CDEAE4] text-[#147D6F] flex items-center justify-center font-bold shrink-0 shadow-2xs">
@@ -56,7 +56,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
           <div className="min-w-0">
             <div className="text-xs font-black text-gray-900 tracking-tight flex items-center gap-1 leading-tight">
-              <span>KIDULT</span>
+              <span>SNJMUSIC</span>
               <span>{currentUser?.role === 'parent' ? '家長端' : '學生端'}</span>
             </div>
             <div className="text-[10px] text-gray-400 font-medium leading-tight truncate">

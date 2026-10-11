@@ -8,6 +8,9 @@ import { UserProfile, ROLE_CONFIGS } from '@/components/auth/AuthModal';
 import { TabType } from '@/components/layout/BottomNav';
 import { StudentHomeView } from './StudentHomeView';
 
+import { CalendarEvent } from '@/types/calendar';
+import { CourseItem } from '@/components/homework/HomeworkSetupModal';
+
 interface HomeViewProps {
   currentUser: UserProfile | null;
   onOpenAuth: () => void;
@@ -21,6 +24,8 @@ interface HomeViewProps {
   noticeCount?: number;
   courseCount?: number;
   memberCount?: number;
+  courses?: (string | CourseItem)[];
+  calendarEvents?: CalendarEvent[];
 }
 
 export const HomeView: React.FC<HomeViewProps> = ({
@@ -35,12 +40,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onOpenStudentHomework,
   noticeCount = 0,
   courseCount = 0,
-  memberCount = 0
+  memberCount = 0,
+  courses = [],
+  calendarEvents = []
 }) => {
   const isStudentOrParent = currentUser?.role === 'student' || currentUser?.role === 'parent';
   const isAdmin = currentUser?.role === 'admin';
 
-  // 🟢 學生與家長端：全面採用截圖之 KIDULT 專屬儀表板布局
+  // 🟢 學生與家長端：全面採用截圖之 SNJMUSIC 專屬儀表板布局 (使用真實學生課程)
   if (isStudentOrParent) {
     return (
       <StudentHomeView
@@ -49,6 +56,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
         onOpenNotices={onOpenNotices}
         onOpenCalendar={onOpenCalendar}
         onOpenStudentHomework={onOpenStudentHomework}
+        courses={courses}
+        calendarEvents={calendarEvents}
         noticeCount={noticeCount}
       />
     );

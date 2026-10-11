@@ -713,6 +713,8 @@ export default function OnlineClassroomApp() {
             noticeCount={notices.length}
             courseCount={visibleCourses.length}
             memberCount={0}
+            courses={visibleCourses}
+            calendarEvents={calendarEvents}
           />
         )}
 
@@ -986,7 +988,7 @@ export default function OnlineClassroomApp() {
                     </div>
                     <div>
                       <h3 className="text-sm font-black text-gray-900 leading-tight">
-                        KIDULT {currentUser?.role === 'parent' ? '家長端' : '學生端'}
+                        SNJMUSIC {currentUser?.role === 'parent' ? '家長端' : '學生端'}
                       </h3>
                       <p className="text-[10px] text-gray-400 font-medium">智能在線學習中心</p>
                     </div>
@@ -1003,10 +1005,10 @@ export default function OnlineClassroomApp() {
                 {/* 學員資訊卡片 */}
                 <div className="bg-[#F8F9FA] p-3 rounded-2xl border border-gray-150 space-y-1">
                   <div className="text-xs font-black text-gray-900">
-                    {currentUser?.name || 'Heinz Chin Chun Hang'}
+                    {currentUser?.name || '學生'}
                   </div>
                   <div className="text-[11px] text-gray-500">
-                    學號：{currentUser?.username?.toUpperCase() || 'KDS10343'}
+                    學號：{currentUser?.username?.toUpperCase() || ''}
                   </div>
                   <div className="text-[11px] text-[#147D6F] font-semibold">
                     分校：{currentUser?.branch || '北角和富店'}
