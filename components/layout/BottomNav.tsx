@@ -21,6 +21,39 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 }) => {
   const isStudentOrParent = userRole === 'student' || userRole === 'parent';
 
+  // 🟢 學生 / 家長端：精準符合截圖 3 大底部選單 (首頁 / 日曆 / 訊息)，主色採用 #147D6F 墨綠
+  if (isStudentOrParent) {
+    return (
+      <div className="fixed bottom-0 w-full max-w-md bg-white border-t border-gray-200 flex justify-around py-2 z-20 shadow-xs">
+        <TabButton
+          icon={<Home size={22} />}
+          label="首頁"
+          active={activeTab === 'home'}
+          activeColor="text-[#147D6F]"
+          onClick={() => onTabChange('home')}
+        />
+        <TabButton
+          icon={<CalendarIcon size={22} />}
+          label="日曆"
+          active={activeTab === 'calendar'}
+          activeColor="text-[#147D6F]"
+          onClick={() => onTabChange('calendar')}
+        />
+        {isChatEnabled && (
+          <TabButton
+            icon={<MessageCircle size={22} />}
+            label="訊息"
+            active={activeTab === 'msg'}
+            activeColor="text-[#147D6F]"
+            badge={unreadChatCount}
+            onClick={() => onTabChange('msg')}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // 🟠 導師 / 助教 / 管理員端：維持原有完整管理選單
   return (
     <div className="fixed bottom-0 w-full max-w-md bg-white border-t border-gray-200 flex justify-around py-2 z-20">
       <TabButton
@@ -29,7 +62,6 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         active={activeTab === 'home'}
         onClick={() => onTabChange('home')}
       />
-      {/* ⭐ 需求：依系統管理員所設定之角色即時訊息權限動態呈現 (啟動 / 暫停) */}
       {isChatEnabled && (
         <TabButton
           icon={<MessageCircle size={20} />}
@@ -39,38 +71,24 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           onClick={() => onTabChange('msg')}
         />
       )}
-      {/* ⭐ 需求：家長及學生只顯示自己的課程，不顯示管理員/導師之會員與點名 */}
-      {!isStudentOrParent && (
-        <TabButton
-          icon={<Users size={20} />}
-          label="會員"
-          active={activeTab === 'members'}
-          onClick={() => onTabChange('members')}
-        />
-      )}
+      <TabButton
+        icon={<Users size={20} />}
+        label="會員"
+        active={activeTab === 'members'}
+        onClick={() => onTabChange('members')}
+      />
       <TabButton
         icon={<GraduationCap size={20} />}
-        label={isStudentOrParent ? "我的課程" : "課程"}
+        label="課程"
         active={activeTab === 'courses'}
         onClick={() => onTabChange('courses')}
       />
-      {/* ⭐ 需求 1：學生及家長帳戶行事曆移到底部目錄 */}
-      {isStudentOrParent && (
-        <TabButton
-          icon={<CalendarIcon size={20} />}
-          label="行事曆"
-          active={activeTab === 'calendar'}
-          onClick={() => onTabChange('calendar')}
-        />
-      )}
-      {!isStudentOrParent && (
-        <TabButton
-          icon={<UserCheck size={20} />}
-          label="課程點名"
-          active={activeTab === 'attendance'}
-          onClick={() => onTabChange('attendance')}
-        />
-      )}
+      <TabButton
+        icon={<UserCheck size={20} />}
+        label="課程點名"
+        active={activeTab === 'attendance'}
+        onClick={() => onTabChange('attendance')}
+      />
       <TabButton
         icon={
           <div className="flex flex-col gap-0.5">
@@ -91,15 +109,23 @@ interface TabButtonProps {
   icon: React.ReactNode;
   label: string;
   active: boolean;
+  activeColor?: string;
   onClick: () => void;
   badge?: number;
 }
 
-const TabButton: React.FC<TabButtonProps> = ({ icon, label, active, onClick, badge }) => (
+const TabButton: React.FC<TabButtonProps> = ({
+  icon,
+  label,
+  active,
+  activeColor = 'text-[#FF6B57]',
+  onClick,
+  badge,
+}) => (
   <button
     onClick={onClick}
-    className={`flex-1 flex flex-col items-center justify-center py-1 px-0.5 transition-colors shrink-0 relative ${
-      active ? 'text-[#FF6B57]' : 'text-gray-400 hover:text-gray-600'
+    className={`flex-1 flex flex-col items-center justify-center py-1 px-0.5 transition-colors shrink-0 relative cursor-pointer ${
+      active ? `${activeColor} font-bold` : 'text-gray-400 hover:text-gray-600'
     }`}
   >
     <div className="h-5 flex items-center justify-center relative">
@@ -113,6 +139,6 @@ const TabButton: React.FC<TabButtonProps> = ({ icon, label, active, onClick, bad
         </span>
       ) : null}
     </div>
-    <span className="text-[10px] mt-1 font-medium leading-none whitespace-nowrap">{label}</span>
+    <span className="text-[10px] mt-1 leading-none whitespace-nowrap">{label}</span>
   </button>
 );

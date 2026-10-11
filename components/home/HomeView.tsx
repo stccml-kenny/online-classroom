@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { UserProfile, ROLE_CONFIGS } from '@/components/auth/AuthModal';
 import { TabType } from '@/components/layout/BottomNav';
+import { StudentHomeView } from './StudentHomeView';
 
 interface HomeViewProps {
   currentUser: UserProfile | null;
@@ -38,6 +39,20 @@ export const HomeView: React.FC<HomeViewProps> = ({
 }) => {
   const isStudentOrParent = currentUser?.role === 'student' || currentUser?.role === 'parent';
   const isAdmin = currentUser?.role === 'admin';
+
+  // 🟢 學生與家長端：全面採用截圖之 KIDULT 專屬儀表板布局
+  if (isStudentOrParent) {
+    return (
+      <StudentHomeView
+        currentUser={currentUser}
+        onNavigateTab={onNavigateTab}
+        onOpenNotices={onOpenNotices}
+        onOpenCalendar={onOpenCalendar}
+        onOpenStudentHomework={onOpenStudentHomework}
+        noticeCount={noticeCount}
+      />
+    );
+  }
 
   // 依真實時間動態計算問候語 (預設早安，客戶端加載後依真實小時切換，防 SSR 水合錯誤)
   const [greeting, setGreeting] = React.useState('早安');

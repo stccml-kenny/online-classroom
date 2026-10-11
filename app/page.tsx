@@ -1,6 +1,6 @@
 ﻿'use client';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { MessageCircle, RotateCcw, Loader2, ChevronDown } from 'lucide-react';
+import { MessageCircle, RotateCcw, Loader2, ChevronDown, LogOut, X } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { BottomNav, TabType } from '@/components/layout/BottomNav';
 import { MoreView } from '@/components/more/MoreView';
@@ -75,6 +75,7 @@ export default function OnlineClassroomApp() {
   }, [currentUser, roleChatPermissions]);
 
   const [showNoticeModal, setShowNoticeModal] = useState(false);
+  const [showStudentSideMenu, setShowStudentSideMenu] = useState(false);
   const [showCalendarModal, setShowCalendarModal] = useState<boolean>(false);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
 
@@ -673,6 +674,9 @@ export default function OnlineClassroomApp() {
           unreadChatCount={isCurrentUserChatEnabled ? unreadChatCount : 0}
           onRefresh={refreshAllData}
           isRefreshing={isRefreshing}
+          onOpenMenu={() => setShowStudentSideMenu(true)}
+          onOpenNotices={() => setShowNoticeModal(true)}
+          noticeCount={notices.length}
         />
 
         {/* ⭐ 下拉重新整理 (Pull-to-Refresh) 視覺回饋指示器 */}
@@ -967,6 +971,140 @@ export default function OnlineClassroomApp() {
             onSaveEvent={handleSaveCalendarEvent}
             onDeleteEvent={handleDeleteCalendarEvent}
           />
+        )}
+
+        {/* 10. 📱 學生 / 家長專屬側邊選單抽屜 (點擊漢堡圖示觸發) */}
+        {showStudentSideMenu && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex justify-start animate-in fade-in duration-150">
+            <div className="w-[280px] max-w-[80vw] bg-white h-full shadow-2xl flex flex-col justify-between p-5 animate-in slide-in-from-left duration-200">
+              <div className="space-y-4">
+                {/* 頂部標題與關閉按鈕 */}
+                <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-[#EBF7F5] border border-[#CDEAE4] text-[#147D6F] flex items-center justify-center font-black">
+                      K
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-black text-gray-900 leading-tight">
+                        KIDULT {currentUser?.role === 'parent' ? '家長端' : '學生端'}
+                      </h3>
+                      <p className="text-[10px] text-gray-400 font-medium">智能在線學習中心</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowStudentSideMenu(false)}
+                    className="p-1 text-gray-400 hover:text-gray-600 rounded-full"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {/* 學員資訊卡片 */}
+                <div className="bg-[#F8F9FA] p-3 rounded-2xl border border-gray-150 space-y-1">
+                  <div className="text-xs font-black text-gray-900">
+                    {currentUser?.name || 'Heinz Chin Chun Hang'}
+                  </div>
+                  <div className="text-[11px] text-gray-500">
+                    學號：{currentUser?.username?.toUpperCase() || 'KDS10343'}
+                  </div>
+                  <div className="text-[11px] text-[#147D6F] font-semibold">
+                    分校：{currentUser?.branch || '北角和富店'}
+                  </div>
+                </div>
+
+                {/* 功能快捷目錄 */}
+                <div className="space-y-1 text-xs font-bold text-gray-700">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('home');
+                      setShowStudentSideMenu(false);
+                    }}
+                    className="w-full text-left p-2.5 rounded-xl hover:bg-[#EBF7F5] hover:text-[#147D6F] transition-colors flex items-center gap-2.5 cursor-pointer"
+                  >
+                    <span>🏠</span>
+                    <span>首頁儀表板</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('calendar');
+                      setShowStudentSideMenu(false);
+                    }}
+                    className="w-full text-left p-2.5 rounded-xl hover:bg-[#EBF7F5] hover:text-[#147D6F] transition-colors flex items-center gap-2.5 cursor-pointer"
+                  >
+                    <span>📅</span>
+                    <span>課程行事曆</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('msg');
+                      setShowStudentSideMenu(false);
+                    }}
+                    className="w-full text-left p-2.5 rounded-xl hover:bg-[#EBF7F5] hover:text-[#147D6F] transition-colors flex items-center gap-2.5 cursor-pointer"
+                  >
+                    <span>💬</span>
+                    <span>即時訊息聯絡</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleOpenStudentHomework();
+                      setShowStudentSideMenu(false);
+                    }}
+                    className="w-full text-left p-2.5 rounded-xl hover:bg-[#EBF7F5] hover:text-[#147D6F] transition-colors flex items-center gap-2.5 cursor-pointer"
+                  >
+                    <span>📝</span>
+                    <span>在線交功課</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowNoticeModal(true);
+                      setShowStudentSideMenu(false);
+                    }}
+                    className="w-full text-left p-2.5 rounded-xl hover:bg-[#EBF7F5] hover:text-[#147D6F] transition-colors flex items-center gap-2.5 cursor-pointer"
+                  >
+                    <span>🔔</span>
+                    <span>最新消息與通告</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleOpenAuth('password');
+                      setShowStudentSideMenu(false);
+                    }}
+                    className="w-full text-left p-2.5 rounded-xl hover:bg-gray-100 transition-colors flex items-center gap-2.5 cursor-pointer"
+                  >
+                    <span>🔑</span>
+                    <span>密碼管理</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 底部登出按鈕 */}
+              <div className="pt-4 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowStudentSideMenu(false);
+                    handleLogout();
+                  }}
+                  className="w-full py-2.5 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <LogOut size={14} />
+                  <span>登出帳戶</span>
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>
