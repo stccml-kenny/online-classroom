@@ -599,17 +599,17 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
     setActiveTab(mode === 'settings_only' ? 'branches' : 'courses');
   };
 
+  const handleCloseModal = () => {
+    handleResetAllStates();
+    if (onClose) onClose();
+  };
+
   // ⭐ 需求：按完成設定時確定儲存並更新資料庫
   const handleSaveAndConfirmSettings = async () => {
     await onUpdateBranches(localBranches);
     await onUpdateClasses(localClasses);
     alert('✅ 學校與班別設定及排序已成功儲存並更新至資料庫！');
     handleCloseModal();
-  };
-
-  const handleCloseModal = () => {
-    handleResetAllStates();
-    if (onClose) onClose();
   };
 
   const prevOpenRef = React.useRef(isOpen);

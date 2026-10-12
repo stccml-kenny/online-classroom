@@ -126,6 +126,14 @@ export const parseUnitResources = (unit: CourseUnit): ParsedUnitResources => {
   };
 };
 
+// 輔助函式：比對課程名稱 (大小寫/子字串容錯)
+const isCourseMatchSimple = (uCourse?: string, targetCourse?: string): boolean => {
+  if (!uCourse || !targetCourse) return true;
+  const uC = uCourse.trim().toLowerCase();
+  const tC = targetCourse.trim().toLowerCase();
+  return uC === tC || uC.includes(tC) || tC.includes(uC);
+};
+
 export const CourseContentModal: React.FC<CourseContentModalProps> = ({
   isOpen,
   onClose,
@@ -164,12 +172,7 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
     return list;
   }, [currentUser, courses]);
 
-  const isCourseMatchSimple = (uCourse?: string, targetCourse?: string) => {
-    if (!uCourse || !targetCourse) return true;
-    const uC = uCourse.trim().toLowerCase();
-    const tC = targetCourse.trim().toLowerCase();
-    return uC === tC || uC.includes(tC) || tC.includes(uC);
-  };
+
 
   // ⭐ 需求 6：課程內容中，課程選擇會因揀選的學校而變更 (嚴格遵循 React Rules of Hooks，置於 early return 之前)
   const filteredCourses = useMemo(() => {
