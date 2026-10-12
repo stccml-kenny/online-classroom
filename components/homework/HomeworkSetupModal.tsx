@@ -250,6 +250,7 @@ interface HomeworkSetupModalProps {
   currentUser?: UserProfile | null;
   usersList?: UserProfile[]; // ⭐ 需求 7：用以計算各課程已參加學生人數
   onUpdateUsersList?: (users: UserProfile[]) => void; // ⭐ 課程異動時同步帳戶名冊
+  onOpenMenu?: () => void;
 }
 
 export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
@@ -271,6 +272,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
   currentUser = null,
   usersList = [],
   onUpdateUsersList,
+  onOpenMenu,
 }) => {
   const isStudent = currentUser?.role === 'student';
   // ⭐ 標準化課程項目清單 (置於 Hook 前以供計算各項指標)

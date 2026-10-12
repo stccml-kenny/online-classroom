@@ -27,6 +27,7 @@ interface ClassManagementModalProps {
   onUpdateUsersList?: (newUsers: UserProfile[]) => void;
   onDataChanged?: () => void;
   onOpenCourseContent?: (courseName: string, branch?: string, isLocked?: boolean) => void;
+  onOpenMenu?: () => void;
 }
 
 export interface StudentRecord {
@@ -71,6 +72,7 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
   onUpdateUsersList,
   onDataChanged,
   onOpenCourseContent,
+  onOpenMenu,
 }) => {
   // ⭐ 需求 2：會員目錄只保留現有會員，刪除新增會員及Excel批次匯入
   const [existingStudents, setExistingStudents] = useState<StudentRecord[]>([]);
