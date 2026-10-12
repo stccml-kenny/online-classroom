@@ -851,6 +851,7 @@ export default function OnlineClassroomApp() {
         <NoticeModal
           isOpen={showNoticeModal}
           onClose={() => setShowNoticeModal(false)}
+          onOpenMenu={() => setShowStudentSideMenu(true)}
           notices={notices}
           currentUser={currentUser}
           branches={branches}
@@ -1037,6 +1038,7 @@ export default function OnlineClassroomApp() {
                       setShowStudentSideMenu(false);
                       setShowCourseContentModal(false);
                       setShowCalendarModal(false);
+                      setShowNoticeModal(false);
                     }}
                     className="w-full text-left p-2.5 rounded-xl hover:bg-orange-50 hover:text-[#FF6B57] transition-colors flex items-center gap-2.5 cursor-pointer"
                   >
@@ -1051,6 +1053,7 @@ export default function OnlineClassroomApp() {
                       setShowStudentSideMenu(false);
                       setShowCourseContentModal(false);
                       setShowCalendarModal(false);
+                      setShowNoticeModal(false);
                     }}
                     className="w-full text-left p-2.5 rounded-xl hover:bg-orange-50 hover:text-[#FF6B57] transition-colors flex items-center gap-2.5 cursor-pointer"
                   >
@@ -1065,6 +1068,7 @@ export default function OnlineClassroomApp() {
                       setShowStudentSideMenu(false);
                       setShowCourseContentModal(false);
                       setShowCalendarModal(false);
+                      setShowNoticeModal(false);
                     }}
                     className="w-full text-left p-2.5 rounded-xl hover:bg-orange-50 hover:text-[#FF6B57] transition-colors flex items-center gap-2.5 cursor-pointer"
                   >

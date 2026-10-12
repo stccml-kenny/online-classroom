@@ -27,7 +27,7 @@ export interface NewsItem {
 }
 
 export const NEWS_CATEGORIES: { label: NewsCategory; color: string; bg: string; border: string }[] = [
-  { label: '校務通知', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
+  { label: '校務通知', color: 'text-[#FF6B57]', bg: 'bg-orange-50', border: 'border-orange-200' },
   { label: '活動快訊', color: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-200' },
   { label: '重要提醒', color: 'text-rose-700', bg: 'bg-rose-50', border: 'border-rose-200' },
   { label: '停課/天氣', color: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200' },
