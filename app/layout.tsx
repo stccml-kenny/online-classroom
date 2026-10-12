@@ -39,6 +39,26 @@ export default function RootLayout({
           name="viewport"
           content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
         />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                if (typeof window !== 'undefined') {
+                  var origErr = console.error;
+                  console.error = function() {
+                    if (arguments.length > 0 && typeof arguments[0] === 'string' &&
+                        (arguments[0].indexOf('Realtime got disconnected') !== -1 ||
+                         arguments[0].indexOf('Reconnect will be attempted') !== -1)) {
+                      console.debug.apply(console, arguments);
+                      return;
+                    }
+                    origErr.apply(console, arguments);
+                  };
+                }
+              })();
+            `,
+          }}
+        />
       </head>
       <body className="antialiased bg-gray-100 min-h-screen">
         {children}
