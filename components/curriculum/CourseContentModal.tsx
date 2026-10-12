@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect, useMemo } from 'react';
 import {
-  X, Plus, GraduationCap, BookOpen, Calendar, Edit2, Trash2, Download, FileText, Music, Video, Play, Pause, ExternalLink, CheckCircle2, Clock, Eye, Layers, Unlink, ChevronDown, ChevronUp, CheckSquare, Square, Edit3, Lock, School
+  X, Plus, GraduationCap, BookOpen, Calendar, Edit2, Trash2, Download, FileText, Music, Video, Play, Pause, ExternalLink, CheckCircle2, Clock, Eye, Layers, Unlink, ChevronDown, ChevronUp, CheckSquare, Square, Edit3, Lock, School, Menu
 } from 'lucide-react';
 import { CourseUnit, CourseUnitFormModal } from './CourseUnitFormModal';
 import { HomeworkCard, HomeworkItem, HomeworkAttachment, extractYoutubeId, getGoogleLinkMeta, YoutubeIcon, getHomeworkPublishStatus } from '../homework/HomeworkCard';
@@ -26,6 +26,7 @@ interface CourseContentModalProps {
   isLocked?: boolean;     // ⭐ 於課程目錄點擊打開時，鎖上學校及課程選項
   isReadOnly?: boolean;   // ⭐ 學生與家長帳戶唯讀模式
   currentUser?: UserProfile | null;
+  onOpenMenu?: () => void;
 }
 
 export type PublishStatusType = 'published' | 'scheduled' | 'pending' | 'unpublished';
@@ -138,6 +139,7 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
   isLocked = false,
   isReadOnly = false,
   currentUser = null,
+  onOpenMenu,
 }) => {
   const [activeTab, setActiveTab] = useState<'units' | 'homework'>('units');
 
@@ -149,8 +151,18 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
   const isStudent = currentUser?.role === 'student';
   const studentEnrolledCourses = useMemo(() => {
     if (!currentUser || currentUser.role !== 'student') return [];
-    return Array.isArray(currentUser.enrolledCourses) ? currentUser.enrolledCourses : [];
-  }, [currentUser]);
+    const list = Array.isArray(currentUser.enrolledCourses) ? currentUser.enrolledCourses : [];
+    if (courses && courses.length > 0 && list.length > 0) {
+      const matched = courses.filter((cName) =>
+        list.some((ec) => isCourseMatchSimple(ec, cName))
+      );
+      if (matched.length > 0) return matched;
+    }
+    if (courses && courses.length > 0) {
+      return courses;
+    }
+    return list;
+  }, [currentUser, courses]);
 
   const isCourseMatchSimple = (uCourse?: string, targetCourse?: string) => {
     if (!uCourse || !targetCourse) return true;
@@ -769,12 +781,24 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
       <div className="w-full flex-1 flex flex-col overflow-hidden max-w-4xl mx-auto bg-white shadow-md relative">
         {/* 1. 頂部滿板功能導航列 (兩行式設計：統一與課程行事曆相同色彩與版面) */}
         <div className="bg-gradient-to-r from-[#FF6B57] via-[#FF7A66] to-[#FF8E7D] text-white px-4 sm:px-6 pt-3.5 pb-2.5 shrink-0 shadow-md flex flex-col gap-2.5">
-          {/* 第一行：圖示、標題、學校標籤與關閉按鈕 */}
+          {/* 第一行：左上角三間目錄、標題、學校標籤與關閉按鈕 */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2.5 min-w-0 flex-1">
-              <div className="w-9 h-9 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center shadow-inner shrink-0">
-                <BookOpen size={20} className="text-white" />
-              </div>
+              {/* ⭐ 左上角三間目錄 (漢堡選單) 按鈕 - 始終維持 */}
+              {onOpenMenu ? (
+                <button
+                  type="button"
+                  onClick={onOpenMenu}
+                  className="w-9 h-9 rounded-2xl bg-white/20 hover:bg-white/30 backdrop-blur-md flex items-center justify-center shadow-inner shrink-0 transition-colors cursor-pointer text-white"
+                  title="選單目錄"
+                >
+                  <Menu size={20} className="text-white" />
+                </button>
+              ) : (
+                <div className="w-9 h-9 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center shadow-inner shrink-0">
+                  <Menu size={20} className="text-white" />
+                </div>
+              )}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h1 className="text-base sm:text-lg font-black tracking-wide whitespace-nowrap">

@@ -17,7 +17,8 @@ import {
   FileText,
   Search,
   CheckCircle2,
-  Loader2
+  Loader2,
+  Menu
 } from 'lucide-react';
 import type { UserProfile } from '@/components/auth/AuthModal';
 import type { CalendarEvent } from '@/types/calendar';
@@ -38,6 +39,7 @@ interface CalendarModalProps {
   onSaveEvent: (eventData: CalendarEvent, existingId?: string) => Promise<void>;
   onDeleteEvent: (eventId: string) => Promise<void>;
   isInline?: boolean;
+  onOpenMenu?: () => void;
 }
 
 // 格式化日期字串為 YYYY-MM-DD
@@ -60,6 +62,7 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
   onSaveEvent,
   onDeleteEvent,
   isInline = false,
+  onOpenMenu,
 }) => {
   if (!isOpen) return null;
 
@@ -420,12 +423,23 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
       {/* 1. 頂部滿板功能導航列 (兩行式設計：第一行放標題與關閉，第二行整行放課程與功課清單切換) */}
       <div className="bg-gradient-to-r from-[#FF6B57] via-[#FF7A66] to-[#FF8E7D] text-white px-4 sm:px-6 pt-3.5 pb-2.5 shrink-0 shadow-md flex flex-col gap-2.5">
         
-        {/* 第一行：圖示、標題、學校標籤與關閉按鈕 */}
+        {/* 第一行：圖示/三間目錄、標題、學校標籤與關閉按鈕 */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
-            <div className="w-9 h-9 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center shadow-inner shrink-0">
-              <CalendarIcon size={20} className="text-white" />
-            </div>
+            {onOpenMenu ? (
+              <button
+                type="button"
+                onClick={onOpenMenu}
+                className="w-9 h-9 rounded-2xl bg-white/20 hover:bg-white/30 backdrop-blur-md flex items-center justify-center shadow-inner shrink-0 transition-colors cursor-pointer text-white"
+                title="選單目錄"
+              >
+                <Menu size={20} className="text-white" />
+              </button>
+            ) : (
+              <div className="w-9 h-9 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center shadow-inner shrink-0">
+                <CalendarIcon size={20} className="text-white" />
+              </div>
+            )}
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-base sm:text-lg font-black tracking-wide whitespace-nowrap">

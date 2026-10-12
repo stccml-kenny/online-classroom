@@ -745,6 +745,7 @@ export default function OnlineClassroomApp() {
               isOpen={true}
               isInline={true}
               onClose={() => setActiveTab('home')}
+              onOpenMenu={() => setShowStudentSideMenu(true)}
               currentUser={currentUser}
               branches={branches}
               classes={classes}
@@ -868,6 +869,7 @@ export default function OnlineClassroomApp() {
             setCourseModalInitialTab('units');
             setCourseModalIsLocked(false);
           }}
+          onOpenMenu={() => setShowStudentSideMenu(true)}
           branches={branches}
           courses={courseNames}
           classes={classes}
@@ -974,6 +976,7 @@ export default function OnlineClassroomApp() {
             isOpen={true}
             isInline={false}
             onClose={() => setShowCalendarModal(false)}
+            onOpenMenu={() => setShowStudentSideMenu(true)}
             currentUser={currentUser}
             branches={branches}
             classes={classes}
@@ -1032,6 +1035,8 @@ export default function OnlineClassroomApp() {
                     onClick={() => {
                       setActiveTab('home');
                       setShowStudentSideMenu(false);
+                      setShowCourseContentModal(false);
+                      setShowCalendarModal(false);
                     }}
                     className="w-full text-left p-2.5 rounded-xl hover:bg-orange-50 hover:text-[#FF6B57] transition-colors flex items-center gap-2.5 cursor-pointer"
                   >
@@ -1044,6 +1049,8 @@ export default function OnlineClassroomApp() {
                     onClick={() => {
                       setActiveTab('calendar');
                       setShowStudentSideMenu(false);
+                      setShowCourseContentModal(false);
+                      setShowCalendarModal(false);
                     }}
                     className="w-full text-left p-2.5 rounded-xl hover:bg-orange-50 hover:text-[#FF6B57] transition-colors flex items-center gap-2.5 cursor-pointer"
                   >
@@ -1056,6 +1063,8 @@ export default function OnlineClassroomApp() {
                     onClick={() => {
                       setActiveTab('msg');
                       setShowStudentSideMenu(false);
+                      setShowCourseContentModal(false);
+                      setShowCalendarModal(false);
                     }}
                     className="w-full text-left p-2.5 rounded-xl hover:bg-orange-50 hover:text-[#FF6B57] transition-colors flex items-center gap-2.5 cursor-pointer"
                   >
@@ -1082,6 +1091,8 @@ export default function OnlineClassroomApp() {
                         onClick={() => {
                           setActiveTab('courses');
                           setShowStudentSideMenu(false);
+                          setShowCourseContentModal(false);
+                          setShowCalendarModal(false);
                         }}
                         className="w-full text-left p-2.5 rounded-xl hover:bg-orange-50 hover:text-[#FF6B57] transition-colors flex items-center gap-2.5 cursor-pointer"
                       >
@@ -1093,6 +1104,8 @@ export default function OnlineClassroomApp() {
                         onClick={() => {
                           setActiveTab('members');
                           setShowStudentSideMenu(false);
+                          setShowCourseContentModal(false);
+                          setShowCalendarModal(false);
                         }}
                         className="w-full text-left p-2.5 rounded-xl hover:bg-orange-50 hover:text-[#FF6B57] transition-colors flex items-center gap-2.5 cursor-pointer"
                       >
@@ -1104,6 +1117,8 @@ export default function OnlineClassroomApp() {
                         onClick={() => {
                           setActiveTab('attendance');
                           setShowStudentSideMenu(false);
+                          setShowCourseContentModal(false);
+                          setShowCalendarModal(false);
                         }}
                         className="w-full text-left p-2.5 rounded-xl hover:bg-orange-50 hover:text-[#FF6B57] transition-colors flex items-center gap-2.5 cursor-pointer"
                       >
@@ -1145,6 +1160,8 @@ export default function OnlineClassroomApp() {
                   type="button"
                   onClick={() => {
                     setShowStudentSideMenu(false);
+                    setShowCourseContentModal(false);
+                    setShowCalendarModal(false);
                     handleLogout();
                   }}
                   className="w-full py-2.5 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
