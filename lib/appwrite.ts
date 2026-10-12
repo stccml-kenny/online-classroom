@@ -2,23 +2,6 @@
 import type { UserProfile, UserRole } from '@/components/auth/AuthModal';
 import { CourseItem, normalizeCourse } from '@/components/homework/HomeworkSetupModal';
 
-// ⭐ 抑制 Next.js 15 開發環境對 Appwrite Realtime 自動重連的 console.error 彈窗攔截
-if (typeof window !== 'undefined') {
-  const originalConsoleError = console.error;
-  console.error = (...args: any[]) => {
-    if (
-      args.length > 0 &&
-      typeof args[0] === 'string' &&
-      (args[0].includes('Realtime got disconnected') ||
-       args[0].includes('Reconnect will be attempted'))
-    ) {
-      console.debug(...args);
-      return;
-    }
-    originalConsoleError(...args);
-  };
-}
-
 const client = new Client();
 
 const endpoint =
