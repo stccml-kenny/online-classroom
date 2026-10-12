@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect, useMemo } from 'react';
 import {
-  X, Plus, GraduationCap, BookOpen, Calendar, Edit2, Trash2, Download, FileText, Music, Video, Play, Pause, ExternalLink, CheckCircle2, Clock, Eye, Layers, Unlink, ChevronDown, ChevronUp, CheckSquare, Square, Edit3, Lock
+  X, Plus, GraduationCap, BookOpen, Calendar, Edit2, Trash2, Download, FileText, Music, Video, Play, Pause, ExternalLink, CheckCircle2, Clock, Eye, Layers, Unlink, ChevronDown, ChevronUp, CheckSquare, Square, Edit3, Lock, School
 } from 'lucide-react';
 import { CourseUnit, CourseUnitFormModal } from './CourseUnitFormModal';
 import { HomeworkCard, HomeworkItem, HomeworkAttachment, extractYoutubeId, getGoogleLinkMeta, YoutubeIcon, getHomeworkPublishStatus } from '../homework/HomeworkCard';
