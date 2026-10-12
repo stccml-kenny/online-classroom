@@ -281,8 +281,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   </span>
                 </div>
                 <div>
-                  <div className="text-xs font-bold text-gray-800 group-hover:text-amber-700">在線交功課</div>
-                  <div className="text-[10px] text-gray-400">直接顯示所有已參加課程之家課</div>
+                  <div className="text-xs font-bold text-gray-800 group-hover:text-[#FF6B57]">課程內容</div>
+                  <div className="text-[10px] text-gray-400">課程單元教材與單元進度</div>
                 </div>
               </button>
             )}

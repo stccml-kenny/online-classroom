@@ -138,11 +138,11 @@ export default function OnlineClassroomApp() {
     setShowCourseContentModal(true);
   };
 
-  // ⭐ 需求 3：學生帳戶中首頁在線交功課按後直接顯示所有已參加之課程的家課
+  // ⭐ 需求：點擊「課程內容」先連結課程內容與單元進度 (預設切換至 'units' 單元進度分頁)
   const handleOpenStudentHomework = () => {
     setCourseModalInitialCourse('全部課程');
     setCourseModalInitialBranch(currentUser?.branch || '全部分校');
-    setCourseModalInitialTab('homework');
+    setCourseModalInitialTab('units'); // ⭐ 點撃後先連結課程單元教材與單元進度
     setCourseModalIsLocked(false);
     setShowCourseContentModal(true);
   };
@@ -1072,8 +1072,8 @@ export default function OnlineClassroomApp() {
                       }}
                       className="w-full text-left p-2.5 rounded-xl hover:bg-orange-50 hover:text-[#FF6B57] transition-colors flex items-center gap-2.5 cursor-pointer"
                     >
-                      <span>📝</span>
-                      <span>在線交功課</span>
+                      <span>📖</span>
+                      <span>課程內容</span>
                     </button>
                   ) : (
                     <>

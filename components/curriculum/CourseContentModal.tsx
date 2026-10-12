@@ -141,7 +141,7 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'units' | 'homework'>('units');
 
-  // ⭐ 需求 2：課程內容與單元進度「預設全部分校及全部課程」
+  // ⭐ 需求 2：課程內容「預設全部分校及全部課程」
   const [selectedBranch, setSelectedBranch] = useState('全部分校');
   const [selectedCourse, setSelectedCourse] = useState('全部課程');
   const [statusFilter, setStatusFilter] = useState<'all' | PublishStatusType>('all');
@@ -766,83 +766,122 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
 
   return (
     <div onTouchStart={(e) => e.stopPropagation()} onTouchMove={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()} className="fixed inset-0 bg-[#F8F9FA] z-40 flex flex-col w-full h-full h-[100dvh] max-h-[100dvh] overflow-hidden animate-in fade-in duration-200">
-      <div className="w-full flex-1 flex flex-col overflow-hidden max-w-3xl mx-auto bg-white shadow-sm relative">
-        {/* 頂部導航列 (⭐ 需求 3：已移除設定齒輪，純粹專注課程單元與進度) */}
-        <div className="bg-white px-5 py-3.5 rounded-t-2xl border-b border-gray-100 flex justify-between items-center">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
-              <GraduationCap size={20} />
+      <div className="w-full flex-1 flex flex-col overflow-hidden max-w-4xl mx-auto bg-white shadow-md relative">
+        {/* 1. 頂部滿板功能導航列 (兩行式設計：統一與課程行事曆相同色彩與版面) */}
+        <div className="bg-gradient-to-r from-[#FF6B57] via-[#FF7A66] to-[#FF8E7D] text-white px-4 sm:px-6 pt-3.5 pb-2.5 shrink-0 shadow-md flex flex-col gap-2.5">
+          {/* 第一行：圖示、標題、學校標籤與關閉按鈕 */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+              <div className="w-9 h-9 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center shadow-inner shrink-0">
+                <BookOpen size={20} className="text-white" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-base sm:text-lg font-black tracking-wide whitespace-nowrap">
+                    課程內容
+                  </h1>
+                  {selectedBranch && selectedBranch !== '全部分校' && (
+                    <span className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-white/25 text-white flex items-center gap-1 shrink-0 truncate max-w-[180px]">
+                      <School size={12} className="shrink-0" />
+                      <span className="truncate">{selectedBranch}</span>
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-white/85 truncate">
+                  {isStudent
+                    ? `專屬 ${selectedBranch && selectedBranch !== '全部分校' ? selectedBranch : '本校'} 課程單元教材與單元進度`
+                    : '課程單元教材與家課發布管理'}
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="font-bold text-gray-800 text-base">課程內容與單元進度</h3>
-              <p className="text-[11px] text-gray-400">點擊項目展開查看內容，支援多選編輯與刪除</p>
+
+            <div className="flex items-center gap-1.5 shrink-0">
+              {/* 多選管理模式切換按鈕 (唯讀模式隱藏) */}
+              {!isReadOnly && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (activeTab === 'units') {
+                      setIsUnitSelectMode(!isUnitSelectMode);
+                      setSelectedUnitIds([]);
+                    } else {
+                      setIsHwSelectMode(!isHwSelectMode);
+                      setSelectedHwIds([]);
+                    }
+                  }}
+                  className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shadow-2xs cursor-pointer ${
+                    (activeTab === 'units' ? isUnitSelectMode : isHwSelectMode)
+                      ? 'bg-white text-[#FF6B57]'
+                      : 'bg-white/20 text-white hover:bg-white/30'
+                  }`}
+                >
+                  <CheckSquare size={13} />
+                  <span>{(activeTab === 'units' ? isUnitSelectMode : isHwSelectMode) ? '退出多選' : '多選'}</span>
+                </button>
+              )}
+
+              <button
+                onClick={handleResetAndClose}
+                className="p-1.5 rounded-full hover:bg-white/20 transition-colors text-white shrink-0 cursor-pointer"
+                title="關閉課程內容"
+              >
+                <X size={20} />
+              </button>
             </div>
           </div>
 
-          <button onClick={handleResetAndClose} className="p-1 text-gray-400 hover:text-gray-600" title="關閉">
-            <X size={20} />
-          </button>
-        </div>
+          {/* 第二行：課程單元 與 單元家課 滿板居中切換膠囊 (與行事曆完全一致) */}
+          <div className="flex items-center justify-center w-full">
+            <div className="bg-black/20 p-1 rounded-2xl flex items-center w-full max-w-md shadow-inner">
+              <button
+                type="button"
+                onClick={() => setActiveTab('units')}
+                className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  activeTab === 'units'
+                    ? 'bg-white text-[#FF6B57] shadow-sm'
+                    : 'text-white/80 hover:text-white'
+                }`}
+              >
+                <GraduationCap size={15} />
+                <span>課程單元</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                    activeTab === 'units' ? 'bg-orange-100 text-[#FF6B57]' : 'bg-white/20 text-white'
+                  }`}
+                >
+                  {filteredUnits.length}
+                </span>
+              </button>
 
-        {/* 分頁標籤：課程單元 (Units) VS 家課作業 (Homework) */}
-        <div className="bg-white px-4 border-b border-gray-100 flex text-xs font-bold justify-between items-center">
-          <div className="flex flex-1">
-            <button
-              onClick={() => setActiveTab('units')}
-              className={`py-2.5 px-3 border-b-2 text-center transition-colors flex items-center justify-center gap-1.5 ${
-                activeTab === 'units'
-                  ? 'border-indigo-600 text-indigo-600'
-                  : 'border-transparent text-gray-400 hover:text-gray-600'
-              }`}
-            >
-              <GraduationCap size={15} />
-              <span>課程單元 ({filteredUnits.length})</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('homework')}
-              className={`py-2.5 px-3 border-b-2 text-center transition-colors flex items-center justify-center gap-1.5 ${
-                activeTab === 'homework'
-                  ? 'border-[#FF6B57] text-[#FF6B57]'
-                  : 'border-transparent text-gray-400 hover:text-gray-600'
-              }`}
-            >
-              <BookOpen size={15} />
-              <span>單元家課 ({filteredHomework.length})</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('homework')}
+                className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  activeTab === 'homework'
+                    ? 'bg-white text-[#FF6B57] shadow-sm'
+                    : 'text-white/80 hover:text-white'
+                }`}
+              >
+                <CheckCircle2 size={15} />
+                <span>單元家課</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                    activeTab === 'homework' ? 'bg-amber-100 text-amber-800' : 'bg-white/20 text-white'
+                  }`}
+                >
+                  {filteredHomework.length}
+                </span>
+              </button>
+            </div>
           </div>
-
-          {/* 多選管理模式切換按鈕 (唯讀模式隱藏) */}
-          {!isReadOnly && (
-            <button
-              type="button"
-              onClick={() => {
-                if (activeTab === 'units') {
-                  setIsUnitSelectMode(!isUnitSelectMode);
-                  setSelectedUnitIds([]);
-                } else {
-                  setIsHwSelectMode(!isHwSelectMode);
-                  setSelectedHwIds([]);
-                }
-              }}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 shadow-2xs ${
-                (activeTab === 'units' ? isUnitSelectMode : isHwSelectMode)
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              <CheckSquare size={13} />
-              <span>{(activeTab === 'units' ? isUnitSelectMode : isHwSelectMode) ? '退出多選' : '多選管理'}</span>
-            </button>
-          )}
         </div>
 
         {/* 篩選工具列：預設全部分校及全部課程 (⭐ 需求：於課程目錄中點擊打開，鎖上該頁的學校及課程選項) */}
         <div className="bg-white px-4 py-2 border-b border-gray-100 space-y-1.5">
           {isLocked ? (
-            <div className="bg-indigo-50/70 border border-indigo-200/80 rounded-xl p-2.5 flex items-center justify-between text-xs">
+            <div className="bg-orange-50/70 border border-orange-200/80 rounded-xl p-2.5 flex items-center justify-between text-xs">
               <div className="flex items-center gap-2 min-w-0">
-                <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                <div className="w-7 h-7 rounded-lg bg-[#FF6B57] text-white flex items-center justify-center shrink-0 shadow-2xs">
                   <Lock size={14} />
                 </div>
                 <div className="min-w-0">
@@ -850,7 +889,7 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
                     <span className="text-[10px] bg-purple-100 text-purple-700 font-bold px-1.5 py-0.2 rounded border border-purple-200">
                       {selectedBranch}
                     </span>
-                    <span className="text-[10px] text-indigo-600 font-semibold flex items-center gap-0.5">
+                    <span className="text-[10px] text-[#FF6B57] font-semibold flex items-center gap-0.5">
                       <span>已鎖定指定課程</span>
                     </span>
                   </div>
@@ -864,12 +903,12 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
               </span>
             </div>
           ) : isStudent ? (
-            /* ⭐ 需求 2 & 3：學生帳戶模式中課程內容與單元進度移除學校下拉選單，只提供已參加的課程選項 */
+            /* ⭐ 需求 2 & 3：學生帳戶模式中課程內容移除學校下拉選單，只提供已參加的課程選項 */
             <div className="grid grid-cols-1 gap-1.5">
               <select
                 value={selectedCourse}
                 onChange={(e) => setSelectedCourse(e.target.value)}
-                className="w-full bg-indigo-50 text-indigo-700 text-xs font-bold px-2.5 py-2 rounded-lg border border-indigo-100 outline-none"
+                className="w-full bg-gray-50 border border-gray-300 text-gray-800 font-bold rounded-xl px-2.5 py-2 text-xs outline-none focus:border-[#FF6B57]"
               >
                 {studentEnrolledCourses.length === 0 ? (
                   <option value="">暫未參加任何課程</option>
@@ -891,7 +930,7 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
               <select
                 value={selectedBranch}
                 onChange={(e) => setSelectedBranch(e.target.value)}
-                className="w-full bg-purple-50 text-purple-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg border-none outline-none"
+                className="w-full bg-gray-50 border border-gray-300 text-gray-800 font-bold rounded-xl px-2.5 py-1.5 text-xs outline-none focus:border-[#FF6B57]"
               >
                 <option value="全部分校">全部分校 (All Schools)</option>
                 {branches.map((b) => (
@@ -903,7 +942,7 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
               <select
                 value={selectedCourse}
                 onChange={(e) => setSelectedCourse(e.target.value)}
-                className="w-full bg-indigo-50 text-indigo-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-indigo-100 outline-none"
+                className="w-full bg-gray-50 border border-gray-300 text-gray-800 font-bold rounded-xl px-2.5 py-1.5 text-xs outline-none focus:border-[#FF6B57]"
               >
                 <option value="全部課程">全部課程 (All Courses)</option>
                 {filteredCourses.length === 0 && selectedBranch !== '全部分校' ? (
@@ -995,7 +1034,7 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
                     key={u.$id || idx}
                     className={`bg-white rounded-2xl border transition-all text-xs relative ${
                       isSelected
-                        ? 'border-indigo-600 ring-2 ring-indigo-600/20 shadow-md'
+                        ? 'border-[#FF6B57] ring-2 ring-[#FF6B57]/20 shadow-md'
                         : 'border-gray-200/90 hover:border-gray-300 shadow-xs'
                     }`}
                   >
@@ -1012,10 +1051,10 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
                                 : [...prev, u.$id!]
                             );
                           }}
-                          className="pt-0.5 text-indigo-600 shrink-0"
+                          className="pt-0.5 text-[#FF6B57] shrink-0"
                         >
                           {isSelected ? (
-                            <CheckSquare size={18} className="text-indigo-600" />
+                            <CheckSquare size={18} className="text-[#FF6B57]" />
                           ) : (
                             <Square size={18} className="text-gray-300 hover:text-gray-500" />
                           )}
@@ -1093,7 +1132,7 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
                             <span>{linkedHws.length} 項家課</span>
                           </span>
 
-                          <span className="text-indigo-600 font-bold text-[10px] ml-auto flex items-center gap-0.5">
+                          <span className="text-[#FF6B57] font-bold text-[10px] ml-auto flex items-center gap-0.5">
                             <span>{isExpanded ? '收合詳情' : '點擊展開'}</span>
                             {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                           </span>
@@ -1108,7 +1147,7 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
                               setEditingUnit(u);
                               setUnitFormOpen(true);
                             }}
-                            className="p-1 hover:text-indigo-600 transition-colors"
+                            className="p-1 hover:text-[#FF6B57] transition-colors"
                             title="編輯單元"
                           >
                             <Edit2 size={15} />
@@ -1434,7 +1473,7 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
                                   <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2 min-w-0">
                                       {isVideo ? (
-                                        <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+                                        <div className="w-7 h-7 rounded-lg bg-indigo-100 text-[#FF6B57] flex items-center justify-center shrink-0">
                                           <Video size={15} />
                                         </div>
                                       ) : isAudio ? (
@@ -1699,7 +1738,7 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
               <button
                 type="button"
                 onClick={() => setBatchEditOpen(true)}
-                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold flex items-center gap-1 transition-colors shadow-xs"
+                className="px-3 py-1.5 bg-[#FF6B57] hover:bg-[#e05a48] text-white rounded-xl font-bold flex items-center gap-1 transition-colors shadow-xs"
               >
                 <Edit3 size={13} />
                 <span>批量編輯</span>
@@ -1725,7 +1764,7 @@ export const CourseContentModal: React.FC<CourseContentModalProps> = ({
                 setEditingUnit(null);
                 setUnitFormOpen(true);
               }}
-              className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+              className="flex-1 py-2.5 bg-[#FF6B57] hover:bg-[#e05a48] text-white font-bold rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
             >
               <Plus size={15} />
               <span>新增課程單元</span>
