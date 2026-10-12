@@ -46,6 +46,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
 }) => {
   const isStudentOrParent = currentUser?.role === 'student' || currentUser?.role === 'parent';
   const isAdmin = currentUser?.role === 'admin';
+  const isTeacherOrAssistant = currentUser?.role === 'teacher' || currentUser?.role === 'assistant';
 
   // 🟢 學生與家長端：全面採用截圖之 SNJMUSIC 專屬儀表板布局 (使用真實學生課程)
   if (isStudentOrParent) {
@@ -136,8 +137,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
             )}
           </div>
 
-          {/* 開始使用按鈕 (⭐ 未登入情況下首頁橙色框內的開始使用按鍵已移除，僅登入後顯示) */}
-          {currentUser && (
+          {/* 開始使用按鈕 (⭐ 導師端及助教端移除開始使用按鈕，直接使用下方專屬核心功能卡片) */}
+          {currentUser && !isTeacherOrAssistant && (
             <div className="pt-1 space-y-2">
               <button
                 type="button"
@@ -150,16 +151,20 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 </span>
                 <ChevronRight size={16} />
               </button>
-              {isAdmin && (
-                <button
-                  type="button"
-                  onClick={onOpenAccountMgmt}
-                  className="w-full py-2 bg-white/20 hover:bg-white/30 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 text-xs transition-colors backdrop-blur-xs"
-                >
-                  <UserPlus size={14} />
-                  <span>👑 系統管理員：派發新帳戶與帳號管理</span>
-                </button>
-              )}
+            </div>
+          )}
+
+          {/* 系統管理員專屬功能入口 */}
+          {currentUser && isAdmin && (
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={onOpenAccountMgmt}
+                className="w-full py-2 bg-white/20 hover:bg-white/30 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 text-xs transition-colors backdrop-blur-xs"
+              >
+                <UserPlus size={14} />
+                <span>👑 系統管理員：派發新帳戶與帳號管理</span>
+              </button>
             </div>
           )}
         </div>
