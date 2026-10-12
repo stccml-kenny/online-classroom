@@ -305,24 +305,41 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
       .sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''));
   }, [allHomeworkEvents, filterBranch, filterCourse, searchQuery, isStudentOrParent]);
 
-  // 可供下拉選單篩選的課程名稱清單 (整合真實課程、字串清單與已修讀課程)
+  // 可供下拉選單篩選的課程名稱清單 (⭐ 嚴格依系統中真實存在的課程顯示，徹底排除不存在的「小結他」等虛擬課程)
   const availableCourseNames = useMemo(() => {
-    const set = new Set<string>();
+    const realCourseList: string[] = [];
+    const seen = new Set<string>();
+
+    // 1. 嚴格從真實 courses 提取所有真實存在的課程名稱
     courses.forEach((c) => {
       const name = typeof c === 'string' ? c.trim() : (c.name ? c.name.trim() : '');
-      if (name) set.add(name);
+      if (name && !seen.has(name)) {
+        seen.add(name);
+        realCourseList.push(name);
+      }
     });
-    courseNames.forEach((cn) => {
-      if (cn && cn.trim()) set.add(cn.trim());
-    });
+
+    // 2. 若為學生或家長身分，僅保留「真實存在」且「學生有修讀」之課程
     if (isStudentOrParent && enrolledCoursesList.length > 0) {
-      enrolledCoursesList.forEach((ec) => {
-        if (ec && ec.trim()) set.add(ec.trim());
-      });
+      const matched = realCourseList.filter((realName) =>
+        enrolledCoursesList.some((ec) => isCourseMatch(ec, realName))
+      );
+      // 若學生的 enrolledCourses 能匹配到真實課程，則只呈現這些真實課程
+      if (matched.length > 0) {
+        return matched;
+      }
     }
-    const arr = Array.from(set);
-    return arr.length > 0 ? arr : (courseNames.length > 0 ? courseNames : ['常規課程']);
-  }, [courses, courseNames, isStudentOrParent, enrolledCoursesList]);
+
+    // 3. 若無特定匹配或為教職員，直接呈現系統中真實存在的課程名稱清單
+    return realCourseList;
+  }, [courses, isStudentOrParent, enrolledCoursesList]);
+
+  // ⭐ 自動防禦：若當前 filterCourse 不在真實課程清單內 (且非 'all')，自動重置為 'all' (全部課程)
+  useEffect(() => {
+    if (filterCourse !== 'all' && !availableCourseNames.includes(filterCourse)) {
+      setFilterCourse('all');
+    }
+  }, [filterCourse, availableCourseNames]);
 
   // 處理開啟表單
   const handleOpenCreateForm = () => {

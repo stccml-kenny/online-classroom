@@ -172,19 +172,26 @@ export default function OnlineClassroomApp() {
 
     if (currentUser.role === 'student') {
       const myCourses = currentUser.enrolledCourses || [];
-      if (myCourses.length === 0) {
-        // 若學生帳戶尚未分配課程，僅依其所屬分校呈現基礎課程
-        const sBranch = (currentUser.branch || '').trim().toLowerCase();
-        return courses.filter((c) => {
-          const cBranch = (typeof c === 'object' && c !== null ? c.branch || '' : '').trim().toLowerCase();
-          return !cBranch || cBranch === '全部分校' || !sBranch || sBranch === '全部分校' || cBranch === sBranch || cBranch.includes(sBranch);
-        });
-      }
-      return courses.filter((c) => {
+      const sBranch = (currentUser.branch || '').trim().toLowerCase();
+
+      // 先嘗試匹配學生 enrolledCourses 中真實存在於系統 courses 的課程
+      const matchedCourses = courses.filter((c) => {
         const cName = typeof c === 'string' ? c : c.name;
         const cSlot = typeof c === 'object' && c !== null ? c.timeSlot : '';
         const cBranch = typeof c === 'object' && c !== null ? c.branch : '';
         return myCourses.some((mc) => isCourseMatch(mc, cName, cSlot, cBranch, currentUser.branch));
+      });
+
+      // 若有匹配到真實存在的課程，返回該學生的真實課程
+      if (matchedCourses.length > 0) {
+        return matchedCourses;
+      }
+
+      // ⭐ 若學生帳戶尚未分配課程，或帳戶所填的課程在系統真實課程中不存在(例如「小結他」等虛擬名稱)，
+      // 則嚴格依照該學生所屬分校呈現該校真實存在的課程，絕不產生幽靈課程！
+      return courses.filter((c) => {
+        const cBranch = (typeof c === 'object' && c !== null ? c.branch || '' : '').trim().toLowerCase();
+        return !cBranch || cBranch === '全部分校' || !sBranch || sBranch === '全部分校' || cBranch === sBranch || cBranch.includes(sBranch);
       });
     }
 
@@ -987,13 +994,13 @@ export default function OnlineClassroomApp() {
                 <div className="flex items-center justify-between pb-3 border-b border-gray-100">
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 rounded-xl bg-orange-50 border border-orange-200 text-[#FF6B57] flex items-center justify-center font-black">
-                      K
+                      S
                     </div>
                     <div>
                       <h3 className="text-sm font-black text-gray-900 leading-tight">
-                        SNJMUSIC {currentUser?.role === 'parent' ? '家長端' : '學生端'}
+                        SNJMUSIC {currentUser ? (ROLE_CONFIGS[currentUser.role]?.label || '用戶') : '音樂教室'}
                       </h3>
-                      <p className="text-[10px] text-gray-400 font-medium">智能在線學習中心</p>
+                      <p className="text-[10px] text-gray-400 font-medium">智能音樂教學中心</p>
                     </div>
                   </div>
                   <button
@@ -1005,16 +1012,16 @@ export default function OnlineClassroomApp() {
                   </button>
                 </div>
 
-                {/* 學員資訊卡片 */}
+                {/* 用戶資訊卡片 */}
                 <div className="bg-[#F8F9FA] p-3 rounded-2xl border border-gray-150 space-y-1">
                   <div className="text-xs font-black text-gray-900">
-                    {currentUser?.name || '學生'}
+                    {currentUser?.name || '訪客'}
                   </div>
                   <div className="text-[11px] text-gray-500">
-                    學號：{currentUser?.username?.toUpperCase() || ''}
+                    帳號：{currentUser?.username?.toUpperCase() || '尚未登入'}
                   </div>
                   <div className="text-[11px] text-[#FF6B57] font-semibold">
-                    分校：{currentUser?.branch || '北角和富店'}
+                    分校：{currentUser?.branch || '總校'}
                   </div>
                 </div>
 
@@ -1029,7 +1036,7 @@ export default function OnlineClassroomApp() {
                     className="w-full text-left p-2.5 rounded-xl hover:bg-orange-50 hover:text-[#FF6B57] transition-colors flex items-center gap-2.5 cursor-pointer"
                   >
                     <span>🏠</span>
-                    <span>首頁儀表板</span>
+                    <span>首頁</span>
                   </button>
 
                   <button
@@ -1056,17 +1063,55 @@ export default function OnlineClassroomApp() {
                     <span>即時訊息聯絡</span>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleOpenStudentHomework();
-                      setShowStudentSideMenu(false);
-                    }}
-                    className="w-full text-left p-2.5 rounded-xl hover:bg-orange-50 hover:text-[#FF6B57] transition-colors flex items-center gap-2.5 cursor-pointer"
-                  >
-                    <span>📝</span>
-                    <span>在線交功課</span>
-                  </button>
+                  {isStudentOrParent ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleOpenStudentHomework();
+                        setShowStudentSideMenu(false);
+                      }}
+                      className="w-full text-left p-2.5 rounded-xl hover:bg-orange-50 hover:text-[#FF6B57] transition-colors flex items-center gap-2.5 cursor-pointer"
+                    >
+                      <span>📝</span>
+                      <span>在線交功課</span>
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTab('courses');
+                          setShowStudentSideMenu(false);
+                        }}
+                        className="w-full text-left p-2.5 rounded-xl hover:bg-orange-50 hover:text-[#FF6B57] transition-colors flex items-center gap-2.5 cursor-pointer"
+                      >
+                        <span>📚</span>
+                        <span>課程目錄管理</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTab('members');
+                          setShowStudentSideMenu(false);
+                        }}
+                        className="w-full text-left p-2.5 rounded-xl hover:bg-orange-50 hover:text-[#FF6B57] transition-colors flex items-center gap-2.5 cursor-pointer"
+                      >
+                        <span>👥</span>
+                        <span>會員名冊</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTab('attendance');
+                          setShowStudentSideMenu(false);
+                        }}
+                        className="w-full text-left p-2.5 rounded-xl hover:bg-orange-50 hover:text-[#FF6B57] transition-colors flex items-center gap-2.5 cursor-pointer"
+                      >
+                        <span>⏱️</span>
+                        <span>課程點名</span>
+                      </button>
+                    </>
+                  )}
 
                   <button
                     type="button"
