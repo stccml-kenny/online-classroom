@@ -609,12 +609,12 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
                 return (
                   <div
                     key={evt.id || evt.$id}
-                    className="p-4 rounded-2xl border border-gray-200 bg-white hover:border-indigo-300 transition-all shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
+                    className="p-4 rounded-2xl border border-gray-200 bg-white hover:border-[#FF6B57]/50 hover:shadow-orange-50/50 transition-all shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
                   >
                     <div className="flex items-start gap-3.5 flex-1 min-w-0">
                       {/* 左側日期方塊 */}
-                      <div className="w-14 h-14 rounded-2xl bg-indigo-50 border border-indigo-200 text-center flex flex-col justify-center shrink-0 shadow-2xs">
-                        <span className="text-[11px] font-bold text-indigo-600 leading-none">
+                      <div className="w-14 h-14 rounded-2xl bg-orange-50 border border-orange-200 text-center flex flex-col justify-center shrink-0 shadow-2xs">
+                        <span className="text-[11px] font-black text-[#FF6B57] leading-none">
                           {dateOnly.substring(5, 7)}月
                         </span>
                         <span className="text-lg font-black text-gray-900 leading-tight">
@@ -625,7 +625,7 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
                       {/* 內容主體 */}
                       <div className="space-y-1 flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-indigo-100 text-indigo-800 border border-indigo-300 flex items-center gap-1">
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-orange-50 text-[#FF6B57] border border-orange-200 flex items-center gap-1">
                             <span>📚 課程上課</span>
                             {evt.sessionIndex && <span>· 第 {evt.sessionIndex} 節</span>}
                           </span>
@@ -645,7 +645,7 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
                         </div>
 
                         <div className="flex items-center gap-3 text-xs text-gray-600 flex-wrap">
-                          <span className="flex items-center gap-1 font-bold text-indigo-700">
+                          <span className="flex items-center gap-1 font-bold text-[#FF6B57]">
                             <Clock size={13} />
                             {evt.timeSlot || '全天'}
                           </span>
@@ -677,7 +677,7 @@ export const CalendarModal: React.FC<CalendarModalProps> = ({
                         <button
                           type="button"
                           onClick={() => handleOpenEditForm(evt)}
-                          className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors"
+                          className="p-2 text-gray-500 hover:text-[#FF6B57] hover:bg-orange-50 rounded-xl transition-colors"
                           title="編輯"
                         >
                           <Edit2 size={16} />
