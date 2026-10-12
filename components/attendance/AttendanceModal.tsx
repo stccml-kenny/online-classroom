@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect, useMemo } from 'react';
-import { X, UserCheck, CheckCircle2, Save, Cloud, Loader2, Calendar, MapPin, GraduationCap } from 'lucide-react';
+import { X, UserCheck, CheckCircle2, Save, Cloud, Loader2, Calendar, MapPin, GraduationCap, Menu, School } from 'lucide-react';
 import { AttendanceRow, StudentAttendance, AttendanceStatus } from './AttendanceRow';
 import { CourseItem, getCourseDisplayName } from '../homework/HomeworkSetupModal';
 import { databases, DATABASE_ID } from '@/lib/appwrite';
@@ -13,6 +13,7 @@ interface AttendanceModalProps {
   classes?: string[];
   courses?: string[];
   courseItems?: (string | CourseItem)[];
+  onOpenMenu?: () => void;
 }
 
 export const AttendanceModal: React.FC<AttendanceModalProps> = ({
@@ -23,6 +24,7 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
   classes = [],
   courses = [],
   courseItems = [],
+  onOpenMenu,
 }) => {
   // ⭐ 需求：課程點名不需篩選班別，不需日子篩選；初始未選時為空
   const [selectedBranch, setSelectedBranch] = useState('');
@@ -250,24 +252,53 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
   return (
     <div className={isInline ? "w-full flex-1 flex flex-col bg-[#F8F9FA] overflow-hidden" : "fixed inset-0 bg-black/50 z-30 flex items-end justify-center"}>
       <div className={isInline ? "w-full flex-1 flex flex-col overflow-hidden bg-[#F8F9FA]" : "bg-[#F8F9FA] w-full max-w-md rounded-t-2xl max-h-[92vh] flex flex-col shadow-2xl"}>
-        {/* 頂部標題列 */}
-        <div className={`bg-white px-5 py-3.5 border-b border-gray-100 flex justify-between items-center shrink-0 ${isInline ? '' : 'rounded-t-2xl'}`}>
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-orange-50 text-[#FF6B57] rounded-lg">
-              <UserCheck size={20} />
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <h3 className="font-bold text-gray-800 text-lg">課程點名</h3>
-                <span title="雲端連線">
-                  <Cloud size={14} className="text-blue-500" />
-                </span>
+        {/* 頂部滿板功能導航列 (統一與課程行事曆相同色彩與版面設計) */}
+        <div className="bg-gradient-to-r from-[#FF6B57] via-[#FF7A66] to-[#FF8E7D] text-white px-4 sm:px-6 pt-3.5 pb-2.5 shrink-0 shadow-md flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            {onOpenMenu ? (
+              <button
+                type="button"
+                onClick={onOpenMenu}
+                className="w-9 h-9 rounded-2xl bg-white/20 hover:bg-white/30 backdrop-blur-md flex items-center justify-center shadow-inner shrink-0 transition-colors cursor-pointer text-white"
+                title="選單目錄"
+              >
+                <Menu size={20} className="text-white" />
+              </button>
+            ) : (
+              <div className="w-9 h-9 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center shadow-inner shrink-0">
+                <UserCheck size={20} className="text-white" />
               </div>
-              <p className="text-xs text-gray-400">課程專屬即時點名與出席統計</p>
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-base sm:text-lg font-black tracking-wide whitespace-nowrap">
+                  課程點名
+                </h1>
+                {selectedBranch && (
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-white/25 text-white flex items-center gap-1 shrink-0 truncate max-w-[180px]">
+                    <School size={12} className="shrink-0" />
+                    <span className="truncate">{selectedBranch}</span>
+                  </span>
+                )}
+                {totalCount > 0 && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/20 font-black">
+                    應出席 {totalCount} 人 · 出席率 {attendanceRate}%
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-white/85 truncate">
+                課程專屬即時點名與出席統計
+              </p>
             </div>
           </div>
+
           {onClose && !isInline && (
-            <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600">
+            <button
+              type="button"
+              onClick={handleResetAndClose}
+              className="p-1.5 rounded-full hover:bg-white/20 transition-colors text-white shrink-0 cursor-pointer"
+              title="關閉點名"
+            >
               <X size={20} />
             </button>
           )}
@@ -279,7 +310,7 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
             {/* 學校選擇 */}
             <div>
               <label className="block text-[11px] font-semibold text-gray-600 mb-1 flex items-center gap-1">
-                <MapPin size={12} className="text-purple-600" />
+                <MapPin size={12} className="text-[#FF6B57]" />
                 <span>學校 / 分校</span>
               </label>
               <select
@@ -288,7 +319,7 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
                   setSelectedBranch(e.target.value);
                   setSelectedCourse('');
                 }}
-                className="w-full bg-purple-50 text-purple-700 font-semibold text-xs px-2.5 py-2 rounded-xl border border-purple-100 outline-none truncate"
+                className="w-full bg-orange-50 text-gray-800 font-bold text-xs px-2.5 py-2 rounded-xl border border-orange-200 outline-none truncate"
               >
                 <option value="" disabled>請選擇學校/分校...</option>
                 {branches.map((b) => (
@@ -300,14 +331,14 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
             {/* 課程選擇 (不需班別，直接依學校選課) */}
             <div>
               <label className="block text-[11px] font-semibold text-gray-600 mb-1 flex items-center gap-1">
-                <GraduationCap size={12} className="text-indigo-600" />
+                <GraduationCap size={12} className="text-[#FF6B57]" />
                 <span>課程名稱</span>
               </label>
               <select
                 value={selectedCourse}
                 disabled={!selectedBranch}
                 onChange={(e) => setSelectedCourse(e.target.value)}
-                className="w-full bg-indigo-50 text-indigo-700 font-semibold text-xs px-2.5 py-2 rounded-xl border border-indigo-100 outline-none disabled:opacity-50 truncate"
+                className="w-full bg-orange-50 text-gray-800 font-bold text-xs px-2.5 py-2 rounded-xl border border-orange-200 outline-none disabled:opacity-50 truncate"
               >
                 <option value="" disabled>
                   {!selectedBranch
@@ -328,14 +359,14 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-bold text-gray-700 flex items-center gap-1 shrink-0">
-                  <Calendar size={13} className="text-indigo-600" />
+                  <Calendar size={13} className="text-[#FF6B57]" />
                   <span>課節日期：</span>
                 </span>
                 {currentCourseSessionDates.length > 0 ? (
                   <select
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
-                    className="bg-indigo-50 text-indigo-800 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-indigo-200 outline-none"
+                    className="bg-orange-50 text-[#FF6B57] font-bold text-xs px-2.5 py-1.5 rounded-xl border border-orange-200 outline-none"
                     title="選擇課節日期"
                   >
                     {currentCourseSessionDates.map((d, sIdx) => (
@@ -381,8 +412,8 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
                       onClick={() => setDate(d)}
                       className={`px-2.5 py-1 rounded-lg text-xs font-bold shrink-0 transition-all flex items-center gap-1 border ${
                         isCurrent
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                          : 'bg-white text-gray-700 border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/50'
+                          ? 'bg-[#FF6B57] text-white border-[#FF6B57] shadow-xs'
+                          : 'bg-white text-gray-700 border-gray-200 hover:border-[#FF6B57]/50 hover:bg-orange-50/50'
                       }`}
                       title={`第 ${sIdx + 1} 節日期：${d}`}
                     >
@@ -422,7 +453,7 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
           </div>
           {unmarkedCount > 0 && (
             <div>
-              <div className="font-bold text-purple-600 text-sm">{unmarkedCount} 人</div>
+              <div className="font-bold text-[#FF6B57] text-sm">{unmarkedCount} 人</div>
               <div className="text-[10px] text-purple-400">待點名</div>
             </div>
           )}

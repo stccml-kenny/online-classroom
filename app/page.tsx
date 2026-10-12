@@ -765,6 +765,7 @@ export default function OnlineClassroomApp() {
               isOpen={true}
               isInline={true}
               mode="courses_only"
+              onOpenMenu={() => setShowStudentSideMenu(true)}
               branches={branches}
               classes={classes}
               courses={visibleCourses}
@@ -787,6 +788,7 @@ export default function OnlineClassroomApp() {
             <ClassManagementModal
               isOpen={true}
               isInline={true}
+              onOpenMenu={() => setShowStudentSideMenu(true)}
               branches={branches}
               classes={classes}
               courses={courseNames}
@@ -805,6 +807,7 @@ export default function OnlineClassroomApp() {
             <AttendanceModal
               isOpen={true}
               isInline={true}
+              onOpenMenu={() => setShowStudentSideMenu(true)}
               branches={branches}
               classes={classes}
               courses={courseNames}
@@ -898,6 +901,7 @@ export default function OnlineClassroomApp() {
           <AttendanceModal
             isOpen={true}
             onClose={() => setShowAttendanceModal(false)}
+            onOpenMenu={() => setShowStudentSideMenu(true)}
             branches={branches}
             classes={classes}
             courses={courseNames}
@@ -910,6 +914,7 @@ export default function OnlineClassroomApp() {
           <ClassManagementModal
             isOpen={true}
             onClose={() => setShowClassModal(false)}
+            onOpenMenu={() => setShowStudentSideMenu(true)}
             branches={branches}
             classes={classes}
             courses={courseNames}
@@ -926,6 +931,7 @@ export default function OnlineClassroomApp() {
             isOpen={true}
             mode="settings_only"
             onClose={() => setShowSetupModal(false)}
+            onOpenMenu={() => setShowStudentSideMenu(true)}
             branches={branches}
             classes={classes}
             courses={courses}
@@ -1039,6 +1045,9 @@ export default function OnlineClassroomApp() {
                       setShowCourseContentModal(false);
                       setShowCalendarModal(false);
                       setShowNoticeModal(false);
+                      setShowClassModal(false);
+                      setShowSetupModal(false);
+                      setShowAttendanceModal(false);
                     }}
                     className="w-full text-left p-2.5 rounded-xl hover:bg-orange-50 hover:text-[#FF6B57] transition-colors flex items-center gap-2.5 cursor-pointer"
                   >
@@ -1054,6 +1063,9 @@ export default function OnlineClassroomApp() {
                       setShowCourseContentModal(false);
                       setShowCalendarModal(false);
                       setShowNoticeModal(false);
+                      setShowClassModal(false);
+                      setShowSetupModal(false);
+                      setShowAttendanceModal(false);
                     }}
                     className="w-full text-left p-2.5 rounded-xl hover:bg-orange-50 hover:text-[#FF6B57] transition-colors flex items-center gap-2.5 cursor-pointer"
                   >
@@ -1069,6 +1081,9 @@ export default function OnlineClassroomApp() {
                       setShowCourseContentModal(false);
                       setShowCalendarModal(false);
                       setShowNoticeModal(false);
+                      setShowClassModal(false);
+                      setShowSetupModal(false);
+                      setShowAttendanceModal(false);
                     }}
                     className="w-full text-left p-2.5 rounded-xl hover:bg-orange-50 hover:text-[#FF6B57] transition-colors flex items-center gap-2.5 cursor-pointer"
                   >

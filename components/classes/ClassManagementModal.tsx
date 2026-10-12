@@ -524,14 +524,45 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
   return (
     <div className={isInline ? "w-full flex-1 flex flex-col bg-white overflow-hidden" : "fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"}>
       <div className={isInline ? "w-full flex-1 flex flex-col overflow-hidden bg-white" : "bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh]"}>
-        {/* 頂部標題 */}
-        <div className="bg-[#4A5568] text-white px-5 py-3.5 flex justify-between items-center shrink-0">
-          <div className="flex items-center gap-2">
-            <Users size={18} />
-            <h4 className="font-bold text-base">會員目錄 (現有會員名冊)</h4>
+        {/* 頂部滿板功能導航列 (統一與課程行事曆相同色彩與版面設計) */}
+        <div className="bg-gradient-to-r from-[#FF6B57] via-[#FF7A66] to-[#FF8E7D] text-white px-4 sm:px-6 pt-3.5 pb-2.5 shrink-0 shadow-md flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            {onOpenMenu ? (
+              <button
+                type="button"
+                onClick={onOpenMenu}
+                className="w-9 h-9 rounded-2xl bg-white/20 hover:bg-white/30 backdrop-blur-md flex items-center justify-center shadow-inner shrink-0 transition-colors cursor-pointer text-white"
+                title="選單目錄"
+              >
+                <Menu size={20} className="text-white" />
+              </button>
+            ) : (
+              <div className="w-9 h-9 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center shadow-inner shrink-0">
+                <Users size={20} className="text-white" />
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-base sm:text-lg font-black tracking-wide whitespace-nowrap">
+                  會員目錄 (現有會員名冊)
+                </h1>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/25 font-black">
+                  {groupedStudents.length} 位會員
+                </span>
+              </div>
+              <p className="text-[11px] text-white/85 truncate">
+                學生資料管理與修讀課程即時同步
+              </p>
+            </div>
           </div>
+
           {onClose && !isInline && (
-            <button onClick={onClose} className="text-white/80 hover:text-white">
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 rounded-full hover:bg-white/20 transition-colors text-white shrink-0 cursor-pointer"
+              title="關閉會員目錄"
+            >
               <X size={20} />
             </button>
           )}
@@ -557,7 +588,7 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
             <select
               value={filterBranch}
               onChange={(e) => setFilterBranch(e.target.value)}
-              className="bg-purple-50 text-purple-700 text-xs font-semibold px-2 py-1.5 rounded-lg border border-purple-100 outline-none"
+              className="bg-orange-50 text-gray-800 text-xs font-bold px-2 py-1.5 rounded-xl border border-orange-200 outline-none focus:border-[#FF6B57]"
             >
               <option value="全部分校">全部分校 (全部學校)</option>
               {allKnownBranches.map((b) => (
@@ -567,7 +598,7 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
             <select
               value={filterClass}
               onChange={(e) => setFilterClass(e.target.value)}
-              className="bg-gray-100 text-gray-700 text-xs font-semibold px-2 py-1.5 rounded-lg border-none outline-none"
+              className="bg-orange-50 text-gray-800 text-xs font-bold px-2 py-1.5 rounded-xl border border-orange-200 outline-none focus:border-[#FF6B57]"
             >
               <option value="全部班別">全部班別</option>
               {Array.from(new Set([...classes, ...availableClassesInList])).map((c) => (
@@ -577,7 +608,7 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
             <select
               value={filterCourse}
               onChange={(e) => setFilterCourse(e.target.value)}
-              className="bg-indigo-50 text-indigo-700 text-xs font-semibold px-2 py-1.5 rounded-lg border-none outline-none"
+              className="bg-orange-50 text-gray-800 text-xs font-bold px-2 py-1.5 rounded-xl border border-orange-200 outline-none focus:border-[#FF6B57]"
             >
               <option value="全部課程">全部課程</option>
               {allKnownCourses.map((c) => (
@@ -728,7 +759,7 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
                                   setSelectedCourseToAdd(studentCourses[0] || '');
                                 }
                               }}
-                              className="text-xs text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5"
+                              className="text-xs text-[#FF6B57] hover:text-[#e05a48] hover:bg-orange-50 px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5"
                               title="為此學生加選課程 (同步帳戶中心)"
                             >
                               <Plus size={11} />
@@ -760,8 +791,8 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
                                       onOpenCourseContent?.(en.course_name, s.branch, true);
                                     }
                                   }}
-                                  className={`text-[11px] bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 ${
-                                    onOpenCourseContent ? 'cursor-pointer hover:bg-indigo-100 hover:border-indigo-300 transition-colors' : ''
+                                  className={`text-[11px] bg-orange-50 text-[#FF6B57] border border-orange-200 px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 ${
+                                    onOpenCourseContent ? 'cursor-pointer hover:bg-orange-100 hover:border-orange-300 transition-colors' : ''
                                   }`}
                                   title={onOpenCourseContent ? "點擊打開此課程的單元與家課" : undefined}
                                 >
@@ -788,11 +819,11 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
                         {isAdding && (() => {
                           const studentCourses = getAvailableCoursesForStudent(s);
                           return (
-                            <div className="mt-2 p-2.5 bg-indigo-50/60 border border-indigo-200 rounded-xl flex items-center gap-2">
+                            <div className="mt-2 p-2.5 bg-indigo-50/60 border border-orange-200 rounded-xl flex items-center gap-2">
                               <select
                                 value={selectedCourseToAdd}
                                 onChange={(e) => setSelectedCourseToAdd(e.target.value)}
-                                className={`flex-1 p-2 bg-white border border-indigo-200 rounded-lg text-xs outline-none focus:border-indigo-600 truncate ${
+                                className={`flex-1 p-2 bg-white border border-orange-200 rounded-lg text-xs outline-none focus:border-[#FF6B57] truncate ${
                                   selectedCourseToAdd ? 'text-black font-semibold' : 'text-gray-500'
                                 }`}
                               >
@@ -817,7 +848,7 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
                                 type="button"
                                 disabled={!selectedCourseToAdd}
                                 onClick={() => handleAddCourseForExistingStudent(s)}
-                                className="px-3 py-2 bg-indigo-600 text-white rounded-lg font-bold text-xs hover:bg-indigo-700 transition-colors shadow-2xs shrink-0 disabled:opacity-50"
+                                className="px-3 py-2 bg-[#FF6B57] text-white rounded-lg font-bold text-xs hover:bg-[#e05a48] transition-colors shadow-2xs shrink-0 disabled:opacity-50"
                               >
                                 確認
                               </button>

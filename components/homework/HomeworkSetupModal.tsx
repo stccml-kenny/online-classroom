@@ -5,7 +5,7 @@ import { Query } from 'appwrite';
 import {
   X, Plus, Trash2, Settings, MapPin, GraduationCap, Layers, Edit2, Check, RotateCcw, BookmarkCheck,
   Clock, Calendar, CheckSquare, Square, ChevronDown, ChevronUp, AlertCircle, Sparkles, Filter,
-  BookOpen, ChevronRight, GripVertical, Users
+  BookOpen, ChevronRight, GripVertical, Users, Menu
 } from 'lucide-react';
 
 export type CourseStatus = 'active' | 'planning' | 'ended' | 'paused';
@@ -1087,84 +1087,104 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
 
   const mainContent = (
     <div className={`bg-white w-full ${isInline ? 'flex-1 flex flex-col min-h-0' : 'flex-1 flex flex-col w-full h-full overflow-hidden'}`}>
-      {/* 頂部標題 */}
-      {!isInline ? (
-        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-5 py-3.5 flex justify-between items-center shrink-0">
-          <div className="flex items-center gap-2">
-            {mode === 'settings_only' ? <Settings size={18} /> : <GraduationCap size={18} />}
-            <div>
-              <h4 className="font-bold text-base leading-tight">
-                {mode === 'settings_only' ? '學校與班別' : '課程與班別設定'}
-              </h4>
-              <p className="text-[10px] text-white/80">
-                {mode === 'settings_only' ? '管理學校/分校與班別名冊' : '管理各校課程、上課時段、每節排程、學校及班別名冊'}
-              </p>
-            </div>
-          </div>
-          <button onClick={handleCloseModal} className="text-white/80 hover:text-white p-1" title="關閉">
-            <X size={20} />
-          </button>
-        </div>
-      ) : (
-        <div className="bg-white px-4 py-3 border-b border-gray-150 flex justify-between items-center shrink-0 shadow-2xs">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
-              <GraduationCap size={20} />
-            </div>
-            <div>
-              <h4 className="font-bold text-sm text-gray-800 leading-tight">
-                {isStudent
-                  ? '我的課程管理'
-                  : mode === 'courses_only'
-                  ? '課程設定與排程管理'
-                  : '課程與班級設定'}
-              </h4>
-              <p className="text-[10px] text-gray-400">
+      {/* 頂部滿板功能導航列 (統一與課程行事曆相同色彩與版面設計) */}
+      <div className="bg-gradient-to-r from-[#FF6B57] via-[#FF7A66] to-[#FF8E7D] text-white px-4 sm:px-6 pt-3.5 pb-2.5 shrink-0 shadow-md flex flex-col gap-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            {onOpenMenu ? (
+              <button
+                type="button"
+                onClick={onOpenMenu}
+                className="w-9 h-9 rounded-2xl bg-white/20 hover:bg-white/30 backdrop-blur-md flex items-center justify-center shadow-inner shrink-0 transition-colors cursor-pointer text-white"
+                title="選單目錄"
+              >
+                <Menu size={20} className="text-white" />
+              </button>
+            ) : (
+              <div className="w-9 h-9 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center shadow-inner shrink-0">
+                {mode === 'settings_only' ? <Settings size={20} className="text-white" /> : <GraduationCap size={20} className="text-white" />}
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-base sm:text-lg font-black tracking-wide whitespace-nowrap">
+                  {isStudent
+                    ? '我的課程管理'
+                    : mode === 'courses_only'
+                    ? '課程設定與排程管理'
+                    : mode === 'settings_only'
+                    ? '學校與班別名冊'
+                    : '課程與班別設定'}
+                </h1>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/25 font-black">
+                  {mode === 'courses_only' ? `${normalizedCourses.length} 門課程` : mode === 'settings_only' ? `${branches.length} 校 / ${localClasses.length} 班` : `${normalizedCourses.length} 門課程`}
+                </span>
+              </div>
+              <p className="text-[11px] text-white/85 truncate">
                 {isStudent
                   ? '查閱我的專屬修讀課程、上課時段與每節課堂日期進度'
                   : mode === 'courses_only'
                   ? '管理各校課程名稱、時段、每節課堂日期與自動排程'
+                  : mode === 'settings_only'
+                  ? '管理學校/分校校區與班別名冊'
                   : '管理各校課程、上課時段、自動排程、學校與班別名冊'}
               </p>
             </div>
           </div>
-        </div>
-      )}
 
-        {/* 標籤頁導航 (⭐ 課程目錄中只保留課程設定；設定按鍵只保留學校/分校及班別設定) */}
-        {mode === 'courses_only' ? null : (
-          <div className="flex border-b border-gray-100 bg-gray-50 text-xs font-bold overflow-x-auto">
-            {mode !== 'settings_only' && (
+          {onClose && !isInline && (
+            <button
+              type="button"
+              onClick={handleCloseModal}
+              className="p-1.5 rounded-full hover:bg-white/20 transition-colors text-white shrink-0 cursor-pointer"
+              title="關閉"
+            >
+              <X size={20} />
+            </button>
+          )}
+        </div>
+
+        {/* 標籤頁導航 (若為 settings_only 或 all 模式，呈現與行事曆一致的居中切換膠囊) */}
+        {mode !== 'courses_only' && (
+          <div className="flex items-center justify-center w-full">
+            <div className="bg-black/20 p-1 rounded-2xl flex items-center w-full max-w-md shadow-inner">
+              {mode !== 'settings_only' && (
+                <button
+                  type="button"
+                  onClick={() => { setActiveTab('courses'); setEditingItem(null); handleCloseCourseForm(); }}
+                  className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    activeTab === 'courses' ? 'bg-white text-[#FF6B57] shadow-sm' : 'text-white/80 hover:text-white'
+                  }`}
+                >
+                  <GraduationCap size={14} />
+                  <span>課程 ({normalizedCourses.length})</span>
+                </button>
+              )}
               <button
-                onClick={() => { setActiveTab('courses'); setEditingItem(null); handleCloseCourseForm(); }}
-                className={`flex-1 py-2.5 px-2 text-center border-b-2 whitespace-nowrap transition-colors flex items-center justify-center gap-1 ${
-                  activeTab === 'courses' ? 'border-indigo-600 text-indigo-600 bg-white' : 'border-transparent text-gray-500'
+                type="button"
+                onClick={() => { setActiveTab('branches'); setEditingItem(null); handleCloseCourseForm(); }}
+                className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  activeTab === 'branches' ? 'bg-white text-[#FF6B57] shadow-sm' : 'text-white/80 hover:text-white'
                 }`}
               >
-                <GraduationCap size={13} />
-                課程 ({normalizedCourses.length})
+                <MapPin size={14} />
+                <span>學校/分校 ({branches.length})</span>
               </button>
-            )}
-            <button
-              onClick={() => { setActiveTab('branches'); setEditingItem(null); handleCloseCourseForm(); }}
-              className={`flex-1 py-2.5 px-2 text-center border-b-2 whitespace-nowrap transition-colors flex items-center justify-center gap-1 ${
-                activeTab === 'branches' ? 'border-purple-600 text-purple-600 bg-white' : 'border-transparent text-gray-500'
-              }`}
-            >
-              <MapPin size={13} />
-              學校/分校 ({branches.length})
-            </button>
-            <button
-              onClick={() => { setActiveTab('classes'); setEditingItem(null); handleCloseCourseForm(); }}
-              className={`flex-1 py-2.5 px-2 text-center border-b-2 whitespace-nowrap transition-colors flex items-center justify-center gap-1 ${
-                activeTab === 'classes' ? 'border-indigo-600 text-indigo-600 bg-white' : 'border-transparent text-gray-500'
-              }`}
-            >
-              <Layers size={13} />
-              班別 ({classes.length})
-            </button>
+              <button
+                type="button"
+                onClick={() => { setActiveTab('classes'); setEditingItem(null); handleCloseCourseForm(); }}
+                className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  activeTab === 'classes' ? 'bg-white text-[#FF6B57] shadow-sm' : 'text-white/80 hover:text-white'
+                }`}
+              >
+                <Layers size={14} />
+                <span>班別 ({localClasses.length})</span>
+              </button>
+            </div>
           </div>
         )}
+      </div>
+
 
         {/* 內容區塊 */}
         <div className="p-3 sm:p-4 overflow-y-auto flex-1 text-sm pb-36 sm:pb-12">
@@ -1173,10 +1193,10 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
             <div className="space-y-3">
               {/* 新增 / 編輯課程完整表單面板 */}
               {isCourseFormOpen ? (
-                <form onSubmit={handleSaveCourseForm} onTouchStart={(e) => e.stopPropagation()} onTouchMove={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()} className="bg-indigo-50/40 border border-indigo-200 rounded-2xl p-3.5 space-y-3">
-                  <div className="flex justify-between items-center border-b border-indigo-100 pb-2.5">
+                <form onSubmit={handleSaveCourseForm} onTouchStart={(e) => e.stopPropagation()} onTouchMove={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()} className="bg-orange-50/40 border border-orange-200 rounded-2xl p-3.5 space-y-3">
+                  <div className="flex justify-between items-center border-b border-orange-100 pb-2.5">
                     <span className="font-bold text-indigo-950 text-xs flex items-center gap-1.5">
-                      <GraduationCap size={16} className="text-indigo-600 shrink-0" />
+                      <GraduationCap size={16} className="text-[#FF6B57] shrink-0" />
                       <span className="truncate">{editingCourseTargetId ? '編輯課程詳細排程' : '新增課程詳細排程'}</span>
                     </span>
                     {/* ⭐ 手機端頂部快速確認與關閉按鈕 */}
@@ -1190,7 +1210,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                       </button>
                       <button
                         type="submit"
-                        className="px-3.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-extrabold transition-all flex items-center gap-1 shadow-xs cursor-pointer active:scale-95"
+                        className="px-3.5 py-1 bg-[#FF6B57] hover:bg-[#e05a48] text-white rounded-lg text-xs font-extrabold transition-all flex items-center gap-1 shadow-xs cursor-pointer active:scale-95"
                       >
                         <Check size={14} />
                         <span>{editingCourseTargetId ? '儲存' : '確認'}</span>
@@ -1217,7 +1237,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                         placeholder="例：奧數思維班、兒童合唱團"
                         value={courseFormName}
                         onChange={(e) => setCourseFormName(e.target.value)}
-                        className={`w-full p-2 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-indigo-600 placeholder:text-gray-400 ${
+                        className={`w-full p-2 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-[#FF6B57] placeholder:text-gray-400 ${
                           courseFormName.trim() ? 'text-black font-semibold' : 'text-gray-500'
                         }`}
                         required
@@ -1234,7 +1254,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                         <select
                           value={courseFormBranch}
                           onChange={(e) => setCourseFormBranch(e.target.value)}
-                          className={`w-full p-2 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-purple-600 ${
+                          className={`w-full p-2 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-[#FF6B57] ${
                             courseFormBranch ? 'text-black font-semibold' : 'text-gray-500'
                           }`}
                         >
@@ -1249,7 +1269,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                           placeholder="輸入所屬分校 (例：總校、沙田分校)"
                           value={courseFormBranch}
                           onChange={(e) => setCourseFormBranch(e.target.value)}
-                          className={`w-full p-2 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-purple-600 placeholder:text-gray-400 ${
+                          className={`w-full p-2 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-[#FF6B57] placeholder:text-gray-400 ${
                             courseFormBranch.trim() ? 'text-black font-semibold' : 'text-gray-500'
                           }`}
                         />
@@ -1273,7 +1293,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                             onClick={() => setCourseFormStatus(st)}
                             className={`py-1.5 px-1 rounded-lg text-center transition-all border ${
                               isSelected
-                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs font-bold'
+                                ? 'bg-[#FF6B57] text-white border-indigo-600 shadow-2xs font-bold'
                                 : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
                             }`}
                           >
@@ -1288,7 +1308,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                   <div>
                     <div className="flex justify-between items-center mb-1">
                       <label className="text-[11px] font-bold text-gray-700 flex items-center gap-1">
-                        <Clock size={12} className="text-indigo-600" />
+                        <Clock size={12} className="text-[#FF6B57]" />
                         <span>課程時間 (時段)</span>
                       </label>
                       <div className="flex gap-1 text-[10px]">
@@ -1302,7 +1322,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                               if (p[0]) setCourseFormStartTime(p[0].trim());
                               if (p[1]) setCourseFormEndTime(p[1].trim());
                             }}
-                            className="bg-white hover:bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-200"
+                            className="bg-white hover:bg-indigo-100 text-[#FF6B57] px-1.5 py-0.5 rounded border border-orange-200"
                           >
                             {slot}
                           </button>
@@ -1317,7 +1337,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                           setCourseFormStartTime(e.target.value);
                           setCourseFormTimeSlot(`${e.target.value} - ${courseFormEndTime}`);
                         }}
-                        className={`flex-1 p-1.5 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-indigo-600 ${
+                        className={`flex-1 p-1.5 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-[#FF6B57] ${
                           courseFormStartTime ? 'text-black font-semibold' : 'text-gray-500'
                         }`}
                       />
@@ -1329,7 +1349,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                           setCourseFormEndTime(e.target.value);
                           setCourseFormTimeSlot(`${courseFormStartTime} - ${e.target.value}`);
                         }}
-                        className={`flex-1 p-1.5 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-indigo-600 ${
+                        className={`flex-1 p-1.5 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-[#FF6B57] ${
                           courseFormEndTime ? 'text-black font-semibold' : 'text-gray-500'
                         }`}
                       />
@@ -1337,10 +1357,10 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                   </div>
 
                   {/* 4. 課程節數與排程 */}
-                  <div className="bg-white p-2.5 rounded-xl border border-indigo-100 space-y-2.5">
+                  <div className="bg-white p-2.5 rounded-xl border border-orange-100 space-y-2.5">
                     <div className="flex justify-between items-center">
                       <label className="text-[11px] font-bold text-indigo-950 flex items-center gap-1">
-                        <Calendar size={13} className="text-indigo-600" />
+                        <Calendar size={13} className="text-[#FF6B57]" />
                         <span>課程每節日期與節數排程</span>
                       </label>
                       <div className="flex items-center gap-1 text-xs">
@@ -1352,7 +1372,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                           placeholder="0"
                           value={courseFormTotalSessions > 0 ? courseFormTotalSessions : ''}
                           onChange={(e) => setCourseFormTotalSessions(parseInt(e.target.value) || 0)}
-                          className={`w-14 p-1 bg-white border border-indigo-200 rounded text-center text-xs outline-none placeholder:text-gray-400 ${
+                          className={`w-14 p-1 bg-white border border-orange-200 rounded text-center text-xs outline-none placeholder:text-gray-400 ${
                             courseFormTotalSessions > 0 ? 'text-black font-semibold' : 'text-gray-500'
                           }`}
                         />
@@ -1404,7 +1424,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                                 onClick={() => toggleWeekday(w.day)}
                                 className={`flex-1 py-1 rounded text-xs font-bold transition-colors ${
                                   isSelected
-                                    ? 'bg-indigo-600 text-white'
+                                    ? 'bg-[#FF6B57] text-white'
                                     : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'
                                 }`}
                               >
@@ -1418,7 +1438,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                       <button
                         type="button"
                         onClick={handleRunAutoSchedule}
-                        className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1 shadow-2xs"
+                        className="w-full py-1.5 bg-[#FF6B57] hover:bg-[#e05a48] text-white rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1 shadow-2xs"
                       >
                         <Sparkles size={13} />
                         <span>依週次自動生成每節日期</span>
@@ -1476,10 +1496,10 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                           {courseFormSessionDates.map((dateStr, idx) => (
                             <div
                               key={dateStr}
-                              className="flex items-center justify-between p-1.5 px-2 bg-indigo-50/50 hover:bg-indigo-50 rounded-lg border border-indigo-100 text-[11px]"
+                              className="flex items-center justify-between p-1.5 px-2 bg-orange-50/50 hover:bg-orange-50 rounded-lg border border-orange-100 text-[11px]"
                             >
                               <div className="flex items-center gap-2 min-w-0">
-                                <span className="font-bold text-indigo-700 shrink-0 w-12">
+                                <span className="font-bold text-[#FF6B57] shrink-0 w-12">
                                   第 {idx + 1} 節
                                 </span>
                                 <span className="font-semibold text-gray-800 truncate">
@@ -1514,7 +1534,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleRestoreExcludedDate(exDate)}
-                                className="text-indigo-600 hover:text-indigo-800 font-bold ml-0.5"
+                                className="text-[#FF6B57] hover:text-[#e05a48] font-bold ml-0.5"
                                 title="恢復此日"
                               >
                                 復原
@@ -1527,7 +1547,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                   </div>
 
                   {/* ⭐ 表單提交與取消按鈕 (黏性底部固定，在手機端始終可見) */}
-                  <div className="sticky bottom-0 bg-white/95 backdrop-blur-md p-3 border-t border-indigo-200 rounded-b-2xl shadow-lg z-20 flex gap-2 pt-2">
+                  <div className="sticky bottom-0 bg-white/95 backdrop-blur-md p-3 border-t border-orange-200 rounded-b-2xl shadow-lg z-20 flex gap-2 pt-2">
                     <button
                       type="button"
                       onClick={handleCloseCourseForm}
@@ -1537,7 +1557,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                     </button>
                     <button
                       type="submit"
-                      className="flex-2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-extrabold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm cursor-pointer active:scale-95"
+                      className="flex-2 py-2.5 bg-[#FF6B57] hover:bg-[#e05a48] text-white rounded-xl font-extrabold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm cursor-pointer active:scale-95"
                     >
                       <Check size={15} />
                       <span>{editingCourseTargetId ? '儲存課程變更' : '確認新增課程'}</span>
@@ -1551,7 +1571,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                     <button
                       type="button"
                       onClick={handleOpenAddCourse}
-                      className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                      className="w-full py-2.5 bg-[#FF6B57] hover:bg-[#e05a48] text-white font-bold rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
                     >
                       <Plus size={15} />
                       <span>新增課程 (設定時段、節數、每節日期與狀態)</span>
@@ -1594,7 +1614,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                     <select
                       value={courseFilterStatus}
                       onChange={(e) => setCourseFilterStatus(e.target.value)}
-                      className="w-full bg-white text-indigo-800 font-semibold text-[11px] p-1.5 rounded-lg border border-gray-200 outline-none truncate"
+                      className="w-full bg-white text-[#e05a48] font-semibold text-[11px] p-1.5 rounded-lg border border-gray-200 outline-none truncate"
                     >
                       <option value="all">全部狀態</option>
                       <option value="active">🟢 進行中</option>
@@ -1652,7 +1672,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                   return (
                     <div
                       key={c.id || `${c.name}_${idx}`}
-                      className="bg-white border border-gray-200 rounded-xl p-3 space-y-2 shadow-2xs hover:border-indigo-300 transition-all text-xs"
+                      className="bg-white border border-gray-200 rounded-xl p-3 space-y-2 shadow-2xs hover:border-orange-300 transition-all text-xs"
                     >
                       {/* 標題與操作列 (⭐ 點擊課程標題或卡片打開單元與家課) */}
                       <div className="flex items-start justify-between gap-2">
@@ -1680,7 +1700,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                               </span>
                             )}
                             {c.timeSlot && (
-                              <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded flex items-center gap-1">
+                              <span className="text-[10px] font-semibold text-[#FF6B57] bg-orange-50 border border-orange-100 px-1.5 py-0.5 rounded flex items-center gap-1">
                                 <Clock size={10} />
                                 <span>{c.timeSlot}</span>
                               </span>
@@ -1697,10 +1717,10 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                             )}
                           </div>
                           {/* ⭐ 課程名稱 + (課程時間)，懸浮呈現品牌亮色 */}
-                          <h4 className="font-bold text-gray-900 group-hover/title:text-indigo-600 text-sm leading-snug truncate transition-colors flex items-center gap-1.5">
+                          <h4 className="font-bold text-gray-900 group-hover/title:text-[#FF6B57] text-sm leading-snug truncate transition-colors flex items-center gap-1.5">
                             <span>{c.name}</span>
                             {c.timeSlot && !c.name.includes(c.timeSlot.trim()) && (
-                              <span className="text-indigo-600 font-semibold ml-1.5">
+                              <span className="text-[#FF6B57] font-semibold ml-1.5">
                                 ({c.timeSlot.trim()})
                               </span>
                             )}
@@ -1711,7 +1731,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                             <button
                               type="button"
                               onClick={(e) => { e.stopPropagation(); handleOpenEditCourse(c); }}
-                              className="text-gray-400 hover:text-indigo-600 p-1 rounded transition-colors"
+                              className="text-gray-400 hover:text-[#FF6B57] p-1 rounded transition-colors"
                               title="修改課程設定"
                             >
                               <Edit2 size={14} />
@@ -1735,11 +1755,11 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                           const displayName = getCourseDisplayName(c);
                           onOpenCourseContent?.(displayName, c.branch || '全部分校', true);
                         }}
-                        className="w-full py-1.5 px-2.5 bg-indigo-50/70 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 rounded-lg font-bold text-[11px] flex items-center justify-between transition-all group shadow-2xs"
+                        className="w-full py-1.5 px-2.5 bg-orange-50/70 hover:bg-indigo-100 text-[#FF6B57] border border-orange-200/80 rounded-lg font-bold text-[11px] flex items-center justify-between transition-all group shadow-2xs"
                         title="查看並發布此課程之單元教材與單元家課"
                       >
                         <span className="flex items-center gap-1.5">
-                          <BookOpen size={13} className="text-indigo-600 group-hover:scale-110 transition-transform" />
+                          <BookOpen size={13} className="text-[#FF6B57] group-hover:scale-110 transition-transform" />
                           <span>打開課程單元及單元家課</span>
                         </span>
                         <ChevronRight size={13} className="text-indigo-400 group-hover:translate-x-0.5 transition-transform" />
@@ -1751,17 +1771,17 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                           <div>
                             <div
                               onClick={() => toggleExpandCourse(c.id)}
-                              className="flex items-center justify-between cursor-pointer select-none text-[11px] text-gray-500 hover:text-indigo-600"
+                              className="flex items-center justify-between cursor-pointer select-none text-[11px] text-gray-500 hover:text-[#FF6B57]"
                             >
                               <span className="font-medium flex items-center gap-1">
-                                <Calendar size={12} className="text-indigo-600" />
+                                <Calendar size={12} className="text-[#FF6B57]" />
                                 <span>每節日期 ({c.sessionDates.length} 節)：</span>
                                 <span className="text-gray-400 truncate max-w-[180px]">
                                   {c.sessionDates.slice(0, 3).map((d) => d.slice(5)).join(', ')}
                                   {c.sessionDates.length > 3 ? '...' : ''}
                                 </span>
                               </span>
-                              <span className="text-[10px] font-bold text-indigo-600 flex items-center gap-0.5">
+                              <span className="text-[10px] font-bold text-[#FF6B57] flex items-center gap-0.5">
                                 <span>{isExpanded ? '收合' : '展開詳情'}</span>
                                 {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                               </span>
@@ -1772,7 +1792,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                               <div className="mt-2 bg-gray-50 p-2 rounded-lg border border-gray-200 max-h-36 overflow-y-auto space-y-1 text-[11px]">
                                 {c.sessionDates.map((d, i) => (
                                   <div key={d} className="flex justify-between items-center text-gray-700 px-1 py-0.5">
-                                    <span className="font-bold text-indigo-700">第 {i + 1} 節</span>
+                                    <span className="font-bold text-[#FF6B57]">第 {i + 1} 節</span>
                                     <span>{d} ({formatWeekdayCN(d)})</span>
                                   </div>
                                 ))}
@@ -1790,7 +1810,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                             <button
                               type="button"
                               onClick={() => handleOpenEditCourse(c)}
-                              className="text-indigo-600 font-bold hover:underline"
+                              className="text-[#FF6B57] font-bold hover:underline"
                             >
                               + 排定日期
                             </button>
@@ -1816,7 +1836,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                     placeholder="學校/分校名稱 (例：沙田分校)"
                     value={newBranch}
                     onChange={(e) => setNewBranch(e.target.value)}
-                    className={`flex-1 p-2 border border-gray-200 rounded-lg text-xs outline-none focus:border-purple-600 placeholder:text-gray-400 ${
+                    className={`flex-1 p-2 border border-gray-200 rounded-lg text-xs outline-none focus:border-[#FF6B57] placeholder:text-gray-400 ${
                       newBranch.trim() ? 'text-black font-semibold' : 'text-gray-500'
                     }`}
                   />
@@ -1825,7 +1845,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                     placeholder="學校代號 (例：ST)"
                     value={newBranchCode}
                     onChange={(e) => setNewBranchCode(e.target.value.toUpperCase())}
-                    className="w-32 p-2 border border-purple-200 bg-purple-50/50 rounded-lg text-xs outline-none focus:border-purple-600 text-purple-900 font-bold uppercase font-mono placeholder:text-gray-400"
+                    className="w-32 p-2 border border-purple-200 bg-purple-50/50 rounded-lg text-xs outline-none focus:border-[#FF6B57] text-purple-900 font-bold uppercase font-mono placeholder:text-gray-400"
                   />
                   <button
                     type="submit"
@@ -1872,7 +1892,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                       className={`flex justify-between items-center p-2.5 bg-purple-50/40 border rounded-lg text-xs font-semibold transition-all ${
                         isDragging ? 'opacity-40 scale-[0.98]' : ''
                       } ${
-                        isDragOver ? 'border-purple-600 bg-purple-100/80 shadow-xs' : 'border-purple-100 hover:border-purple-300'
+                        isDragOver ? 'border-[#FF6B57] bg-purple-100/80 shadow-xs' : 'border-purple-100 hover:border-purple-300'
                       }`}
                     >
                       {isEditing ? (
@@ -1986,13 +2006,13 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                   placeholder="新班別名稱 (例：1A、高班、週末班)"
                   value={newClass}
                   onChange={(e) => setNewClass(e.target.value)}
-                  className={`flex-1 p-2 border border-gray-200 rounded-lg text-xs outline-none focus:border-indigo-600 placeholder:text-gray-400 ${
+                  className={`flex-1 p-2 border border-gray-200 rounded-lg text-xs outline-none focus:border-[#FF6B57] placeholder:text-gray-400 ${
                     newClass.trim() ? 'text-black font-semibold' : 'text-gray-500'
                   }`}
                 />
                 <button
                   type="submit"
-                  className="bg-indigo-600 text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-indigo-700 transition-colors"
+                  className="bg-[#FF6B57] text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-[#e05a48] transition-colors"
                 >
                   <Plus size={14} /> 新增
                 </button>
@@ -2002,7 +2022,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                 {localClasses.length > 0 && (
                   <div className="flex justify-between items-center px-1 pb-1">
                     <span className="text-[11px] text-gray-500 font-medium flex items-center gap-1">
-                      <Sparkles size={11} className="text-indigo-600" />
+                      <Sparkles size={11} className="text-[#FF6B57]" />
                       <span>已設定 {localClasses.length} 個班別 (按住拖動可更改排序)</span>
                     </span>
                     <button
@@ -2033,7 +2053,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                       className={`flex justify-between items-center p-2.5 bg-gray-50 border rounded-lg text-xs font-semibold transition-all ${
                         isDragging ? 'opacity-40 scale-[0.98]' : ''
                       } ${
-                        isDragOver ? 'border-indigo-600 bg-indigo-50/80 shadow-xs' : 'border-gray-150 hover:border-indigo-300'
+                        isDragOver ? 'border-indigo-600 bg-orange-50/80 shadow-xs' : 'border-gray-150 hover:border-orange-300'
                       }`}
                     >
                       {isEditing ? (
@@ -2066,7 +2086,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                             {/* 拖動手把 + 上下微調按鈕 */}
                             <div className="flex items-center gap-0.5 text-gray-400">
                               <span
-                                className="cursor-grab active:cursor-grabbing p-1 hover:text-indigo-600 hover:bg-indigo-100/60 rounded transition-colors"
+                                className="cursor-grab active:cursor-grabbing p-1 hover:text-[#FF6B57] hover:bg-indigo-100/60 rounded transition-colors"
                                 title="按著此處上下拖動更改排序"
                               >
                                 <GripVertical size={14} />
@@ -2076,7 +2096,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                                   type="button"
                                   disabled={idx === 0}
                                   onClick={() => handleMoveClass(idx, 'up')}
-                                  className="text-gray-400 hover:text-indigo-600 disabled:opacity-20 px-0.5"
+                                  className="text-gray-400 hover:text-[#FF6B57] disabled:opacity-20 px-0.5"
                                   title="上移"
                                 >
                                   ▲
@@ -2085,7 +2105,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                                   type="button"
                                   disabled={idx === localClasses.length - 1}
                                   onClick={() => handleMoveClass(idx, 'down')}
-                                  className="text-gray-400 hover:text-indigo-600 disabled:opacity-20 px-0.5"
+                                  className="text-gray-400 hover:text-[#FF6B57] disabled:opacity-20 px-0.5"
                                   title="下移"
                                 >
                                   ▼
@@ -2093,7 +2113,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                               </div>
                             </div>
 
-                            <span className="text-[10px] text-indigo-600 bg-indigo-100 px-1 py-0.2 rounded font-mono font-bold">
+                            <span className="text-[10px] text-[#FF6B57] bg-indigo-100 px-1 py-0.2 rounded font-mono font-bold">
                               #{idx + 1}
                             </span>
                             <Layers size={14} className="text-gray-400" />
@@ -2103,7 +2123,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                           <div className="flex items-center gap-1 shrink-0">
                             <button
                               onClick={() => handleStartEditClass(c)}
-                              className="text-gray-400 hover:text-indigo-600 p-1 rounded"
+                              className="text-gray-400 hover:text-[#FF6B57] p-1 rounded"
                               title="修改名稱"
                             >
                               <Edit2 size={14} />
@@ -2141,7 +2161,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
             <button
               type="button"
               onClick={handleSaveAndConfirmSettings}
-              className="flex-1 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl font-bold text-xs shadow-md flex items-center justify-center gap-1.5 transition-all"
+              className="flex-1 py-2.5 bg-[#FF6B57] hover:bg-[#e05a48] text-white rounded-xl font-bold text-xs shadow-md flex items-center justify-center gap-1.5 transition-all"
             >
               <Check size={16} />
               <span>完成設定 (確定儲存並更新資料庫)</span>
