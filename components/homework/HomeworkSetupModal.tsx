@@ -1088,7 +1088,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
   };
 
   const mainContent = (
-    <div className={`bg-white w-full ${isInline ? 'flex-1 flex flex-col min-h-0' : 'flex-1 flex flex-col w-full h-full overflow-hidden'}`}>
+    <div className={`bg-white w-full overflow-x-hidden ${isInline ? 'flex-1 flex flex-col min-h-0' : 'flex-1 flex flex-col w-full h-full overflow-hidden'}`}>
       {/* 頂部滿板功能導航列 (統一與課程行事曆相同色彩與版面設計) */}
       <div className="bg-gradient-to-r from-[#FF6B57] via-[#FF7A66] to-[#FF8E7D] text-white px-4 sm:px-6 pt-3.5 pb-2.5 shrink-0 shadow-md flex flex-col gap-2.5">
         <div className="flex items-center justify-between gap-2">
@@ -1109,7 +1109,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
             )}
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-base sm:text-lg font-black tracking-wide whitespace-nowrap">
+                <h1 className="text-sm sm:text-base md:text-lg font-black tracking-wide truncate max-w-[190px] sm:max-w-none">
                   {isStudent
                     ? '我的課程管理'
                     : mode === 'courses_only'
@@ -1148,39 +1148,39 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
 
         {/* 標籤頁導航 (若為 settings_only 或 all 模式，呈現與行事曆一致的居中切換膠囊) */}
         {mode !== 'courses_only' && (
-          <div className="flex items-center justify-center w-full">
-            <div className="bg-black/20 p-1 rounded-2xl flex items-center w-full max-w-md shadow-inner">
+          <div className="flex items-center justify-center w-full px-1">
+            <div className="bg-black/20 p-1 rounded-2xl flex items-center w-full max-w-md shadow-inner gap-1">
               {mode !== 'settings_only' && (
                 <button
                   type="button"
                   onClick={() => { setActiveTab('courses'); setEditingItem(null); handleCloseCourseForm(); }}
-                  className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap min-w-0 ${
                     activeTab === 'courses' ? 'bg-white text-[#FF6B57] shadow-sm' : 'text-white/80 hover:text-white'
                   }`}
                 >
-                  <GraduationCap size={14} />
-                  <span>課程 ({normalizedCourses.length})</span>
+                  <GraduationCap size={13} className="shrink-0" />
+                  <span className="truncate">課程 ({normalizedCourses.length})</span>
                 </button>
               )}
               <button
                 type="button"
                 onClick={() => { setActiveTab('branches'); setEditingItem(null); handleCloseCourseForm(); }}
-                className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap min-w-0 ${
                   activeTab === 'branches' ? 'bg-white text-[#FF6B57] shadow-sm' : 'text-white/80 hover:text-white'
                 }`}
               >
-                <MapPin size={14} />
-                <span>學校/分校 ({branches.length})</span>
+                <MapPin size={13} className="shrink-0" />
+                <span className="truncate">分校 ({branches.length})</span>
               </button>
               <button
                 type="button"
                 onClick={() => { setActiveTab('classes'); setEditingItem(null); handleCloseCourseForm(); }}
-                className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap min-w-0 ${
                   activeTab === 'classes' ? 'bg-white text-[#FF6B57] shadow-sm' : 'text-white/80 hover:text-white'
                 }`}
               >
-                <Layers size={14} />
-                <span>班別 ({localClasses.length})</span>
+                <Layers size={13} className="shrink-0" />
+                <span className="truncate">班別 ({localClasses.length})</span>
               </button>
             </div>
           </div>
@@ -1604,7 +1604,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                     <select
                       value={courseFilterBranch}
                       onChange={(e) => setCourseFilterBranch(e.target.value)}
-                      className="w-full bg-white text-purple-800 font-semibold text-[11px] p-1.5 rounded-lg border border-gray-200 outline-none truncate"
+                      className="w-full bg-white text-gray-800 font-semibold text-[11px] p-1.5 rounded-lg border border-gray-200 outline-none truncate"
                     >
                       <option value="全部分校">全部學校 ({branches.length})</option>
                       {branches.map((b) => (
@@ -1692,7 +1692,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                             </span>
                             {/* ⭐ 所屬學校標籤 */}
                             {c.branch ? (
-                              <span className="text-[10px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                              <span className="text-[10px] font-bold text-purple-700 bg-purple-50 border border-orange-200 px-2 py-0.5 rounded-full flex items-center gap-1">
                                 <MapPin size={10} className="text-purple-600" />
                                 <span>{c.branch}</span>
                               </span>
@@ -1707,7 +1707,7 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                                 <span>{c.timeSlot}</span>
                               </span>
                             )}
-                            <span className="text-[10px] font-semibold text-purple-700 bg-purple-50 border border-purple-100 px-1.5 py-0.5 rounded">
+                            <span className="text-[10px] font-semibold text-purple-700 bg-purple-50 border border-orange-100 px-1.5 py-0.5 rounded">
                               共 {sessionsCount} 節
                             </span>
                             {/* ⭐ 需求 6：學生帳戶模式中課程設定與排程管理不要顯示已參加人數 */}
@@ -1832,29 +1832,31 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
           {activeTab === 'branches' && (
             <div className="space-y-3">
               <form onSubmit={handleAddBranch} className="space-y-2">
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <input
                     type="text"
                     placeholder="學校/分校名稱 (例：沙田分校)"
                     value={newBranch}
                     onChange={(e) => setNewBranch(e.target.value)}
-                    className={`flex-1 p-2 border border-gray-200 rounded-lg text-xs outline-none focus:border-[#FF6B57] placeholder:text-gray-400 ${
+                    className={`flex-1 min-w-0 p-2 border border-gray-200 rounded-lg text-xs outline-none focus:border-[#FF6B57] placeholder:text-gray-400 ${
                       newBranch.trim() ? 'text-black font-semibold' : 'text-gray-500'
                     }`}
                   />
-                  <input
-                    type="text"
-                    placeholder="學校代號 (例：ST)"
-                    value={newBranchCode}
-                    onChange={(e) => setNewBranchCode(e.target.value.toUpperCase())}
-                    className="w-32 p-2 border border-purple-200 bg-purple-50/50 rounded-lg text-xs outline-none focus:border-[#FF6B57] text-purple-900 font-bold uppercase font-mono placeholder:text-gray-400"
-                  />
-                  <button
-                    type="submit"
-                    className="bg-purple-600 text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-purple-700 transition-colors shrink-0 shadow-xs"
-                  >
-                    <Plus size={14} /> 新增
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="學校代號 (例：ST)"
+                      value={newBranchCode}
+                      onChange={(e) => setNewBranchCode(e.target.value.toUpperCase())}
+                      className="w-28 sm:w-32 p-2 border border-orange-200 bg-purple-50/50 rounded-lg text-xs outline-none focus:border-[#FF6B57] text-gray-900 font-bold uppercase font-mono placeholder:text-gray-400 shrink-0"
+                    />
+                    <button
+                      type="submit"
+                      className="flex-1 sm:flex-none bg-purple-600 text-white px-3.5 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 hover:bg-purple-700 transition-colors shrink-0 shadow-xs cursor-pointer"
+                    >
+                      <Plus size={14} /> 新增
+                    </button>
+                  </div>
                 </div>
               </form>
 
@@ -1891,51 +1893,53 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                       onDragOver={(e) => handleBranchDragOver(e, idx)}
                       onDrop={(e) => handleBranchDrop(e, idx)}
                       onDragEnd={handleBranchDragEnd}
-                      className={`flex justify-between items-center p-2.5 bg-purple-50/40 border rounded-lg text-xs font-semibold transition-all ${
+                      className={`flex justify-between items-center p-2.5 bg-orange-50/20 border rounded-lg text-xs font-semibold transition-all ${
                         isDragging ? 'opacity-40 scale-[0.98]' : ''
                       } ${
-                        isDragOver ? 'border-[#FF6B57] bg-purple-100/80 shadow-xs' : 'border-purple-100 hover:border-purple-300'
+                        isDragOver ? 'border-[#FF6B57] bg-purple-100/80 shadow-xs' : 'border-orange-100 hover:border-orange-300'
                       }`}
                     >
                       {isEditing ? (
-                        <div className="flex items-center gap-1.5 flex-1 mr-2">
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 flex-1 min-w-0 mr-2">
                           <input
                             type="text"
                             value={editValue}
                             onChange={(e) => setEditValue(e.target.value)}
                             placeholder="學校名稱"
-                            className="flex-1 p-1 bg-white border border-purple-500 rounded text-xs outline-none text-black font-semibold"
+                            className="flex-1 min-w-0 p-1 bg-white border border-purple-500 rounded text-xs outline-none text-black font-semibold"
                             autoFocus
                           />
-                          <input
-                            type="text"
-                            value={editBranchCode}
-                            onChange={(e) => setEditBranchCode(e.target.value.toUpperCase())}
-                            placeholder="代號 (例: ST)"
-                            className="w-24 p-1 bg-white border border-purple-500 rounded text-xs outline-none text-purple-900 font-bold font-mono uppercase"
-                          />
-                          <button
-                            onClick={() => handleSaveEditBranch(b)}
-                            className="p-1 bg-emerald-500 text-white rounded hover:bg-emerald-600"
-                            title="保存修改"
-                          >
-                            <Check size={14} />
-                          </button>
-                          <button
-                            onClick={() => setEditingItem(null)}
-                            className="p-1 bg-gray-200 text-gray-600 rounded hover:bg-gray-300"
-                            title="取消"
-                          >
-                            <RotateCcw size={14} />
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="text"
+                              value={editBranchCode}
+                              onChange={(e) => setEditBranchCode(e.target.value.toUpperCase())}
+                              placeholder="代號 (例: ST)"
+                              className="w-20 p-1 bg-white border border-purple-500 rounded text-xs outline-none text-gray-900 font-bold font-mono uppercase shrink-0"
+                            />
+                            <button
+                              onClick={() => handleSaveEditBranch(b)}
+                              className="p-1 bg-emerald-500 text-white rounded hover:bg-emerald-600 shrink-0 cursor-pointer"
+                              title="保存修改"
+                            >
+                              <Check size={14} />
+                            </button>
+                            <button
+                              onClick={() => setEditingItem(null)}
+                              className="p-1 bg-gray-200 text-gray-600 rounded hover:bg-gray-300 shrink-0 cursor-pointer"
+                              title="取消"
+                            >
+                              <RotateCcw size={14} />
+                            </button>
+                          </div>
                         </div>
                       ) : (
                         <>
-                          <div className="flex items-center gap-2 text-purple-900 min-w-0">
+                          <div className="flex items-center gap-1.5 text-gray-900 min-w-0 flex-1 mr-1">
                             {/* 拖動手把 + 上下微調按鈕 */}
-                            <div className="flex items-center gap-0.5 text-gray-400">
+                            <div className="flex items-center gap-0.5 text-gray-400 shrink-0">
                               <span
-                                className="cursor-grab active:cursor-grabbing p-1 hover:text-purple-600 hover:bg-purple-100/60 rounded transition-colors"
+                                className="cursor-grab active:cursor-grabbing p-1 hover:text-purple-600 hover:bg-orange-100/60 rounded transition-colors"
                                 title="按著此處上下拖動更改排序"
                               >
                                 <GripVertical size={14} />
@@ -1962,14 +1966,14 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                               </div>
                             </div>
 
-                            <span className="text-[10px] text-purple-500 bg-purple-100 px-1 py-0.2 rounded font-mono font-bold">
+                            <span className="text-[10px] text-purple-500 bg-purple-100 px-1 py-0.2 rounded font-mono font-bold shrink-0">
                               #{idx + 1}
                             </span>
                             <MapPin size={14} className="text-purple-600 shrink-0" />
-                            <span className="truncate">{info.name}</span>
+                            <span className="truncate min-w-0 flex-1">{info.name}</span>
                             {info.code && (
-                              <span className="px-1.5 py-0.5 rounded font-mono font-bold text-[10px] bg-purple-100 text-purple-700 shrink-0 border border-purple-200">
-                                代號: {info.code}
+                              <span className="px-1.5 py-0.5 rounded font-mono font-bold text-[10px] bg-purple-100 text-purple-700 shrink-0 border border-orange-200">
+                                {info.code}
                               </span>
                             )}
                           </div>
@@ -2059,24 +2063,24 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                       }`}
                     >
                       {isEditing ? (
-                        <div className="flex items-center gap-1.5 flex-1 mr-2">
+                        <div className="flex items-center gap-1.5 flex-1 min-w-0 mr-2">
                           <input
                             type="text"
                             value={editValue}
                             onChange={(e) => setEditValue(e.target.value)}
-                            className="flex-1 p-1 bg-white border border-indigo-500 rounded text-xs outline-none text-black font-semibold"
+                            className="flex-1 p-1.5 bg-white border border-[#FF6B57] rounded-lg text-xs outline-none text-black font-semibold min-w-0"
                             autoFocus
                           />
                           <button
                             onClick={() => handleSaveEditClass(c)}
-                            className="p-1 bg-emerald-500 text-white rounded hover:bg-emerald-600"
+                            className="p-1.5 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 cursor-pointer shrink-0"
                             title="保存修改"
                           >
                             <Check size={14} />
                           </button>
                           <button
                             onClick={() => setEditingItem(null)}
-                            className="p-1 bg-gray-200 text-gray-600 rounded hover:bg-gray-300"
+                            className="p-1.5 bg-gray-200 text-gray-600 rounded-lg hover:bg-gray-300 cursor-pointer shrink-0"
                             title="取消"
                           >
                             <RotateCcw size={14} />
@@ -2084,11 +2088,11 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                         </div>
                       ) : (
                         <>
-                          <div className="flex items-center gap-2 text-gray-900 min-w-0">
+                          <div className="flex items-center gap-1.5 min-w-0 flex-1 mr-2">
                             {/* 拖動手把 + 上下微調按鈕 */}
-                            <div className="flex items-center gap-0.5 text-gray-400">
+                            <div className="flex items-center gap-0.5 text-gray-400 shrink-0">
                               <span
-                                className="cursor-grab active:cursor-grabbing p-1 hover:text-[#FF6B57] hover:bg-indigo-100/60 rounded transition-colors"
+                                className="cursor-grab active:cursor-grabbing p-1 hover:text-[#FF6B57] hover:bg-orange-50 rounded transition-colors"
                                 title="按著此處上下拖動更改排序"
                               >
                                 <GripVertical size={14} />
@@ -2115,27 +2119,27 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
                               </div>
                             </div>
 
-                            <span className="text-[10px] text-[#FF6B57] bg-indigo-100 px-1 py-0.2 rounded font-mono font-bold">
+                            <span className="text-[10px] text-[#FF6B57] bg-orange-100 px-1.5 py-0.2 rounded font-mono font-bold shrink-0">
                               #{idx + 1}
                             </span>
-                            <Layers size={14} className="text-gray-400" />
-                            <span className="truncate">{c.endsWith('班') ? c : `${c} 班`}</span>
+                            <Layers size={13} className="text-gray-400 shrink-0" />
+                            <span className="truncate font-bold text-gray-900 text-xs min-w-0 flex-1">{c.endsWith('班') ? c : `${c} 班`}</span>
                           </div>
 
                           <div className="flex items-center gap-1 shrink-0">
                             <button
                               onClick={() => handleStartEditClass(c)}
-                              className="text-gray-400 hover:text-[#FF6B57] p-1 rounded"
+                              className="text-gray-400 hover:text-[#FF6B57] p-1.5 rounded hover:bg-orange-50 transition-colors"
                               title="修改名稱"
                             >
-                              <Edit2 size={14} />
+                              <Edit2 size={13} />
                             </button>
                             <button
                               onClick={() => handleDeleteClass(c)}
-                              className="text-gray-400 hover:text-red-500 p-1 rounded"
+                              className="text-gray-400 hover:text-red-500 p-1.5 rounded hover:bg-red-50 transition-colors"
                               title="刪除"
                             >
-                              <Trash2 size={14} />
+                              <Trash2 size={13} />
                             </button>
                           </div>
                         </>
@@ -2156,17 +2160,17 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
             <button
               type="button"
               onClick={handleCloseModal}
-              className="py-2.5 px-4 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold rounded-xl text-xs transition-colors"
+              className="py-2.5 px-4 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold rounded-xl text-xs transition-colors shrink-0"
             >
               取消
             </button>
             <button
               type="button"
               onClick={handleSaveAndConfirmSettings}
-              className="flex-1 py-2.5 bg-[#FF6B57] hover:bg-[#e05a48] text-white rounded-xl font-bold text-xs shadow-md flex items-center justify-center gap-1.5 transition-all"
+              className="flex-1 py-2.5 bg-[#FF6B57] hover:bg-[#e05a48] text-white rounded-xl font-bold text-xs shadow-md flex items-center justify-center gap-1.5 transition-all truncate"
             >
-              <Check size={16} />
-              <span>完成設定 (確定儲存並更新資料庫)</span>
+              <Check size={16} className="shrink-0" />
+              <span className="truncate">完成設定 (確定儲存資料庫)</span>
             </button>
           </div>
         )}
@@ -2179,7 +2183,9 @@ export const HomeworkSetupModal: React.FC<HomeworkSetupModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-[#F8F9FA] w-full h-[100dvh] max-h-[100dvh] overflow-hidden animate-in fade-in duration-200">
-      {mainContent}
+      <div className="w-full flex-1 flex flex-col overflow-hidden max-w-4xl mx-auto bg-white shadow-md relative">
+        {mainContent}
+      </div>
     </div>
   );
 };

@@ -524,8 +524,8 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className={isInline ? "w-full flex-1 flex flex-col bg-white overflow-hidden" : "fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"}>
-      <div className={isInline ? "w-full flex-1 flex flex-col overflow-hidden bg-white" : "bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh]"}>
+    <div className={isInline ? "w-full flex-1 flex flex-col bg-white overflow-hidden" : "fixed inset-0 bg-black/60 z-50 flex items-center justify-center sm:p-4"}>
+      <div className={isInline ? "w-full flex-1 flex flex-col overflow-hidden bg-white" : "bg-white w-full h-full sm:h-auto sm:max-h-[88vh] sm:max-w-md sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col"}>
         {/* 頂部滿板功能導航列 (統一與課程行事曆相同色彩與版面設計) */}
         <div className="bg-gradient-to-r from-[#FF6B57] via-[#FF7A66] to-[#FF8E7D] text-white px-4 sm:px-6 pt-3.5 pb-2.5 shrink-0 shadow-md flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
