@@ -713,68 +713,86 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
                       </div>
                     ) : (
                       <>
-                        {/* 一般展示行 */}
-                        <div className="flex justify-between items-center">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-bold text-gray-800 text-sm">{s.student_name}</span>
-                            <span className="text-gray-600 bg-gray-200/80 px-1.5 py-0.5 rounded text-[11px] font-semibold">
-                              {s.class_name} 班
-                            </span>
-                            {s.branch ? (
-                              <span className="text-purple-900 font-bold text-[10px] bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full flex items-center gap-0.5">
-                                <MapPin size={10} className="text-purple-600 shrink-0" />
-                                <span>{s.branch}</span>
+                        {/* 一般展示區：左側學生資訊，右側操作按鈕分上下兩行 */}
+                        <div className="flex justify-between items-start gap-2">
+                          {/* 左側資訊欄 */}
+                          <div className="space-y-1 min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-bold text-gray-800 text-sm">{s.student_name}</span>
+                              <span className="text-gray-600 bg-gray-200/80 px-1.5 py-0.5 rounded text-[11px] font-semibold">
+                                {s.class_name} 班
                               </span>
-                            ) : (
-                              <span className="text-gray-500 text-[10px] bg-gray-100 border border-gray-200 px-2 py-0.5 rounded font-medium">
-                                未設定分校
-                              </span>
-                            )}
+                            </div>
+                            <div>
+                              {s.branch ? (
+                                <span className="text-purple-900 font-bold text-[10px] bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full inline-flex items-center gap-0.5 max-w-full truncate">
+                                  <MapPin size={10} className="text-purple-600 shrink-0" />
+                                  <span className="truncate">{s.branch}</span>
+                                </span>
+                              ) : (
+                                <span className="text-gray-500 text-[10px] bg-gray-100 border border-gray-200 px-2 py-0.5 rounded font-medium inline-block">
+                                  未設定分校
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => handleOpenEvaluation(s)}
-                              className="text-xs text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-0.5 rounded font-bold flex items-center gap-1 shadow-2xs"
-                              title="為此學生填寫成長報告評核"
-                            >
-                              <TrendingUp size={11} />
-                              <span>成長評核</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleStartEditStudent(s)}
-                              className="text-gray-400 hover:text-blue-600 p-1"
-                              title="編輯會員資料"
-                            >
-                              <Edit2 size={13} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (isAdding) {
-                                  setAddingCourseForStudent(null);
-                                  setSelectedCourseToAdd('');
-                                } else {
-                                  setAddingCourseForStudent(s);
-                                  const studentCourses = getAvailableCoursesForStudent(s);
-                                  setSelectedCourseToAdd(studentCourses[0] || '');
-                                }
-                              }}
-                              className="text-xs text-[#FF6B57] hover:text-[#e05a48] hover:bg-orange-50 px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5"
-                              title="為此學生加選課程 (同步帳戶中心)"
-                            >
-                              <Plus size={11} />
-                              <span>加選</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteStudentAll(s)}
-                              className="text-gray-400 hover:text-red-500 p-1"
-                              title="刪除學生 (同步帳戶中心)"
-                            >
-                              <Trash2 size={13} />
-                            </button>
+
+                          {/* 右側操作按鈕欄：⭐ 成長評核與加選分上下兩行，寬敞不折字 */}
+                          <div className="flex flex-col items-end gap-1.5 shrink-0">
+                            {/* 第一行（上行）：成長評核與基本管理按鈕 */}
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEvaluation(s)}
+                                className="text-xs text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2.5 py-1 rounded-xl font-bold flex items-center gap-1 shadow-2xs whitespace-nowrap cursor-pointer transition-all active:scale-95"
+                                title="為此學生填寫成長報告評核"
+                              >
+                                <TrendingUp size={12} className="shrink-0" />
+                                <span className="whitespace-nowrap">成長評核</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleStartEditStudent(s)}
+                                className="text-gray-400 hover:text-blue-600 p-1 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                                title="編輯會員資料"
+                              >
+                                <Edit2 size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteStudentAll(s)}
+                                className="text-gray-400 hover:text-red-500 p-1 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+                                title="刪除學生 (同步帳戶中心)"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+
+                            {/* 第二行（下行）：加選按鈕 */}
+                            <div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (isAdding) {
+                                    setAddingCourseForStudent(null);
+                                    setSelectedCourseToAdd('');
+                                  } else {
+                                    setAddingCourseForStudent(s);
+                                    const studentCourses = getAvailableCoursesForStudent(s);
+                                    setSelectedCourseToAdd(studentCourses[0] || '');
+                                  }
+                                }}
+                                className={`text-xs px-2.5 py-1 rounded-xl font-bold flex items-center gap-1 shadow-2xs whitespace-nowrap cursor-pointer transition-all active:scale-95 ${
+                                  isAdding
+                                    ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                    : 'text-[#FF6B57] hover:text-[#e05a48] bg-orange-50 hover:bg-orange-100 border border-orange-200'
+                                }`}
+                                title="為此學生加選課程 (同步帳戶中心)"
+                              >
+                                <Plus size={12} className="shrink-0" />
+                                <span className="whitespace-nowrap">{isAdding ? '取消加選' : '加選'}</span>
+                              </button>
+                            </div>
                           </div>
                         </div>
 
@@ -807,7 +825,7 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
                                       const validCourses = s.enrollments.filter((e2) => e2.course_name && e2.course_name.trim());
                                       handleDeleteEnrollment(en.id, s.student_name, en.course_name, validCourses.length);
                                     }}
-                                    className="text-indigo-400 hover:text-red-600 font-bold ml-0.5"
+                                    className="text-orange-400 hover:text-red-600 font-bold ml-0.5"
                                     title="退出此課程 (同步帳戶中心)"
                                   >
                                     ×
@@ -821,7 +839,7 @@ export const ClassManagementModal: React.FC<ClassManagementModalProps> = ({
                         {isAdding && (() => {
                           const studentCourses = getAvailableCoursesForStudent(s);
                           return (
-                            <div className="mt-2 p-2.5 bg-indigo-50/60 border border-orange-200 rounded-xl flex items-center gap-2">
+                            <div className="mt-2 p-2.5 bg-orange-50/40 border border-orange-200 rounded-xl flex items-center gap-2">
                               <select
                                 value={selectedCourseToAdd}
                                 onChange={(e) => setSelectedCourseToAdd(e.target.value)}
