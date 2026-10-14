@@ -2,7 +2,7 @@
 import {
   X, Users, Trash2, Download,
   CheckCircle, GraduationCap, Check, Edit2, RotateCcw, User,
-  MapPin, Plus, TrendingUp, Award, Smile
+  MapPin, Plus, TrendingUp, Award, Smile, Menu
 } from 'lucide-react';
 import {
   StudentEvaluation,
