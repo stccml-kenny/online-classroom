@@ -1094,3 +1094,42 @@ export async function updateLeaveApplicationStatusInCloud(id: string, status: 'a
     }
   } catch (err) {}
 }
+
+export async function deleteLeaveApplicationFromCloud(id: string): Promise<void> {
+  let list: CloudLeaveApplication[] = await loadLeaveApplicationsFromCloud();
+  const target = list.find(e => e.id === id);
+  list = list.filter(e => e.id !== id);
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('oc_leave_applications', JSON.stringify(list));
+      if (target) {
+        const attKey = `oc_att_${target.branch}_${target.courseName}_${target.date}`;
+        const rawAtt = localStorage.getItem(attKey);
+        if (rawAtt) {
+          const attList = JSON.parse(rawAtt);
+          if (Array.isArray(attList)) {
+            const updatedAtt = attList.map((st: any) => {
+              if (st.name === target.studentName && st.status === 'excused') {
+                return { ...st, status: 'unmarked', leaveReason: undefined };
+              }
+              return st;
+            });
+            localStorage.setItem(attKey, JSON.stringify(updatedAtt));
+          }
+        }
+      }
+    } catch (e) {}
+  }
+  try {
+    const jsonStr = JSON.stringify(list);
+    const res = await databases.listDocuments(DATABASE_ID, 'homework_settings', [
+      Query.equal('setting_key', 'leave_applications'),
+      Query.limit(1),
+    ]);
+    if (res.documents && res.documents.length > 0) {
+      await databases.updateDocument(DATABASE_ID, 'homework_settings', res.documents[0].$id, {
+        setting_value: jsonStr,
+      });
+    }
+  } catch (err) {}
+}

@@ -209,7 +209,7 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
 
   const handleStatusChange = (id: string, status: AttendanceStatus) => {
     setStudents((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, status } : s))
+      prev.map((s) => (s.id === id ? { ...s, status, leaveReason: status === 'excused' ? s.leaveReason : undefined } : s))
     );
   };
 

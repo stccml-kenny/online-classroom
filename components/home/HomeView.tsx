@@ -2,7 +2,7 @@
 import {
   GraduationCap, Users, User, BookOpen, Clock,
   Sparkles, CheckCircle2, ChevronRight, LogOut,
-  Bell, UserPlus, Calendar as CalendarIcon, Settings, Check, RotateCcw
+  Bell, UserPlus, Calendar as CalendarIcon, Settings, Check, RotateCcw, Trash2
 } from 'lucide-react';
 import { UserProfile, ROLE_CONFIGS } from '@/components/auth/AuthModal';
 import { TabType } from '@/components/layout/BottomNav';
@@ -10,7 +10,7 @@ import { StudentHomeView } from './StudentHomeView';
 
 import { CalendarEvent } from '@/types/calendar';
 import { CourseItem } from '@/components/homework/HomeworkSetupModal';
-import { loadLeaveApplicationsFromCloud, updateLeaveApplicationStatusInCloud, CloudLeaveApplication } from '@/lib/appwrite';
+import { loadLeaveApplicationsFromCloud, updateLeaveApplicationStatusInCloud, deleteLeaveApplicationFromCloud, CloudLeaveApplication } from '@/lib/appwrite';
 
 interface HomeViewProps {
   currentUser: UserProfile | null;
@@ -90,6 +90,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
       prev.map((lv) => (lv.id === id ? { ...lv, status: 'approved' } : lv))
     );
     await updateLeaveApplicationStatusInCloud(id, 'approved');
+  };
+
+  const handleDeleteLeave = async (lv: CloudLeaveApplication) => {
+    if (!window.confirm(`確定要刪除「${lv.studentName}」於 ${lv.date} 的請假申請紀錄嗎？\n\n系統將自動清除該筆請假單並同步更新雲端點名簿。`)) {
+      return;
+    }
+    setAllLeaves((prev) => prev.filter((item) => item.id !== lv.id));
+    await deleteLeaveApplicationFromCloud(lv.id);
   };
 
   const pendingLeaves = allLeaves.filter((lv) => lv.status === 'pending');
@@ -448,7 +456,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                             </span>
                           </div>
 
-                          <div className="flex items-center gap-1 shrink-0">
+                          <div className="flex items-center gap-1.5 shrink-0">
                             {isPending ? (
                               <button
                                 type="button"
@@ -464,6 +472,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
                                 已准假
                               </span>
                             )}
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteLeave(lv)}
+                              className="p-1 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                              title="刪除此請假申請紀錄"
+                            >
+                              <Trash2 size={13} />
+                            </button>
                           </div>
                         </div>
 
