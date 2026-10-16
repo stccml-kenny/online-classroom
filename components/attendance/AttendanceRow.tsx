@@ -9,6 +9,7 @@ export interface StudentAttendance {
   studentNo?: string;
   className?: string; // ⭐ 需求：會員名字下改為班別
   status: AttendanceStatus;
+  leaveReason?: string;
 }
 
 interface AttendanceRowProps {
@@ -25,11 +26,16 @@ export const AttendanceRow: React.FC<AttendanceRowProps> = ({ student, onStatusC
           {student.name ? student.name.charAt(0) : <User size={14} />}
         </div>
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <span className="font-bold text-gray-800 text-sm truncate">{student.name}</span>
             {student.status === 'unmarked' && (
               <span className="text-[9px] text-gray-400 bg-gray-100 px-1.5 py-0.2 rounded font-medium shrink-0">
                 待點名
+              </span>
+            )}
+            {student.status === 'excused' && (
+              <span className="text-[9px] text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded font-semibold shrink-0">
+                {student.leaveReason ? `已請假: ${student.leaveReason}` : '已請假'}
               </span>
             )}
           </div>

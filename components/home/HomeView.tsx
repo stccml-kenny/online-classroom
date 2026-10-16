@@ -66,6 +66,19 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
   // 依真實時間動態計算問候語 (預設早安，客戶端加載後依真實小時切換，防 SSR 水合錯誤)
   const [greeting, setGreeting] = React.useState('早安');
+  const [pendingLeaveCount, setPendingLeaveCount] = React.useState(0);
+
+  React.useEffect(() => {
+    try {
+      const raw = localStorage.getItem('oc_leave_applications');
+      if (raw) {
+        const list = JSON.parse(raw);
+        if (Array.isArray(list)) {
+          setPendingLeaveCount(list.filter((lv: any) => lv.status === 'pending').length);
+        }
+      }
+    } catch {}
+  }, []);
   React.useEffect(() => {
     const hour = new Date().getHours();
     if (hour >= 5 && hour < 12) setGreeting('早安');
@@ -305,13 +318,17 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center group-hover:scale-105 transition-transform">
                       <Clock size={18} />
                     </div>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-50 text-purple-600 font-bold">
-                      考勤
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                      pendingLeaveCount > 0 ? 'bg-blue-100 text-blue-700 font-extrabold' : 'bg-purple-50 text-purple-600'
+                    }`}>
+                      {pendingLeaveCount > 0 ? `考勤 (${pendingLeaveCount} 請假)` : '考勤'}
                     </span>
                   </div>
                   <div>
                     <div className="text-xs font-bold text-gray-800 group-hover:text-purple-600">課程點名</div>
-                    <div className="text-[10px] text-gray-400">未點名/出席/請假記錄</div>
+                    <div className="text-[10px] text-gray-400">
+                      {pendingLeaveCount > 0 ? `${pendingLeaveCount} 位學生已提早請假` : '未點名/出席/請假記錄'}
+                    </div>
                   </div>
                 </button>
 

@@ -408,6 +408,27 @@ export const ChatView: React.FC<ChatViewProps> = ({
         return prev.map((m) => (m.$id === tempId ? savedMsg : m));
       });
 
+      // ⭐ 若為導師發送准假審批，同步更新請假記錄狀態為 approved
+      if (textToSend.includes('【請假審批確認】')) {
+        try {
+          const raw = localStorage.getItem('oc_leave_applications');
+          if (raw) {
+            const list = JSON.parse(raw);
+            const updated = list.map((lv: any) => {
+              if (
+                (lv.studentUsername === activePartner.username ||
+                 lv.studentName === activePartner.name) &&
+                lv.status === 'pending'
+              ) {
+                return { ...lv, status: 'approved' };
+              }
+              return lv;
+            });
+            localStorage.setItem('oc_leave_applications', JSON.stringify(updated));
+          }
+        } catch {}
+      }
+
       fetchConversations();
     } catch (err) {
       console.error('發送訊息失敗:', err);

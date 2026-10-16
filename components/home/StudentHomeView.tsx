@@ -24,6 +24,22 @@ import { TabType } from '@/components/layout/BottomNav';
 import { CalendarEvent } from '@/types/calendar';
 import { CourseItem } from '@/components/homework/HomeworkSetupModal';
 import { StudentEvaluation, loadStudentEvaluationsFromCloud } from '@/lib/appwrite';
+import { chatService } from '@/lib/chatService';
+
+export interface LeaveApplication {
+  id: string;
+  studentName: string;
+  studentUsername: string;
+  className: string;
+  branch: string;
+  courseName: string;
+  date: string;
+  coach: string;
+  reason: string;
+  remarks: string;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: string;
+}
 
 interface StudentHomeViewProps {
   currentUser: UserProfile | null;
@@ -246,6 +262,27 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
   };
   const [leaveSuccessToast, setLeaveSuccessToast] = useState<string | null>(null);
 
+  // 近期請假紀錄清單
+  const [myLeaves, setMyLeaves] = useState<LeaveApplication[]>([]);
+  const loadMyLeaves = React.useCallback(() => {
+    try {
+      const raw = localStorage.getItem('oc_leave_applications');
+      if (raw) {
+        const all: LeaveApplication[] = JSON.parse(raw);
+        const filtered = all.filter(
+          (lv) =>
+            lv.studentName === studentName ||
+            (currentUser?.username && lv.studentUsername === currentUser.username)
+        );
+        setMyLeaves(filtered);
+      }
+    } catch {}
+  }, [studentName, currentUser?.username]);
+
+  React.useEffect(() => {
+    loadMyLeaves();
+  }, [loadMyLeaves]);
+
   // 請假表單狀態
   const [leaveReason, setLeaveReason] = useState('事假');
   const [leaveRemarks, setLeaveRemarks] = useState('');
@@ -259,16 +296,126 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
     setShowLeaveModal(true);
   };
 
-  // 確認提交請假申請
-  const handleSubmitLeave = () => {
-    if (!selectedSessionForLeave) return;
+  // 確認提交請假申請 (自動化：保存請假記錄 + 預先連動點名簿 + 自動向導師/職員發送請假即時訊息)
+  const handleSubmitLeave = async () => {
+    if (!selectedSessionForLeave || !currentUser) return;
     setIsSubmittingLeave(true);
-    setTimeout(() => {
-      setIsSubmittingLeave(false);
-      setShowLeaveModal(false);
-      setLeaveSuccessToast(`已成功為【${selectedSessionForLeave.date}】提交請假申請，學校職員將跟進補堂！`);
-      setTimeout(() => setLeaveSuccessToast(null), 4000);
-    }, 500);
+
+    const leaveRecord: LeaveApplication = {
+      id: `leave_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      studentName,
+      studentUsername: currentUser.username || studentId,
+      className: currentUser.className || '',
+      branch: selectedSessionForLeave.branch || currentUser.branch || '總校',
+      courseName: selectedSessionForLeave.course,
+      date: selectedSessionForLeave.date,
+      coach: selectedSessionForLeave.coach || '負責導師',
+      reason: leaveReason,
+      remarks: leaveRemarks.trim(),
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    };
+
+    // 1. 本地保存請假申請清單
+    try {
+      const raw = localStorage.getItem('oc_leave_applications');
+      const list: LeaveApplication[] = raw ? JSON.parse(raw) : [];
+      list.unshift(leaveRecord);
+      localStorage.setItem('oc_leave_applications', JSON.stringify(list));
+      setMyLeaves((prev) => [leaveRecord, ...prev]);
+    } catch (e) {}
+
+    // 2. 自動預先連動點名簿 (標記為請假)
+    try {
+      const attKey = `oc_att_${selectedSessionForLeave.branch}_${selectedSessionForLeave.course}_${selectedSessionForLeave.date}`;
+      const rawAtt = localStorage.getItem(attKey);
+      let attList = rawAtt ? JSON.parse(rawAtt) : [];
+      if (Array.isArray(attList) && attList.length > 0) {
+        let found = false;
+        attList = attList.map((st: any) => {
+          if (st.name === studentName) {
+            found = true;
+            return { ...st, status: 'excused', leaveReason: leaveReason };
+          }
+          return st;
+        });
+        if (!found) {
+          attList.push({
+            id: `stu_excused_${Date.now()}`,
+            name: studentName,
+            className: currentUser.className || '常規班',
+            status: 'excused',
+            leaveReason: leaveReason,
+          });
+        }
+      } else {
+        attList = [{
+          id: `stu_excused_${Date.now()}`,
+          name: studentName,
+          className: currentUser.className || '常規班',
+          status: 'excused',
+          leaveReason: leaveReason,
+        }];
+      }
+      localStorage.setItem(attKey, JSON.stringify(attList));
+    } catch (e) {}
+
+    // 3. 自動向導師/管理員發送「【請假申請】」即時訊息
+    try {
+      let allUsers: UserProfile[] = [];
+      const rawUsers = localStorage.getItem('oc_users_list');
+      if (rawUsers) {
+        allUsers = JSON.parse(rawUsers);
+      }
+      const targetTeacher = allUsers.find(
+        (u) =>
+          (u.role === 'teacher' || u.role === 'assistant') &&
+          ((u.name && selectedSessionForLeave.coach.includes(u.name)) ||
+           (u.branch && u.branch === selectedSessionForLeave.branch))
+      ) || allUsers.find((u) => u.role === 'teacher') || allUsers.find((u) => u.role === 'admin');
+
+      if (targetTeacher) {
+        const u1 = (currentUser.username || '').toLowerCase().trim();
+        const u2 = (targetTeacher.username || '').toLowerCase().trim();
+        const convId = [u1, u2].sort().join('__');
+        const content = `【請假申請】\n學生姓名：${studentName}\n所屬班別：${currentUser.className || '常規班'} (${selectedSessionForLeave.branch || '總校'})\n課程名稱：${selectedSessionForLeave.course}\n請假日期：${selectedSessionForLeave.date}\n請假事由：${leaveReason}\n備註說明：${leaveRemarks.trim() || '無'}`;
+
+        await chatService.sendMessage({
+          conversationId: convId,
+          sender: currentUser,
+          receiver: {
+            username: targetTeacher.username,
+            name: targetTeacher.name || targetTeacher.username,
+            role: targetTeacher.role,
+          },
+          content,
+          type: 'text',
+          branch: selectedSessionForLeave.branch || currentUser.branch,
+          className: currentUser.className,
+        });
+
+        await chatService.upsertConversation({
+          conversationId: convId,
+          sender: currentUser,
+          receiver: {
+            username: targetTeacher.username,
+            name: targetTeacher.name || targetTeacher.username,
+            role: targetTeacher.role,
+          },
+          lastMessage: content,
+          lastMessageTime: new Date().toISOString(),
+          branch: selectedSessionForLeave.branch || currentUser.branch,
+          className: currentUser.className,
+        });
+      }
+    } catch (err) {
+      console.warn('發送請假即時訊息略過:', err);
+    }
+
+    setIsSubmittingLeave(false);
+    setShowLeaveModal(false);
+    setLeaveSuccessToast(`已成功為【${selectedSessionForLeave.date}】提交請假申請！系統已自動向導師發送請假通知，並預先更新點名簿。`);
+    setTimeout(() => setLeaveSuccessToast(null), 4500);
   };
 
   // 點擊「問教練 / 職員」
@@ -630,6 +777,48 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
                   <p className="text-gray-400">目前尚無課程記錄</p>
                 )}
               </div>
+            </div>
+
+            {/* 我的請假與補堂申請記錄 */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-gray-800 flex items-center gap-1">
+                  <Clock size={13} className="text-[#FF6B57]" />
+                  <span>近期請假記錄</span>
+                </span>
+                <span className="text-[10px] text-gray-400">已自動同步至導師考勤</span>
+              </div>
+              {myLeaves.length > 0 ? (
+                <div className="max-h-44 overflow-y-auto space-y-2 pr-0.5">
+                  {myLeaves.map((lv) => (
+                    <div key={lv.id} className="p-2.5 bg-gray-50 border border-gray-200 rounded-xl space-y-1 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-gray-900 truncate max-w-[170px]">{lv.courseName}</span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          lv.status === 'approved'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-blue-50 text-blue-700 border border-blue-200'
+                        }`}>
+                          {lv.status === 'approved' ? '🟢 已准假' : '🔵 已排入點名簿'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-gray-500">
+                        <span>日期：{lv.date}</span>
+                        <span className="px-1.5 py-0.2 rounded bg-orange-50 text-[#FF6B57] font-semibold border border-orange-100">{lv.reason}</span>
+                      </div>
+                      {lv.remarks && (
+                        <div className="text-[10px] text-gray-400 bg-white p-1 rounded border border-gray-100">
+                          備註：{lv.remarks}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-3 bg-gray-50 rounded-xl border border-dashed border-gray-200 text-center text-xs text-gray-400">
+                  尚無請假記錄。點擊課堂卡片「請假」即可提早申請。
+                </div>
+              )}
             </div>
 
             {/* 請假及補堂說明 */}

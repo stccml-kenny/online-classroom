@@ -118,57 +118,91 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
       setLoading(true);
       const cacheKey = `oc_att_${selectedBranch}_${selectedCourse}_${date}`;
 
-      // 1. 若已有儲存過的點名快取，優先載入已記錄狀態
+      // 1. 若已有儲存過的點名快取，優先載入已記錄狀態 (並準備合併最新請假申請)
       const cached = localStorage.getItem(cacheKey);
+      let studentList: StudentAttendance[] = [];
       if (cached) {
         try {
-          setStudents(JSON.parse(cached));
-          setLoading(false);
-          return;
+          studentList = JSON.parse(cached);
         } catch (e) {}
       }
 
-      // 2. 從 Appwrite students 資料表讀取學生名冊 (依分校與課程過濾，不限班別)
-      try {
-        const res = await databases.listDocuments(
-          DATABASE_ID,
-          'students',
-          [Query.limit(500)]
-        );
-
-        const matched = (res.documents as any[]).filter((doc) => {
-          const matchBranch = !doc.branch || doc.branch === selectedBranch;
-          const docCourse = (doc.course_name || '').trim();
-          const matchCourse = docCourse && (
-            selectedCourse === docCourse ||
-            selectedCourse.startsWith(docCourse) ||
-            docCourse.startsWith(selectedCourse)
+      // 2. 如果尚未有快取，從 Appwrite students 資料表讀取學生名冊 (依分校與課程過濾)
+      if (studentList.length === 0) {
+        try {
+          const res = await databases.listDocuments(
+            DATABASE_ID,
+            'students',
+            [Query.limit(500)]
           );
-          return matchBranch && matchCourse;
-        });
 
-        const uniqueNames = new Set<string>();
-        const studentList: StudentAttendance[] = [];
-        matched.forEach((doc, idx) => {
-          if (doc.student_name && !uniqueNames.has(doc.student_name)) {
-            uniqueNames.add(doc.student_name);
-            studentList.push({
-              id: doc.$id || `stu_${idx}`,
-              name: doc.student_name,
-              // ⭐ 需求：會員名字下改為班別
-              className: doc.class_name ? (doc.class_name.endsWith('班') ? doc.class_name : `${doc.class_name} 班`) : '未設定班別',
-              status: 'unmarked',
+          const matched = (res.documents as any[]).filter((doc) => {
+            const matchBranch = !doc.branch || doc.branch === selectedBranch;
+            const docCourse = (doc.course_name || '').trim();
+            const matchCourse = docCourse && (
+              selectedCourse === docCourse ||
+              selectedCourse.startsWith(docCourse) ||
+              docCourse.startsWith(selectedCourse)
+            );
+            return matchBranch && matchCourse;
+          });
+
+          const uniqueNames = new Set<string>();
+          matched.forEach((doc, idx) => {
+            if (doc.student_name && !uniqueNames.has(doc.student_name)) {
+              uniqueNames.add(doc.student_name);
+              studentList.push({
+                id: doc.$id || `stu_${idx}`,
+                name: doc.student_name,
+                // ⭐ 需求：會員名字下改為班別
+                className: doc.class_name ? (doc.class_name.endsWith('班') ? doc.class_name : `${doc.class_name} 班`) : '未設定班別',
+                status: 'unmarked',
+              });
+            }
+          });
+        } catch (err: any) {
+          console.warn('讀取學生名冊略過或離線中:', err.message);
+        }
+      }
+
+      // ⭐ 3. 核心自動連動：檢查是否有學生提早申請請假 (oc_leave_applications)
+      try {
+        const rawLeaves = localStorage.getItem('oc_leave_applications');
+        if (rawLeaves) {
+          const leaveList: any[] = JSON.parse(rawLeaves);
+          const activeLeaves = leaveList.filter((lv) => {
+            const matchDate = lv.date === date;
+            const matchBranch = !lv.branch || lv.branch === selectedBranch || selectedBranch === '全部分校';
+            const lvCourse = (lv.courseName || '').trim();
+            const matchCourse = !lvCourse || !selectedCourse || (
+              selectedCourse === lvCourse ||
+              selectedCourse.includes(lvCourse) ||
+              lvCourse.includes(selectedCourse)
+            );
+            return matchDate && matchBranch && matchCourse;
+          });
+
+          if (activeLeaves.length > 0) {
+            const leaveMap = new Map<string, string>();
+            activeLeaves.forEach((lv) => {
+              leaveMap.set((lv.studentName || '').toLowerCase().trim(), lv.reason || '事假');
+            });
+
+            studentList = studentList.map((st) => {
+              const reason = leaveMap.get((st.name || '').toLowerCase().trim());
+              if (reason && (st.status === 'unmarked' || !st.status)) {
+                return { ...st, status: 'excused', leaveReason: reason };
+              } else if (reason && st.status === 'excused' && !st.leaveReason) {
+                return { ...st, leaveReason: reason };
+              }
+              return st;
             });
           }
-        });
+        }
+      } catch (e) {}
 
-        setStudents(studentList);
-      } catch (err: any) {
-        console.warn('讀取學生名冊略過或離線中:', err.message);
-        setStudents([]);
-      } finally {
-        setLoading(false);
-      }
+      setStudents(studentList);
+      setLoading(false);
     };
 
     fetchStudentsForAttendance();
