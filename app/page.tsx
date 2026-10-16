@@ -254,6 +254,10 @@ export default function OnlineClassroomApp() {
       // 1. 從資料庫載入最新帳戶清單 (保證跨裝置密碼與帳號一致)
       const cloudAccounts = await loadAllAccountsFromCloud();
       setUsersList(cloudAccounts);
+      try { localStorage.setItem('oc_users_list', JSON.stringify(cloudAccounts)); } catch (e) {}
+
+      // 載入最新請假申請表
+      try { await loadLeaveApplicationsFromCloud(); } catch (e) {}
 
       // 若目前已登入用戶，自最新資料庫帳戶中刷新其資料 (保證即時同步最新修讀課程與密碼)
       if (currentUser) {

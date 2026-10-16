@@ -2,7 +2,7 @@
 import { X, UserCheck, CheckCircle2, Save, Cloud, Loader2, Calendar, MapPin, GraduationCap, Menu, School } from 'lucide-react';
 import { AttendanceRow, StudentAttendance, AttendanceStatus } from './AttendanceRow';
 import { CourseItem, getCourseDisplayName } from '../homework/HomeworkSetupModal';
-import { databases, DATABASE_ID } from '@/lib/appwrite';
+import { databases, DATABASE_ID, loadLeaveApplicationsFromCloud } from '@/lib/appwrite';
 import { ID, Query } from 'appwrite';
 
 interface AttendanceModalProps {
@@ -165,11 +165,10 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
         }
       }
 
-      // ⭐ 3. 核心自動連動：檢查是否有學生提早申請請假 (oc_leave_applications)
+      // ⭐ 3. 核心自動連動：從 Appwrite 雲端即時載入學生請假申請
       try {
-        const rawLeaves = localStorage.getItem('oc_leave_applications');
-        if (rawLeaves) {
-          const leaveList: any[] = JSON.parse(rawLeaves);
+        const leaveList = await loadLeaveApplicationsFromCloud();
+        if (leaveList && leaveList.length > 0) {
           const activeLeaves = leaveList.filter((lv) => {
             const matchDate = lv.date === date;
             const matchBranch = !lv.branch || lv.branch === selectedBranch || selectedBranch === '全部分校';

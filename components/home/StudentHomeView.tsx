@@ -23,7 +23,7 @@ import { UserProfile } from '@/components/auth/AuthModal';
 import { TabType } from '@/components/layout/BottomNav';
 import { CalendarEvent } from '@/types/calendar';
 import { CourseItem } from '@/components/homework/HomeworkSetupModal';
-import { StudentEvaluation, loadStudentEvaluationsFromCloud } from '@/lib/appwrite';
+import { StudentEvaluation, loadStudentEvaluationsFromCloud, saveLeaveApplicationToCloud, loadLeaveApplicationsFromCloud } from '@/lib/appwrite';
 import { chatService } from '@/lib/chatService';
 
 export interface LeaveApplication {
@@ -264,18 +264,15 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
 
   // 近期請假紀錄清單
   const [myLeaves, setMyLeaves] = useState<LeaveApplication[]>([]);
-  const loadMyLeaves = React.useCallback(() => {
+  const loadMyLeaves = React.useCallback(async () => {
     try {
-      const raw = localStorage.getItem('oc_leave_applications');
-      if (raw) {
-        const all: LeaveApplication[] = JSON.parse(raw);
-        const filtered = all.filter(
-          (lv) =>
-            lv.studentName === studentName ||
-            (currentUser?.username && lv.studentUsername === currentUser.username)
-        );
-        setMyLeaves(filtered);
-      }
+      const all = await loadLeaveApplicationsFromCloud();
+      const filtered = all.filter(
+        (lv) =>
+          lv.studentName === studentName ||
+          (currentUser?.username && lv.studentUsername === currentUser.username)
+      );
+      setMyLeaves(filtered);
     } catch {}
   }, [studentName, currentUser?.username]);
 
@@ -316,12 +313,9 @@ export const StudentHomeView: React.FC<StudentHomeViewProps> = ({
       createdAt: new Date().toISOString(),
     };
 
-    // 1. 本地保存請假申請清單
+    // 1. 寫入 Appwrite 雲端資料庫並同步本地快取 (保證導師與 Admin 跨裝置即時收到)
     try {
-      const raw = localStorage.getItem('oc_leave_applications');
-      const list: LeaveApplication[] = raw ? JSON.parse(raw) : [];
-      list.unshift(leaveRecord);
-      localStorage.setItem('oc_leave_applications', JSON.stringify(list));
+      await saveLeaveApplicationToCloud(leaveRecord as any);
       setMyLeaves((prev) => [leaveRecord, ...prev]);
     } catch (e) {}
 

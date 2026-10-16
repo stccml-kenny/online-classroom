@@ -998,3 +998,99 @@ export async function saveStudentEvaluationToCloud(evalData: StudentEvaluation):
     }
   } catch (err) {}
 }
+
+// ⭐ 學生請假申請雲端雙軌持久化 (homework_settings 雲端同步，保證跨裝置即時收到請假)
+export interface CloudLeaveApplication {
+  id: string;
+  studentName: string;
+  studentUsername: string;
+  className: string;
+  branch: string;
+  courseName: string;
+  date: string;
+  coach: string;
+  reason: string;
+  remarks: string;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: string;
+}
+
+export async function loadLeaveApplicationsFromCloud(): Promise<CloudLeaveApplication[]> {
+  let list: CloudLeaveApplication[] = [];
+  if (typeof window !== 'undefined') {
+    try {
+      const cached = localStorage.getItem('oc_leave_applications');
+      if (cached) list = JSON.parse(cached);
+    } catch (e) {}
+  }
+  try {
+    const res = await databases.listDocuments(DATABASE_ID, 'homework_settings', [
+      Query.equal('setting_key', 'leave_applications'),
+      Query.limit(1),
+    ]);
+    if (res.documents && res.documents.length > 0 && res.documents[0].setting_value) {
+      const cloudList = JSON.parse(res.documents[0].setting_value || '[]');
+      if (Array.isArray(cloudList)) {
+        list = cloudList;
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('oc_leave_applications', JSON.stringify(list));
+        }
+      }
+    }
+  } catch (err) {}
+  return list;
+}
+
+export async function saveLeaveApplicationToCloud(leaveData: CloudLeaveApplication): Promise<void> {
+  let list: CloudLeaveApplication[] = await loadLeaveApplicationsFromCloud();
+  const idx = list.findIndex(e => e.id === leaveData.id || (e.studentName === leaveData.studentName && e.date === leaveData.date && e.courseName === leaveData.courseName));
+  if (idx !== -1) {
+    list[idx] = { ...list[idx], ...leaveData };
+  } else {
+    list.unshift(leaveData);
+  }
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('oc_leave_applications', JSON.stringify(list));
+    } catch (e) {}
+  }
+  try {
+    const jsonStr = JSON.stringify(list);
+    const res = await databases.listDocuments(DATABASE_ID, 'homework_settings', [
+      Query.equal('setting_key', 'leave_applications'),
+      Query.limit(1),
+    ]);
+    if (res.documents && res.documents.length > 0) {
+      await databases.updateDocument(DATABASE_ID, 'homework_settings', res.documents[0].$id, {
+        setting_value: jsonStr,
+      });
+    } else {
+      await databases.createDocument(DATABASE_ID, 'homework_settings', ID.unique(), {
+        setting_key: 'leave_applications',
+        setting_value: jsonStr,
+      });
+    }
+  } catch (err) {}
+}
+
+export async function updateLeaveApplicationStatusInCloud(id: string, status: 'approved' | 'rejected' | 'pending'): Promise<void> {
+  let list: CloudLeaveApplication[] = await loadLeaveApplicationsFromCloud();
+  list = list.map(e => e.id === id ? { ...e, status } : e);
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('oc_leave_applications', JSON.stringify(list));
+    } catch (e) {}
+  }
+  try {
+    const jsonStr = JSON.stringify(list);
+    const res = await databases.listDocuments(DATABASE_ID, 'homework_settings', [
+      Query.equal('setting_key', 'leave_applications'),
+      Query.limit(1),
+    ]);
+    if (res.documents && res.documents.length > 0) {
+      await databases.updateDocument(DATABASE_ID, 'homework_settings', res.documents[0].$id, {
+        setting_value: jsonStr,
+      });
+    }
+  } catch (err) {}
+}

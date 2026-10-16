@@ -2,7 +2,7 @@
 import {
   GraduationCap, Users, User, BookOpen, Clock,
   Sparkles, CheckCircle2, ChevronRight, LogOut,
-  Bell, UserPlus, Calendar as CalendarIcon, Settings
+  Bell, UserPlus, Calendar as CalendarIcon, Settings, Check, RotateCcw
 } from 'lucide-react';
 import { UserProfile, ROLE_CONFIGS } from '@/components/auth/AuthModal';
 import { TabType } from '@/components/layout/BottomNav';
@@ -10,6 +10,7 @@ import { StudentHomeView } from './StudentHomeView';
 
 import { CalendarEvent } from '@/types/calendar';
 import { CourseItem } from '@/components/homework/HomeworkSetupModal';
+import { loadLeaveApplicationsFromCloud, updateLeaveApplicationStatusInCloud, CloudLeaveApplication } from '@/lib/appwrite';
 
 interface HomeViewProps {
   currentUser: UserProfile | null;
@@ -66,19 +67,33 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
   // 依真實時間動態計算問候語 (預設早安，客戶端加載後依真實小時切換，防 SSR 水合錯誤)
   const [greeting, setGreeting] = React.useState('早安');
-  const [pendingLeaveCount, setPendingLeaveCount] = React.useState(0);
+  const [allLeaves, setAllLeaves] = React.useState<CloudLeaveApplication[]>([]);
+  const [loadingLeaves, setLoadingLeaves] = React.useState(false);
+
+  const fetchLeaves = React.useCallback(async () => {
+    setLoadingLeaves(true);
+    try {
+      const list = await loadLeaveApplicationsFromCloud();
+      setAllLeaves(list);
+    } catch (e) {
+    } finally {
+      setLoadingLeaves(false);
+    }
+  }, []);
 
   React.useEffect(() => {
-    try {
-      const raw = localStorage.getItem('oc_leave_applications');
-      if (raw) {
-        const list = JSON.parse(raw);
-        if (Array.isArray(list)) {
-          setPendingLeaveCount(list.filter((lv: any) => lv.status === 'pending').length);
-        }
-      }
-    } catch {}
-  }, []);
+    fetchLeaves();
+  }, [fetchLeaves]);
+
+  const handleApproveLeave = async (id: string) => {
+    setAllLeaves((prev) =>
+      prev.map((lv) => (lv.id === id ? { ...lv, status: 'approved' } : lv))
+    );
+    await updateLeaveApplicationStatusInCloud(id, 'approved');
+  };
+
+  const pendingLeaves = allLeaves.filter((lv) => lv.status === 'pending');
+  const pendingLeaveCount = pendingLeaves.length;
   React.useEffect(() => {
     const hour = new Date().getHours();
     if (hour >= 5 && hour < 12) setGreeting('早安');
@@ -374,6 +389,106 @@ export const HomeView: React.FC<HomeViewProps> = ({
               </>
             )}
           </div>
+
+          {/* ⭐ 導師與管理員專屬：學生請假申請管理面板 (跨裝置雲端即時同步) */}
+          {!isStudentOrParent && (
+            <div className="bg-white border border-gray-150 rounded-2xl p-4 shadow-xs space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-orange-50 text-[#FF6B57] flex items-center justify-center font-bold">
+                    <Clock size={16} />
+                  </div>
+                  <div>
+                    <h3 className="text-xs sm:text-sm font-bold text-gray-900 flex items-center gap-1.5">
+                      <span>學生請假申請紀錄</span>
+                      {pendingLeaveCount > 0 && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-extrabold border border-blue-200">
+                          {pendingLeaveCount} 筆待審核
+                        </span>
+                      )}
+                    </h3>
+                    <p className="text-[10px] text-gray-400">學生在線請假紀錄已自動同步至雲端與點名簿</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={fetchLeaves}
+                  className="p-1.5 text-gray-400 hover:text-[#FF6B57] rounded-lg transition-colors cursor-pointer"
+                  title="刷新請假紀錄"
+                >
+                  <RotateCcw size={14} className={loadingLeaves ? "animate-spin text-[#FF6B57]" : ""} />
+                </button>
+              </div>
+
+              {allLeaves.length === 0 ? (
+                <div className="py-6 text-center text-xs text-gray-400 bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
+                  <p className="font-semibold text-gray-500">目前尚無學生請假記錄</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">學生於首頁提交請假後，將即時顯示於此並預先排入點名簿</p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto pr-0.5">
+                  {allLeaves.map((lv) => {
+                    const isPending = lv.status === 'pending';
+                    return (
+                      <div
+                        key={lv.id}
+                        className="p-3 bg-gray-50/70 hover:bg-orange-50/30 border border-gray-200/80 rounded-xl space-y-1.5 transition-all text-xs"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                            <span className="font-bold text-gray-900 text-sm">{lv.studentName}</span>
+                            <span className="text-gray-600 bg-gray-200/80 px-1.5 py-0.5 rounded text-[10px] font-semibold">
+                              {lv.className || '常規班'}
+                            </span>
+                            <span className="text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded text-[10px] font-semibold">
+                              {lv.branch || '總校'}
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded bg-orange-50 text-[#FF6B57] border border-orange-200 text-[10px] font-bold">
+                              {lv.reason || '事假'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            {isPending ? (
+                              <button
+                                type="button"
+                                onClick={() => handleApproveLeave(lv.id)}
+                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1 shadow-2xs cursor-pointer active:scale-95"
+                                title="一鍵批准學生請假"
+                              >
+                                <Check size={12} />
+                                <span>准假</span>
+                              </button>
+                            ) : (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                已准假
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between text-[11px] text-gray-600">
+                          <span className="font-semibold text-gray-800 truncate max-w-[200px]">
+                            課程：{lv.courseName}
+                          </span>
+                          <span className="text-gray-500 font-mono">
+                            請假日期：{lv.date}
+                          </span>
+                        </div>
+
+                        {lv.remarks && (
+                          <div className="text-[10px] text-gray-500 bg-white p-1.5 rounded-lg border border-gray-150">
+                            <span className="font-semibold text-gray-700">事由備註：</span>
+                            <span>{lv.remarks}</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
 
 
